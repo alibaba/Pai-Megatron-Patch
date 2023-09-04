@@ -144,7 +144,7 @@ ${WORK_DIR}/output_megatron_llama2/
 ```
 
 ### 模型推理
-对于MegatronLM训练的模型，可以直接用MegatronLM框架进行推理。
+对于Megatron-LM训练的模型，可以直接用Megatron-LM框架进行推理。
 参数如下
 ```bash
 ENV=$1                          # 运行环境: dlc, dsw
