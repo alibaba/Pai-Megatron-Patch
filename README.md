@@ -10,7 +10,7 @@ Pai-Megatron-Patch工具基于英伟达的Megatron-LM框架来构建大模型开
 
 ## 快速开始
 
-[环境准备](https://www.aliyun.com/preview/solution/2023-solution/pai_lingjun)
+[环境准备](https://help.aliyun.com/document_detail/2505831.html?spm=5176.28352543.J_9l_YP1wy4J7aEdtojTyUD.1.347850adeLHhmP&tab=onestop)
 
 [数据准备](toolkits/pretrain_data_preprocessing/README.md)
 
