@@ -430,8 +430,15 @@ def convert_checkpoint_from_transformers_to_megatron(args):
             torch.zeros(merged_qkv_state_dict['transformer.layers.0.post_attention_layernorm.weight'].shape,
                                                                                                              dtype=input_layernorm_dtype)
 
-        merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.rotary_emb.inv_freq'] = state_dict[
-            'model.layers.' + str(layer_id) + '.self_attn.rotary_emb.inv_freq']
+        try:
+            merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.rotary_emb.inv_freq'] = state_dict[
+                'model.layers.' + str(layer_id) + '.self_attn.rotary_emb.inv_freq']
+        except:
+            base = 10000
+            dim = 128
+            merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.rotary_emb.inv_freq'] =\
+            1.0 / (base **
+                   (torch.arange(0, dim, 2).float() / dim))
 
     merged_qkv_state_dict["transformer.word_embeddings.weight"] = state_dict['model.embed_tokens.weight']
     merged_qkv_state_dict["transformer.final_layernorm.weight"] = state_dict['model.norm.weight']
@@ -1011,6 +1018,8 @@ def main():
     parser = add_megatron_checkpoint_args(parser)
     parser = add_transformers_checkpoint_args(parser)
     args = parser.parse_args()
+    model_map = {'codellama-7b':'llama-7b','codellama-13b':'llama-7b','codellama-34b':'llama2-70b','llama2-7b':'llama-7b','llama2-13b':'llama-7b'}
+    args.model_name = model_map.get(args.model_name, args.model_name)
     if args.convert_checkpoint_from_megatron_to_transformers:
         convert_checkpoint_from_megatron_to_transformers(args)
     else:

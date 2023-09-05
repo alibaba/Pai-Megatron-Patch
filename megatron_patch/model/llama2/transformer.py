@@ -1003,7 +1003,7 @@ class ParallelTransformerLayer(MegatronModule):
             sequence_parallel=args.sequence_parallel)
 
 
-        if args.num_layers == 80:
+        if args.num_layers == 80 or args.num_layers == 64:
             self.self_attention = ParallelAttention_70b(
                 init_method,
                 output_layer_init_method,
