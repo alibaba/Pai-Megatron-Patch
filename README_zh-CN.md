@@ -50,5 +50,5 @@ Pai-Megatron-Patch中包含模型库，分词器，模型转换，强化学习�
 
 
 ## 许可证
-本项目采用 [Apache License (Version 2.0)](https://github.com/alibaba/pai-megatron-patch/blob/master/LICENSE). 
+本项目采用 [Apache License (Version 2.0)](https://github.com/alibaba/pai-megatron-patch/blob/master/LICENSE).
 本项目包含来自于其他项目的开源许可授权的代码，具体请查看[NOTICE](https://github.com/alibaba/pai-megatron-patch/blob/master/NOTICE).
