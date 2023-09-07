@@ -1,19 +1,33 @@
-## 简介
+## Pai-Megatron-Patch是什么
 [English](./README.md) | 简体中文
 
-Pai-Megatron-Patch工具是阿里云机器学习平台PAI算法团队研发，基于灵骏智算平台的大模型最佳实践解决方案配套工具，
-旨在帮助大模型开发者快速上手灵骏产品，完成大语言模型（LLM）的高效分布式训练，有监督指令微调，模型离线推理验证等完整大模型开发链路。
-该项目提供了基于Megatron-LM的大模型训练&离线推理验证流程，方便用户快速上手大模型训练。
+随着深度学习大语言模型的不断发展，其模型结构和量级在快速演化，依托大模型技术的应用更是层出不穷。
+对于广大开发者来说不仅要考虑如何在复杂多变的场景下有效的将大模型消耗的算力发挥出来，还要应对大模型的持续迭代。
+开发简单易用的大模型训练工具就成了应对以上问题广受关注的技术方向，让开发者专注于大模型解决方案的开发，降低大模型训练加速性能优化和训练/推理全流程搭建的人力开发成本。
 
-Pai-Megatron-Patch工具基于英伟达的Megatron-LM框架来构建大模型开发链路。设计上对Megatron-LM源码非侵入式修改，
-采用补丁方式对接Megatron-LM训练加速库。patch中包含模型库，分词器，模型转换，强化学习，离线文本生成以及使用示例和工具集。
-在模型库中包含热门大模型的Megatron版本实现以及对应的数据ID化流程。
-同时patch提供了huggingface模型权重到megatron模型权重的转换，方便用户加载huggingface的权重进行继续预训练或者微调。
-patch还提供了对训练好的megatron模型权重到huggingface模型权重的转换，
-方便用户使用huggingface的评估流程对模型质量进行客观评估或者使用huggingface的离线文本生成流水线。
-在强化学习部分，patch提供了PPO训练流程等，方便用户使用SFT模型和RM模型进行强化学习。
-同时patch提供了大量的使用示例帮助用户快速开始大模型训练&离线推理。
-目前patch中支持的大模型有主要baichuan，bloom，chatglm，falcon，galactica，glm，llama，qwen和starcoder，后续还会根据需要及时添加新的Megatron版大模型实现。
+Pai-Megatron-Patch工具是阿里云机器学习平台PAI算法团队研发，基于阿里云智算服务PAI-灵骏平台的大模型最佳实践解决方案配套工具，
+旨在帮助大模型开发者快速上手灵骏产品，完成大语言模型（LLM）的高效分布式训练，有监督指令微调，模型离线推理验证等完整大模型开发链路。
+该项目提供了业界主流开源大模型基于Megatron-LM的训练&离线推理验证流程，方便用户快速上手大模型训练。
+
+## 主要特性
+
+* 多款热门大模型支持：llama，llama-2系列，codellama,  百川，通义，Falcon，GLM，Starcoder，Bloom，chatglm等
+* 支持模型权重互转转换：在Huggingface，Megatron和Transformer Engine之间进行算子命名空间映射
+* 支持Flash Attention 2.0和Transformer Engine模式下的FP8训练加速且确保收敛
+* 丰富且简单易用的使用示例，支持大模型预训练，微调，评估和推理，强化学习全流程最佳实践
+
+## 技术架构
+
+Pai-Megatron-Patch的设计理念是不对Megatron-LM的源码进行侵入式修改，即不在Megatron-LM里面添加新的功能特性，
+将需要扩充完善的部分以patch补丁的方式呈现。在patch中构建LLM训练链路通过依赖Megatron-LM核心库的方法实现和Megatron-LM的解耦合。
+这样解耦合的好处就是Megatron-LM的升级不会影响用户的LLM最佳实践体验。
+
+Pai-Megatron-Patch中包含模型库，分词器，模型转换，强化学习，离线文本生成以及使用示例和工具集等用于构建LLM训练的关键要素。
+在模型库中包含热门大模型的Megatron版本实现，例如baichuan，bloom，chatglm，falcon，galactica，glm，llama，qwen和starcoder，
+后续还会根据需要及时添加新的Megatron版大模型实现。同时patch还提供了huggingface模型权重和Megatron模型权重之间的双向转换。
+一方面是方便用户加载huggingface的权重在Megatron中继续预训练或者微调，
+另一方面是方便用户对训练好的Megatron模型使用huggingface的评估/推理流程对模型质量进行客观评估。
+在强化学习部分，patch提供了PPO训练流程等，方便用户使用SFT模型和RM模型进行强化学习。最后patch提供了大量的使用示例帮助用户快速开始大模型训练&离线推理。
 具体在阿里云灵骏产品的使用流程请参考: [智算服务PAI灵骏大模型分布式训练方案](https://help.aliyun.com/document_detail/2505831.html?spm=5176.28352543.J_9l_YP1wy4J7aEdtojTyUD.1.347850adeLHhmP&tab=onestop)
 
 <div align=center>
