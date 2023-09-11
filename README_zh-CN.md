@@ -33,7 +33,9 @@ Pai-Megatron-Patch中包含模型库，分词器，模型转换，强化学习�
 一方面是方便用户加载huggingface的权重在Megatron中继续预训练或者微调，
 另一方面是方便用户对训练好的Megatron模型使用huggingface的评估/推理流程对模型质量进行客观评估。
 在强化学习部分，patch提供了PPO训练流程等，方便用户使用SFT模型和RM模型进行强化学习。最后patch提供了大量的使用示例帮助用户快速开始大模型训练&离线推理。
+
 具体在阿里云灵骏产品的使用流程请参考: [智算服务PAI灵骏大模型分布式训练方案](https://www.aliyun.com/solution/tech-solution/pai_lingjun)
+
 
 <div align=center>
 <img src=patch.png width=600 height=400 />
@@ -63,5 +65,5 @@ Pai-Megatron-Patch中包含模型库，分词器，模型转换，强化学习�
 </div>
 
 ## 许可证
-本项目采用 [Apache License (Version 2.0)](https://github.com/alibaba/pai-megatron-patch/blob/master/LICENSE). 
+本项目采用 [Apache License (Version 2.0)](https://github.com/alibaba/pai-megatron-patch/blob/master/LICENSE).
 本项目包含来自于其他项目的开源许可授权的代码，具体请查看[NOTICE](https://github.com/alibaba/pai-megatron-patch/blob/master/NOTICE).
