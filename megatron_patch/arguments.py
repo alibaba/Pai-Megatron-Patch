@@ -88,11 +88,13 @@ def get_tasks_args(parser):
                        help='data-dir')
 
     group.add_argument('--train-data',
+                       nargs='+',
                        default=None,
                        help='Whitespace separated paths or corpora names '
                        'for training.')
 
     group.add_argument('--valid-data',
+                       nargs='+',
                        default=None,
                        help='path(s) to the validation data.')
 
