@@ -27,8 +27,10 @@ from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.arguments import get_tasks_args
 
 def model_provider(pre_process=True, post_process=True):
-    model = GPTModel(num_tokentypes=0,
-                     parallel_output=True,
+    from megatron.arguments import core_transformer_config_from_args
+    config = core_transformer_config_from_args(get_args())
+    model = GPTModel(config,
+                     num_tokentypes=0,
                      pre_process=pre_process,
                      post_process=post_process)
     return model
@@ -59,6 +61,7 @@ def forward_step(data_iterator, model):
     loss_mask = loss_mask[..., 1:].contiguous()
 
     output_tensor = model(input_ids=input_ids,
+                          position_ids=None,
                           attention_mask=attention_mask,
                           labels=labels)
 
