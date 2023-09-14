@@ -120,11 +120,12 @@ def add_args(parser):
 
     return parser
 
-
 tensor_parallel_params = [
+    # megatron-lm layers to merge across tp ranks
     "self_attn.query_key_value.weight",
     "self_attn.dense.weight",
-    "mlp.dense_h_to_4h.weight",
+    "mlp.dense_h_to_4h_1.weight",
+    "mlp.dense_h_to_4h_2.weight",
     "mlp.dense_4h_to_h.weight"
 ]
 
@@ -252,11 +253,15 @@ def convert_checkpoint_from_transformers_to_te(args):
 
         dense_h_to_4h_1_weight = hf_state_dict[
             'model.layers.' + str(layer_id) + '.mlp.gate_proj.weight']
+
         dense_h_to_4h_2_weight = hf_state_dict[
             'model.layers.' + str(layer_id) + '.mlp.up_proj.weight']
 
-        internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h.weight'] = torch.cat(
-            [dense_h_to_4h_1_weight, dense_h_to_4h_2_weight], dim=0)
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h_1.weight'] =\
+            dense_h_to_4h_1_weight
+
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h_2.weight'] =\
+            dense_h_to_4h_2_weight
 
         internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_4h_to_h.weight'] = hf_state_dict[
             'model.layers.' + str(layer_id) + '.mlp.down_proj.weight']
@@ -265,23 +270,23 @@ def convert_checkpoint_from_transformers_to_te(args):
             'model.layers.' + str(layer_id) + '.input_layernorm.weight']
 
         input_layernorm_dtype = hf_state_dict['model.layers.' + str(layer_id) + '.input_layernorm.weight'].dtype
-        internal_state_dict['transformer.layers.' + str(layer_id) + '.input_layernorm.bias'] = torch.zeros(internal_state_dict['transformer.layers.0.input_layernorm.weight'].shape,
-                                                                                                             dtype=input_layernorm_dtype)
 
-        internal_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.weight'] = hf_state_dict[
-            'model.layers.' + str(layer_id) + '.post_attention_layernorm.weight']
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.input_layernorm.bias'] =\
+            torch.zeros(internal_state_dict['transformer.layers.0.input_layernorm.weight'].shape, dtype=input_layernorm_dtype)
+
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.weight'] =\
+            hf_state_dict['model.layers.' + str(layer_id) + '.post_attention_layernorm.weight']
 
         internal_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.bias'] =\
             torch.zeros(internal_state_dict['transformer.layers.0.post_attention_layernorm.weight'].shape, dtype=input_layernorm_dtype)
 
 
+    internal_state_dict["transformer.word_embeddings.weight"] = hf_state_dict['model.embed_tokens.weight']
+    internal_state_dict["transformer.final_layernorm.weight"] = hf_state_dict['model.norm.weight']
     final_layernorm_dtype = hf_state_dict['model.norm.weight'].dtype
     internal_state_dict['transformer.final_layernorm.bias'] = \
         torch.zeros(hf_state_dict['model.norm.weight'].shape,
                     dtype=final_layernorm_dtype)
-
-    internal_state_dict["transformer.word_embeddings.weight"] = hf_state_dict['model.embed_tokens.weight']
-    internal_state_dict["transformer.final_layernorm.weight"] = hf_state_dict['model.norm.weight']
     internal_state_dict["transformer.lm_head.weight"] = hf_state_dict['lm_head.weight']
 
     # Saving config and tokenzier files
@@ -437,9 +442,14 @@ def convert_checkpoint_from_transformers_to_te(args):
                     out_name = "self_attention.proj"
                     layer_name = f"layers.{layer}.{out_name}.{weight_or_bias}"
 
-                elif op_name.startswith("mlp.dense_h_to_4h") and weight_or_bias == "weight":
+                elif op_name.startswith("mlp.dense_h_to_4h_1") and weight_or_bias == "weight":
                     out_name = "layernorm_mlp"
-                    weight = "fc1_weight"
+                    weight = "fc1_weight_1"
+                    layer_name = f"layers.{layer}.{out_name}.{weight}"
+
+                elif op_name.startswith("mlp.dense_h_to_4h_2") and weight_or_bias == "weight":
+                    out_name = "layernorm_mlp"
+                    weight = "fc1_weight_2"
                     layer_name = f"layers.{layer}.{out_name}.{weight}"
 
                 elif op_name.startswith("mlp.dense_4h_to_h") and weight_or_bias == "weight":
@@ -459,6 +469,29 @@ def convert_checkpoint_from_transformers_to_te(args):
                     params_dict[layer_name] = (
                         params[i].clone() if (op_name + "." + weight_or_bias in tensor_parallel_params) else params.clone()
                     )
+
+            for i in range(args.target_tensor_model_parallel_size):
+
+                params_dict = get_element_from_dict_by_path(output_state_dict[i],
+                                                            "model.language_model.encoder")
+
+                out_name = "layernorm_mlp"
+                weight_1 = "fc1_weight_1"
+                dense_h_to_4h_1_layer_name = f"layers.{layer}.{out_name}.{weight_1}"
+                dense_h_to_4h_1_weight = params_dict[dense_h_to_4h_1_layer_name]
+
+                weight_2 = "fc1_weight_2"
+                dense_h_to_4h_2_layer_name = f"layers.{layer}.{out_name}.{weight_2}"
+                dense_h_to_4h_2_weight = params_dict[dense_h_to_4h_2_layer_name]
+
+                weight = "fc1_weight"
+                dense_h_to_4h_layer_name = f"layers.{layer}.{out_name}.{weight}"
+
+                params_dict[dense_h_to_4h_layer_name] = torch.cat(
+                [dense_h_to_4h_1_weight, dense_h_to_4h_2_weight], dim=0)
+
+                del params_dict[dense_h_to_4h_1_layer_name]
+                del params_dict[dense_h_to_4h_2_layer_name]
 
         if pp_rank == args.target_pipeline_model_parallel_size - 1:
             # handle final layernorm

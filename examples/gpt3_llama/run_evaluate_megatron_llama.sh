@@ -1,7 +1,5 @@
 #!/bin/bash
-# sh run_evaluate_megatron_llama.sh dsw /workspace/Megatron-LM /workspace/PAI-Megatron-Patch/ 7B 1 2048 80 1 fp16 1 1 /mnt/llama-datasets/alpaca_data.json /mnt/llama-ckpts/llama-7b-hf-to-megatron-tp1-pp1
-# sh run_evaluate_megatron_llama.sh dsw /workspace/Megatron-LM /workspace/PAI-Megatron-Patch/ 13B 1 2048 80 16 fp16 1 1 /mnt/llama-datasets/wudao_train.jsonl /mnt/llama-ckpts/Ziya-LLaMA-13B-to-megatron-tp1-pp1
-
+#sh run_evaluate_megatron_llama.sh dsw /root/Megatron-LM-main/ /workspace/Pai-Megatron-Patch/ 7B 1 80 80 0 fp16 2 1 true true true true true /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-te-tp2-pp1/
 set -e
 ENV=$1
 MEGATRON_PATH=$2
@@ -9,12 +7,12 @@ MEGATRON_PATCH_PATH=$3
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=0,1
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=1
+GPUS_PER_NODE=2
 
 elif [ $ENV = dlc ]; then
 
