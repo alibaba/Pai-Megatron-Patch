@@ -419,25 +419,29 @@ def convert_checkpoint_from_transformers_to_megatron(args):
             'model.layers.' + str(layer_id) + '.mlp.down_proj.weight']
         merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.input_layernorm.weight'] = state_dict[
             'model.layers.' + str(layer_id) + '.input_layernorm.weight']
+        """
         input_layernorm_dtype = state_dict['model.layers.' + str(layer_id) + '.input_layernorm.weight'].dtype
         merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.input_layernorm.bias'] = torch.zeros(merged_qkv_state_dict['transformer.layers.0.input_layernorm.weight'].shape,
                                                                                                              dtype=input_layernorm_dtype)
-
+        """
         merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.weight'] = state_dict[
             'model.layers.' + str(layer_id) + '.post_attention_layernorm.weight']
+        """
         merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.bias'] =\
             torch.zeros(merged_qkv_state_dict['transformer.layers.0.post_attention_layernorm.weight'].shape,
                                                                                                              dtype=input_layernorm_dtype)
-
+        """
         merged_qkv_state_dict['layers.' + str(layer_id) + '.self_attn.rotary_emb.inv_freq'] = state_dict[
             'model.layers.' + str(layer_id) + '.self_attn.rotary_emb.inv_freq']
 
     merged_qkv_state_dict["transformer.word_embeddings.weight"] = state_dict['model.embed_tokens.weight']
     merged_qkv_state_dict["transformer.final_layernorm.weight"] = state_dict['model.norm.weight']
+    """
     final_layernorm_dtype = state_dict['model.norm.weight'].dtype
     merged_qkv_state_dict['transformer.final_layernorm.bias'] = \
         torch.zeros(state_dict['model.norm.weight'].shape,
                     dtype=final_layernorm_dtype)
+    """
     merged_qkv_state_dict["transformer.lm_head.weight"] = state_dict['lm_head.weight']
     state_dict = merged_qkv_state_dict
 
@@ -643,7 +647,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                         )
         if pp_rank == args.target_pipeline_model_parallel_size - 1:
             # handle final layernorm
-            for weight_or_bias in ["weight", "bias"]:
+            for weight_or_bias in ["weight"]:
                 params = state_dict[f"transformer.final_layernorm.{weight_or_bias}"].to(dtype)
                 layer_name = f"final_layernorm.{weight_or_bias}"
                 for i in range(args.target_tensor_model_parallel_size):

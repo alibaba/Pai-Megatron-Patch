@@ -35,6 +35,7 @@ from megatron.model.utils import attention_mask_func
 from megatron.model.utils import openai_gelu
 from megatron.model.utils import erf_gelu
 
+from .fused_layer_norm import MixedFusedNorm
 from .positional_embeddings import LlamaRotaryEmbedding, apply_rotary_pos_emb
 
 try:
@@ -73,29 +74,6 @@ def _args_to_kwargs():
         'sequence_parallel_enabled': args.sequence_parallel,
     }
     return common_kwargs
-
-
-class LlamaRMSNorm(torch.nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        LlamaRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = torch.nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        variance = hidden_states.to(torch.float32).pow(2).mean(-1,
-                                                               keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance +
-                                                    self.variance_epsilon)
-
-        # convert into half-precision if necessary
-        if self.weight.dtype in [torch.float16, torch.bfloat16]:
-            hidden_states = hidden_states.to(self.weight.dtype)
-
-        return self.weight * hidden_states
-
 
 class ParallelMLP(MegatronModule):
     """MLP.
@@ -988,6 +966,7 @@ class ParallelTransformerLayer(MegatronModule):
         self.bf16 = args.bf16
         self.fp32_residual_connection = args.fp32_residual_connection
 
+        """
         # Layernorm on the input data.
         self.input_layernorm = LayerNorm(
             args.hidden_size,
@@ -1001,6 +980,22 @@ class ParallelTransformerLayer(MegatronModule):
             eps=args.layernorm_epsilon,
             no_persist_layer_norm=args.no_persist_layer_norm,
             sequence_parallel=args.sequence_parallel)
+        """
+        self.input_layernorm = MixedFusedNorm(
+            "RMSNorm",
+            args.hidden_size,
+            eps=args.layernorm_epsilon,
+            no_persist_layer_norm=args.no_persist_layer_norm,
+            sequence_parallel=args.sequence_parallel,
+            apply_layernorm_1p=args.apply_layernorm_1p)
+
+        self.post_attention_layernorm = MixedFusedNorm(
+            "RMSNorm",
+            args.hidden_size,
+            eps=args.layernorm_epsilon,
+            no_persist_layer_norm=args.no_persist_layer_norm,
+            sequence_parallel=args.sequence_parallel,
+            apply_layernorm_1p=args.apply_layernorm_1p)
 
 
         if args.num_layers == 80 or args.num_layers == 64:
@@ -1328,6 +1323,7 @@ class ParallelTransformer(MegatronModule):
 
         if self.post_process and self.post_layer_norm:
             # Final layer norm before output.
+            """
             self.final_layernorm = LayerNorm(
                 args.hidden_size,
                 eps=args.layernorm_epsilon,
@@ -1335,7 +1331,14 @@ class ParallelTransformer(MegatronModule):
                 sequence_parallel=args.sequence_parallel,
                 apply_layernorm_1p=args.apply_layernorm_1p)
 
-            # self.final_layernorm = LlamaRMSNorm(args.hidden_size, eps=1e-06)
+            """
+            self.final_layernorm = MixedFusedNorm(
+                "RMSNorm",
+                args.hidden_size,
+                eps=args.layernorm_epsilon,
+                no_persist_layer_norm=args.no_persist_layer_norm,
+                sequence_parallel=args.sequence_parallel,
+                apply_layernorm_1p=args.apply_layernorm_1p)
 
     def _get_layer(self, layer_number):
         return self.layers[layer_number]

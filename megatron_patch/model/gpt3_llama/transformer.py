@@ -33,6 +33,7 @@ from megatron.core.models.common.rotary_pos_embedding import apply_rotary_pos_em
 from megatron.model.utils import attention_mask_func
 from megatron.model.utils import openai_gelu
 from megatron.model.utils import erf_gelu
+from .fused_layer_norm import MixedFusedNorm
 
 try:
     from einops import rearrange
@@ -784,6 +785,7 @@ class ParallelTransformerLayer(MegatronModule):
         self.bf16 = config.bf16
         self.fp32_residual_connection = config.fp32_residual_connection
 
+        """
         # Layernorm on the input data.
         self.input_layernorm = LayerNorm(
             config.hidden_size,
@@ -791,6 +793,14 @@ class ParallelTransformerLayer(MegatronModule):
             no_persist_layer_norm=args.no_persist_layer_norm,
             sequence_parallel=config.sequence_parallel,
             apply_layernorm_1p=args.apply_layernorm_1p)
+        """
+        self.input_layernorm = MixedFusedNorm(
+             args.normalization,
+             config.hidden_size,
+             eps=config.layernorm_epsilon,
+             no_persist_layer_norm=args.no_persist_layer_norm,
+             sequence_parallel=config.sequence_parallel,
+             apply_layernorm_1p=args.apply_layernorm_1p)
 
         # Self attention.
         self.self_attention = ParallelAttention(
@@ -802,8 +812,18 @@ class ParallelTransformerLayer(MegatronModule):
         self.bias_dropout_fusion = config.bias_dropout_fusion
         self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else None
 
+
         # Layernorm on the attention output
+        """
         self.post_attention_layernorm = LayerNorm(
+            config.hidden_size,
+            eps=config.layernorm_epsilon,
+            no_persist_layer_norm=not config.persist_layer_norm,
+            sequence_parallel=config.sequence_parallel,
+            apply_layernorm_1p=args.apply_layernorm_1p)
+        """
+        self.post_attention_layernorm = MixedFusedNorm(
+            args.normalization,
             config.hidden_size,
             eps=config.layernorm_epsilon,
             no_persist_layer_norm=not config.persist_layer_norm,
@@ -1507,7 +1527,17 @@ class ParallelTransformer(MegatronModule):
 
         if self.post_process and self.post_layer_norm:
             # Final layer norm before output.
+            """
             self.final_layernorm = LayerNorm(
+                config.hidden_size,
+                eps=config.layernorm_epsilon,
+                no_persist_layer_norm=args.no_persist_layer_norm,
+                sequence_parallel=config.sequence_parallel,
+                apply_layernorm_1p=args.apply_layernorm_1p)
+            """
+            # Final layer norm before output.
+            self.final_layernorm = MixedFusedNorm(
+                args.normalization,
                 config.hidden_size,
                 eps=config.layernorm_epsilon,
                 no_persist_layer_norm=args.no_persist_layer_norm,
