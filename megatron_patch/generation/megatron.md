@@ -4,6 +4,7 @@
 - 修改tokenizer处理数据的部分，适配huggingface的tokenizer  
 - 增加推理过程中对重复生成的处理，支持repetition_penalty.  
 
+
 ## 模型推理示例
 对于Megatron-LM训练的模型，可以直接用Megatron-LM框架进行推理。
 参数如下
@@ -30,6 +31,7 @@ TEMPERATURE=${18}               # 采样策略中温度惩罚: 1-n
 REPETITION_PENALTY=${19}        # 避免生成是产生大量重复，可以设置为(1-2)默认为1.2
 ```
 运行以下命令进行模型推理。  
+
 以下有监督微调过程保存模型的推理代码，需要将run_text_generation_megatron_llama.sh脚本中CUDA_VISIBLE_DEVICES参数设置为0；GPUS_PER_NODE参数设置为1；同时使用下列代码进行推理。此时使用单卡进行推理。注意：此处模型tp为1，可使用单卡推理；如果tp>1，则需使用相应卡数进行推理。
 ```bash
 export WORK_DIR=/mnt/workspace
@@ -55,3 +57,4 @@ ${WORK_DIR}/llama2_pred.txt \
 1.0 \
 1.2
 ```
+

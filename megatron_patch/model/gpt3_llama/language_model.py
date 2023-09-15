@@ -585,7 +585,7 @@ class TransformerLanguageModel(MegatronModule):
 
     def load_state_dict(self, state_dict, strict=True):
         """Customized load."""
-
+        args = get_args()
         # Embedding.
         if self.pre_process:
             if self._embedding_key in state_dict:
@@ -622,7 +622,10 @@ class TransformerLanguageModel(MegatronModule):
                     state_dict_self_attention[key] = state_dict_[key]
             state_dict_ = state_dict_self_attention
 
-            self.encoder.load_state_dict(state_dict_, strict=strict)
+            if args.transformer_impl == "transformer_engine":
+                self.encoder.load_state_dict(state_dict_, strict=False)
+            else:
+                self.encoder.load_state_dict(state_dict_, strict=strict)
 
         # Pooler.
         if self.post_process:
