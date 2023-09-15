@@ -159,10 +159,11 @@ megatron_options="  \
         --seed 1234 \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --position-embedding-type rotary \
+        --position-embedding-type none \
         --swiglu \
         --untie-embeddings-and-output-weights \
         --patch-tokenizer-type BaichuanTokenizer
+        --disable-bias-linear
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS finetune_megatron_baichuan13b.py
