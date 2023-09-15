@@ -434,7 +434,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
             merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.rotary_emb.inv_freq'] = state_dict[
                 'model.layers.' + str(layer_id) + '.self_attn.rotary_emb.inv_freq']
         except:
-            base = 10000
+            base = config.rope_theta
             dim = 128
             merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.rotary_emb.inv_freq'] =\
             1.0 / (base **
