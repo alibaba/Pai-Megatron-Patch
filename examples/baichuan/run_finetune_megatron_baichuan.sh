@@ -161,6 +161,7 @@ megatron_options="  \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --position-embedding-type none \
         --swiglu \
+        --use-alibi-mask \
         --untie-embeddings-and-output-weights \
         --patch-tokenizer-type BaichuanTokenizer
         --disable-bias-linear

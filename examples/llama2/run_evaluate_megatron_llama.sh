@@ -1,6 +1,5 @@
 #!/bin/bash
-# sh run_evaluate_megatron_llama.sh dsw /root/Megatron-LM-23.04 /workspace/PAI-Megatron-Patch/ 70B 1 2048 80 0 fp16 2 1 /mnt/llama-datasets/alpaca_data.json /mnt/llama2-ckpts/llama-2-70b-hf-to-megatron-tp2-pp1
-
+# sh run_evaluate_megatron_llama.sh dsw //workspace/Megatron-LM-23.04/ /workspace/Pai-Megatron-Patch 7B 1 80 80 0 fp16 1 1 /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1
 set -e
 ENV=$1
 MEGATRON_PATH=$2
