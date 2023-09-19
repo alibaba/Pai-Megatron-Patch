@@ -49,33 +49,6 @@ def post_language_model_processing(lm_output, labels, logit_weights,
         loss = loss.transpose(0, 1).contiguous()
         return loss
 
-def post_language_model_processing_bak(lm_output, labels, logit_weights,
-                                   parallel_output,
-                                   fp16_lm_cross_entropy):
-
-    # Output. Format [s b h]
-    output = parallel_lm_logits(
-        lm_output,
-        logit_weights,
-        parallel_output)
-
-    if labels is None:
-        # [s b h] => [b s h]
-        return output.transpose(0,1).contiguous()
-    else:
-        # [b s] => [s b]
-        labels = labels.transpose(0,1).contiguous()
-        if fp16_lm_cross_entropy:
-            assert output.dtype == torch.half
-            loss = tensor_parallel.vocab_parallel_cross_entropy(output, labels)
-        else:
-            loss = tensor_parallel.vocab_parallel_cross_entropy(output.float(), labels)
-
-        # [s b] => [b, s]
-        loss = loss.transpose(0,1).contiguous()
-        return loss
-
-
 class GPTModel(MegatronModule):
     """GPT-2 Language model."""
 
@@ -93,7 +66,6 @@ class GPTModel(MegatronModule):
         self.post_process = post_process
         self.fp16_lm_cross_entropy = args.fp16_lm_cross_entropy
         self.untie_embeddings_and_output_weights = args.untie_embeddings_and_output_weights
-
         self.language_model, self._language_model_key = get_language_model(
             config=config,
             num_tokentypes=num_tokentypes,
@@ -125,11 +97,19 @@ class GPTModel(MegatronModule):
             inference_params=inference_params)
 
         if self.post_process:
-            return post_language_model_processing(
-                lm_output, labels,
-                self.language_model.output_layer.weight if self.untie_embeddings_and_output_weights else self.shared_embedding_or_output_weight(),
-                self.parallel_output,
-                self.fp16_lm_cross_entropy)
+            if self.training:
+                return post_language_model_processing(
+                    lm_output, labels,
+                    torch.nn.functional.normalize(self.language_model.output_layer.weight) if self.untie_embeddings_and_output_weights else self.shared_embedding_or_output_weight(),
+                    self.parallel_output,
+                    self.fp16_lm_cross_entropy)
+            else:
+                return post_language_model_processing(
+                    lm_output, labels,
+                    self.language_model.output_layer.weight if self.untie_embeddings_and_output_weights else self.shared_embedding_or_output_weight(),
+                    self.parallel_output,
+                    self.fp16_lm_cross_entropy)
+
         else:
             return lm_output
 

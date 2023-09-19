@@ -221,6 +221,7 @@ class CoreAttention(MegatronModule):
         self.fp16 = config.fp16
         self.bf16 = config.bf16
 
+        args = get_args()
         self.apply_query_key_layer_scaling = config.apply_query_key_layer_scaling
         self.attention_softmax_in_fp32 = config.attention_softmax_in_fp32
         if self.apply_query_key_layer_scaling:
@@ -228,6 +229,7 @@ class CoreAttention(MegatronModule):
         self.layer_number = max(1, layer_number)
         self.attn_mask_type = attn_mask_type
         self.sequence_parallel = config.sequence_parallel
+        self.use_alibi_mask = args.use_alibi_mask
 
         projection_size = config.kv_channels * config.num_attention_heads
 
@@ -299,9 +301,15 @@ class CoreAttention(MegatronModule):
         # ===========================
 
         # attention scores and attention mask [b, np, sq, sk]
-        #attention_mask = attention_mask.to(torch.bool)
-        attention_probs = self.scale_mask_softmax(attention_scores,
-                                                  attention_mask)
+        if self.use_alibi_mask:
+            attention_scores = attention_scores + attention_mask
+            attention_scores = torch.max(
+                attention_scores, torch.tensor(torch.finfo(attention_scores.dtype).min)
+            )
+            attention_probs = torch.nn.functional.softmax(attention_scores, dim=-1)
+        else:
+            attention_probs = self.scale_mask_softmax(attention_scores, attention_mask)
+
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
