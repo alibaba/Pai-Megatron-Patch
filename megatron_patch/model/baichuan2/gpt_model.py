@@ -97,18 +97,11 @@ class GPTModel(MegatronModule):
             inference_params=inference_params)
 
         if self.post_process:
-            if self.training:
-                return post_language_model_processing(
-                    lm_output, labels,
-                    torch.nn.functional.normalize(self.language_model.output_layer.weight) if self.untie_embeddings_and_output_weights else self.shared_embedding_or_output_weight(),
-                    self.parallel_output,
-                    self.fp16_lm_cross_entropy)
-            else:
-                return post_language_model_processing(
-                    lm_output, labels,
-                    self.language_model.output_layer.weight if self.untie_embeddings_and_output_weights else self.shared_embedding_or_output_weight(),
-                    self.parallel_output,
-                    self.fp16_lm_cross_entropy)
+            return post_language_model_processing(
+                lm_output, labels,
+                self.language_model.output_layer.weight if self.untie_embeddings_and_output_weights else self.shared_embedding_or_output_weight(),
+                self.parallel_output,
+                self.fp16_lm_cross_entropy)
 
         else:
             return lm_output
