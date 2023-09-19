@@ -709,6 +709,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
         hidden_size=megatron_args.hidden_size,
         num_hidden_layers=megatron_args.num_layers,
         num_attention_heads=megatron_args.num_attention_heads,
+        intermediate_size=intermediate_size_map[megatron_args.hidden_size],
         rms_norm_eps=1e-06,
         initializer_range=0.02,
         use_cache=True,

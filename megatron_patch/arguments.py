@@ -200,4 +200,9 @@ def get_tasks_args(parser):
                        action='store_true',
                        help='position-encoding-2d')
 
+    group.add_argument('--z-loss-weight',
+                       type=float,
+                       default=0.0,
+                       help='the max-z weight for baichuan2')
+
     return parser
