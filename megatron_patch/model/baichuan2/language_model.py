@@ -652,6 +652,8 @@ class TransformerLanguageModel(MegatronModule):
             else:
                 alibi_mask = self.get_alibi_mask(encoder_input, self.seq_length_with_past)
 
+            #TODO: Memory Issue
+            enc_attn_mask = None
             if enc_attn_mask is not None:
                 if len(enc_attn_mask.shape) == 2:
                     expanded_mask = enc_attn_mask.to(alibi_mask.dtype)

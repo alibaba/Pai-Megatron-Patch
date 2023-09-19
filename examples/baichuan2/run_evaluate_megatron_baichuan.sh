@@ -163,6 +163,7 @@ megatron_options=" \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type BaichuanTokenizer \
         --swiglu \
+        --no-query-key-layer-scaling \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear
         "
