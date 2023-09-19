@@ -1,5 +1,6 @@
 #!/bin/bash
-#sh run_finetune_megatron_llama_wgbs.sh dsw /root/Megatron-LM-23.04/ /workspace/PAI-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 80 0 fp16 1 1 sel true true true 500 /mnt/llama2-datasets/code_alpaca.json /mnt/llama2-ckpts/llama-2-7b-hf-to-megatron-tp1-pp1 1000 100 /mnt/output_llama2
+#
+
 set -e
 ENV=$1
 MEGATRON_PATH=$2

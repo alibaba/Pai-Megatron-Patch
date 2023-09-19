@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_pretrain_megatron_baichuan.sh dsw /workspace/Megatron-LM-main/ /workspace/github/Pai-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 2048 0 bf16 2 1 sel true false false false 100000 /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base-to-mg-tp2-pp1 100000000 10000 /mnt/output_baichuan2
+#sh run_finetune_megatron_baichuan_wgbs.sh dsw /root/Megatron-LM-23.04/ /workspace/PAI-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 80 0 fp16 1 1 sel true true true false 500 /mnt/llama2-datasets/code_alpaca.json /mnt/baichuan2-ckpts/baichuan2-7b-hf-to-megatron-tp1-pp1 1000 100 /mnt/output_baichuan
 set -e
 ENV=$1
 MEGATRON_PATH=$2
@@ -43,8 +43,8 @@ TE=${19}
 SAVE_INTERVAL=${20}
 DATASET_PATH=${21}
 PRETRAIN_CHECKPOINT_PATH=${22}
-TRAIN_TOKENS=${23}
-WARMUP_TOKENS=${24}
+TRAIN_ITERS=${23} # TRAIN_ITERS = num_samples * epoch / global_batch_size
+WARMUP_ITERS=${24} 
 OUTPUT_BASEPATH=${25}
 
 
@@ -139,9 +139,7 @@ elif [ $SP = false ]; then
                     "
 fi
 
-TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
-LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
-LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${WARMUP_ITERS} ))
 
 NAME="${ENV}-pretrain-megatron-baichuan-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
@@ -189,10 +187,12 @@ megatron_options="  \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
         --DDP-impl local \
+        --no-save-optim \
         --no-load-optim \
         --no-load-rng \
         --num-workers 8 \
         --seed 1234 \
+        --dataloader-type cyclic \
         --dataset LLama-SFT \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
