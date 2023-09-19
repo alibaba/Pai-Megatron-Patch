@@ -1,6 +1,7 @@
 #!/bin/bash
 # transformers to megatron
 # sh model_convertor.sh /root/Megatron-LM-23.04/ /mnt/baichuan-ckpts/baichuan-13b-base/ /mnt/baichuan-ckpts/baichuan-13b-base-hf-to-megatron-tp1-pp1 1 1 baichuan-13b 0 false
+# megatron to transformers
 set -e
 START_TIME=$SECONDS
 

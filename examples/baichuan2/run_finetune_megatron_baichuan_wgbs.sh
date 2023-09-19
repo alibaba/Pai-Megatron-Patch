@@ -1,6 +1,5 @@
 #!/bin/bash
-#
-
+#sh run_finetune_megatron_baichuan_wgbs.sh dsw /root/Megatron-LM-23.04/ /workspace/PAI-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 80 0 fp16 1 1 sel true true true false 500 /mnt/llama2-datasets/code_alpaca.json /mnt/baichuan2-ckpts/baichuan2-7b-hf-to-megatron-tp1-pp1 1000 100 /mnt/output_baichuan
 set -e
 ENV=$1
 MEGATRON_PATH=$2
@@ -15,7 +14,6 @@ NNODES=1
 NODE_RANK=0
 GPUS_PER_NODE=4
 
-# 'dsw' for single node; 'dlc' for multi-node
 elif [ $ENV = dlc ]; then
 
 NNODES=${WORLD_SIZE}
@@ -26,7 +24,7 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$4  #7B, 13B, 34B
+MODEL_SIZE=$4
 BATCH_SIZE=$5
 GLOBAL_BATCH_SIZE=$6
 LR=$7
@@ -41,12 +39,13 @@ AC=${15}
 DO=${16}
 FL=${17}
 SP=${18}
-SAVE_INTERVAL=${19}
-DATASET_PATH=${20}
-PRETRAIN_CHECKPOINT_PATH=${21}
-TRAIN_ITERS=${22} # TRAIN_ITERS = num_samples * epoch / global_batch_size
-WARMUP_ITERS=${23} 
-OUTPUT_BASEPATH=${24}
+TE=${19}
+SAVE_INTERVAL=${20}
+DATASET_PATH=${21}
+PRETRAIN_CHECKPOINT_PATH=${22}
+TRAIN_ITERS=${23} # TRAIN_ITERS = num_samples * epoch / global_batch_size
+WARMUP_ITERS=${24} 
+OUTPUT_BASEPATH=${25}
 
 
 if [ $MODEL_SIZE = 7B ]; then
@@ -55,23 +54,20 @@ NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
-NUM_HEAD_KV=32
+
+model_options=" \
+        --use-rotary-position-embeddings"
 
 elif [ $MODEL_SIZE = 13B ]; then
 
 NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
-INTERMEDIATE_SIZE=13824
-NUM_HEAD_KV=40
+INTERMEDIATE_SIZE=13696
 
-elif [ $MODEL_SIZE = 34B ]; then
-
-NUM_LAYERS=48
-HIDDEN_SIZE=8192
-NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=22016
-NUM_HEAD_KV=8
+model_options=" \
+        --use-alibi-mask \
+        --position-embedding-type none"
 
 fi
 
@@ -98,6 +94,13 @@ if [ $PR = fp16 ]; then
 elif [ $PR = bf16 ]; then
     pr_options=" \
         --bf16"
+elif [ $PR = fp8 ]; then
+    pr_options=" \
+        --bf16
+        --fp8-hybrid \
+        --fp8-amax-compute-algo max \
+        --fp8-amax-history-len 1024 \
+        --transformer-impl transformer_engine"
 fi
 
 if [ $DO = true ]; then
@@ -118,6 +121,15 @@ elif [ $FL = false ]; then
                     "
 fi
 
+if [ $TE = true ]; then
+    te_options=" \
+		    --transformer-impl transformer_engine"
+
+elif [ $TE = false ]; then
+    te_options=" \
+                    "
+fi
+
 if [ $SP = true ] && [ $TP -gt 1 ]; then
     sp_options=" \
 		    --sequence-parallel"
@@ -129,7 +141,7 @@ fi
 
 LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${WARMUP_ITERS} ))
 
-NAME="${ENV}-pretrain-megatron-llama-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_ITERS}-wt-${WARMUP_ITERS}"
+NAME="${ENV}-pretrain-megatron-baichuan-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
 mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
 mkdir -p "${OUTPUT_BASEPATH}/log/"
@@ -146,15 +158,14 @@ megatron_options="  \
         --data-path ${DATASET_PATH}
         --lr ${LR} \
         --min-lr ${MIN_LR} \
-        --lr-decay-style cosine \
+        --lr-decay-style linear \
         --adam-beta1 0.9 \
         --adam-beta2 0.95 \
         --weight-decay 0.1 \
         --clip-grad 1.0 \
         --init-method-std 0.006 \
-        --dataloader-type cyclic \
         --lr-decay-iters ${LR_DECAY_ITERS} \
-        --lr-warmup-iters ${WARMUP_ITERS} \
+        --lr-warmup-iters ${LR_WARMUP_ITERS} \
         --train-iters ${TRAIN_ITERS} \
         --micro-batch-size ${BATCH_SIZE} \
         --global-batch-size ${GLOBAL_BATCH_SIZE} \
@@ -163,7 +174,7 @@ megatron_options="  \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --intermediate-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
-        --max-position-embeddings 16384 \
+        --max-position-embeddings ${SEQ_LEN} \
         --log-interval 1 \
         --eval-interval 100 \
         --eval-iters 10 \
@@ -181,19 +192,19 @@ megatron_options="  \
         --no-load-rng \
         --num-workers 8 \
         --seed 1234 \
+        --dataloader-type cyclic \
+        --dataset LLama-SFT \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --use-rotary-position-embeddings \
-        --no-position-embedding \
-        --n-head-kv ${NUM_HEAD_KV} \
+        --patch-tokenizer-type BaichuanTokenizer \
         --swiglu \
+        --no-query-key-layer-scaling \
         --untie-embeddings-and-output-weights \
-        --patch-tokenizer-type LLamaTokenizer
+        --disable-bias-linear
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megatron_llama.py
- ${megatron_options} ${activation_checkpoint_options} ${do_options} ${pr_options} ${sp_options} ${flash_options} ${load_options}"
-
+run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megatron_baichuan.py
+ ${megatron_options} ${activation_checkpoint_options} ${do_options} ${pr_options} ${sp_options} ${flash_options} ${load_options} ${te_options} ${model_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
