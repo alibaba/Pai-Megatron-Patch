@@ -24,14 +24,10 @@ from .language_model import get_language_model
 
 
 def post_language_model_processing(lm_output, labels, logit_weights,
-                                   parallel_output,
-                                   fp16_lm_cross_entropy):
+                                   parallel_output, fp16_lm_cross_entropy):
 
     # Output. Format [s b h]
-    output = parallel_lm_logits(
-        lm_output,
-        logit_weights,
-        parallel_output)
+    output = parallel_lm_logits(lm_output, logit_weights, parallel_output)
 
     if labels is None:
         # [s b h] => [b s h]
@@ -39,16 +35,19 @@ def post_language_model_processing(lm_output, labels, logit_weights,
     else:
         # [b s] => [s b]
         labels = labels.transpose(0, 1).contiguous()
+        shift_logits = output[:-1, ..., :].contiguous()
+        shift_labels = labels[1:, ...].contiguous()
         if fp16_lm_cross_entropy:
             assert output.dtype == torch.half
-            loss = tensor_parallel.vocab_parallel_cross_entropy(output, labels)
+            loss = tensor_parallel.vocab_parallel_cross_entropy(
+                shift_logits, shift_labels)
         else:
-            loss = tensor_parallel.vocab_parallel_cross_entropy(output.float(), labels)
+            loss = tensor_parallel.vocab_parallel_cross_entropy(
+                shift_logits.float(), shift_labels)
 
         # [s b] => [b, s]
-        loss = loss.transpose(0,1).contiguous()
+        loss = loss.transpose(0, 1).contiguous()
         return loss
-
 
 class GPTModel(MegatronModule):
     """GPT-2 Language model."""
@@ -110,6 +109,7 @@ class GPTModel(MegatronModule):
                     self.language_model.output_layer.weight if self.untie_embeddings_and_output_weights else self.shared_embedding_or_output_weight(),
                     self.parallel_output,
                     self.fp16_lm_cross_entropy)
+
         else:
             return lm_output
 
