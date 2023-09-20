@@ -21,6 +21,7 @@ from megatron.model.enums import AttnMaskType
 
 from .language_model import parallel_lm_logits
 from .language_model import get_language_model
+from megatron.core.parallel_state import get_tensor_model_parallel_group
 
 
 def post_language_model_processing(lm_output, labels, logit_weights,
@@ -44,6 +45,18 @@ def post_language_model_processing(lm_output, labels, logit_weights,
         else:
             loss = tensor_parallel.vocab_parallel_cross_entropy(
                 shift_logits.float(), shift_labels)
+        
+        # add z_loss
+        args = get_args()
+        z_loss_weight = args.z_loss_weight if 'z_loss_weight' in args else 0.0
+        if z_loss_weight:
+            logits_max = torch.max(shift_logits, dim=-1)[0]
+            torch.distributed.all_reduce(
+                logits_max, op=torch.distributed.ReduceOp.MAX, group=get_tensor_model_parallel_group()
+            )
+            softmax_normalizer = logits_max ** 2
+            z_loss = z_loss_weight * softmax_normalizer.mean()
+            loss = loss + z_loss
 
         # [s b] => [b, s]
         loss = loss.transpose(0, 1).contiguous()

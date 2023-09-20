@@ -1,6 +1,8 @@
 #!/bin/bash
 # transformers to megatron
 # sh model_convertor.sh /root/Megatron-LM-23.04/ /mnt/baichuan-ckpts/baichuan-13b-base/ /mnt/baichuan-ckpts/baichuan-13b-base-hf-to-megatron-tp1-pp1 1 1 baichuan-13b 0 false
+# megatron to transformers
+# sh model_convertor.sh ../../../../Megatron-LM/ ../../../../baichuan/baichuan-13b-base-hf-to-megatron-tp4-pp1/release/ ../../../../baichuan/baichuan2-13b-mg2hf41  4 1 baichuan2-13b 0 true
 set -e
 START_TIME=$SECONDS
 
@@ -9,7 +11,7 @@ SOURCE_CKPT_PATH=$2
 TARGET_CKPT_PATH=$3
 TP=$4
 PP=$5
-MN=$6 #baichuan-13b
+MN=$6 #baichuan2-7b, baichuan2-13b
 EXTRA_VOCAB_SIZE=$7
 mg2hf=$8
 
