@@ -1,0 +1,17 @@
+deepspeed
+icetk
+ftfy
+hjson
+ninja
+tokenizers
+transformers>=4.31.0
+accelerate>=0.23.0
+jieba
+sentencepiece
+rjieba
+sqlitedict
+sacrebleu
+datasets
+tensorboard
+lm_dataformat
+tiktoken
