@@ -106,6 +106,10 @@ def get_tasks_args(parser):
                        action='store_true',
                        help='use alibi mask for baichuan model')
 
+    group.add_argument('--use-normhead',
+                       action='store_true',
+                       help='use-normhead')
+
     group.add_argument('--glu-activation',
                        type=str,
                        help='GLU activations to use.')
