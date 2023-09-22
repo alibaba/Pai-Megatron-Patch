@@ -21,7 +21,7 @@ def dummy_function(*args, **kwargs):
 try:
     from flash_attn.bert_padding import unpad_input, pad_input
 
-    support_flash_attn = True
+    support_flash_attn, fa_version = True, 2.0
 except ImportError:
     logger.info("flash attention unavailable")
     unpad_input = dummy_function
@@ -31,9 +31,8 @@ except ImportError:
 if support_flash_attn:
     try:
         from flash_attn.flash_attn_interface import flash_attn_unpadded_qkvpacked_func
-
         flash_attn_varlen_qkvpacked_func = flash_attn_unpadded_qkvpacked_func
-        logger.info("import from flash attention 1.0")
+        fa_version = 1.0
     except ImportError:
         try:
             from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func, flash_attn_varlen_func, \
@@ -42,8 +41,7 @@ if support_flash_attn:
             flash_attn.flash_attn_interface.flash_attn_unpadded_func = flash_attn_varlen_func
             flash_attn.flash_attn_interface.flash_attn_unpadded_qkvpacked_func = flash_attn_varlen_qkvpacked_func
             flash_attn.flash_attn_interface.flash_attn_unpadded_kvpacked_func = flash_attn_varlen_kvpacked_func
-
-            logger.info("import from flash attention 2.0")
+            fa_version = 2.0
         except ImportError:
             flash_attn_varlen_qkvpacked_func = dummy_function
 
@@ -388,9 +386,9 @@ def main():
         init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
     if args.flash:
         if not support_flash_attn:
-            raise ImportError('FlashAttention 1.0 is not available, please install with '
+            raise ImportError('FlashAttention is not available, please install with '
                               'pip install flash-attn')
-        logger.info("enable flash attention 1.0(no-pretrain)")
+        logger.info(f"enable flash attention {fa_version}")
         with ContextManagers(init_contexts):
             if args.load:
                 model = LlamaForCausalLMWithFlash.from_pretrained(
@@ -405,7 +403,7 @@ def main():
                 model = LlamaForCausalLMWithFlash(config)
 
     else:
-        logger.info("disable flash attention 1.0(no-pretrain)")
+        logger.info("disable flash attention")
         with ContextManagers(init_contexts):
             if args.load:
                 model = LlamaForCausalLM.from_pretrained(
