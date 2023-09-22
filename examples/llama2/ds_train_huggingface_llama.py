@@ -21,7 +21,7 @@ def dummy_function(*args, **kwargs):
 try:
     from flash_attn.bert_padding import unpad_input, pad_input
 
-    support_flash_attn = True
+    support_flash_attn, fa_version = True, 2.0
 except ImportError:
     logger.info("flash attention unavailable")
     unpad_input = dummy_function
@@ -31,9 +31,8 @@ except ImportError:
 if support_flash_attn:
     try:
         from flash_attn.flash_attn_interface import flash_attn_unpadded_qkvpacked_func
-
         flash_attn_varlen_qkvpacked_func = flash_attn_unpadded_qkvpacked_func
-        logger.info("import from flash attention 1.0")
+        fa_version = 1.0
     except ImportError:
         try:
             from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func, flash_attn_varlen_func, \
@@ -42,8 +41,7 @@ if support_flash_attn:
             flash_attn.flash_attn_interface.flash_attn_unpadded_func = flash_attn_varlen_func
             flash_attn.flash_attn_interface.flash_attn_unpadded_qkvpacked_func = flash_attn_varlen_qkvpacked_func
             flash_attn.flash_attn_interface.flash_attn_unpadded_kvpacked_func = flash_attn_varlen_kvpacked_func
-
-            logger.info("import from flash attention 2.0")
+            fa_version = 2.0
         except ImportError:
             flash_attn_varlen_qkvpacked_func = dummy_function
 
@@ -291,6 +289,16 @@ def preprocess(sources, targets, tokenizer):
         label[:source_len] = -100
     return dict(input_ids=input_ids, labels=labels)
 
+def init_weight(model):
+
+    def _init_weight(module):
+        if hasattr(module, 'weight'):
+            nn.init.normal_(module.weight, 0., 0.1)
+        if hasattr(module, 'bias') and module.bias is not None:
+            nn.init.constant_(module.bias, 0)
+
+    model.apply(_init_weight)
+
 
 def main():
     training_args = TrainingArguments(
@@ -388,36 +396,39 @@ def main():
         init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
     if args.flash:
         if not support_flash_attn:
-            raise ImportError('FlashAttention 1.0 is not available, please install with '
+            raise ImportError('FlashAttention is not available, please install with '
                               'pip install flash-attn')
-        logger.info("enable flash attention 1.0(no-pretrain)")
-        with ContextManagers(init_contexts):
-            if args.load:
-                model = LlamaForCausalLMWithFlash.from_pretrained(
-                    args.load,
-                    from_tf=False,
-                    config=config,
-                    revision='main',
-                    use_auth_token=None,
-                    low_cpu_mem_usage=False,
-                )
-            else:
+        logger.info(f"enable flash attention {fa_version}")
+        if args.load:
+            # init_contexts will be constructed in the `from_pretrained`
+            model = LlamaForCausalLMWithFlash.from_pretrained(
+                args.load,
+                from_tf=False,
+                config=config,
+                revision='main',
+                use_auth_token=None,
+                low_cpu_mem_usage=False,
+            )
+        else:
+            with ContextManagers(init_contexts):
                 model = LlamaForCausalLMWithFlash(config)
-
+                init_weight(model)
     else:
-        logger.info("disable flash attention 1.0(no-pretrain)")
-        with ContextManagers(init_contexts):
-            if args.load:
-                model = LlamaForCausalLM.from_pretrained(
-                    args.load,
-                    from_tf=False,
-                    config=config,
-                    revision='main',
-                    use_auth_token=None,
-                    low_cpu_mem_usage=False,
-                )
-            else:
+        logger.info("disable flash attention")
+        if args.load:
+            model = LlamaForCausalLM.from_pretrained(
+                args.load,
+                from_tf=False,
+                config=config,
+                revision='main',
+                use_auth_token=None,
+                low_cpu_mem_usage=False,
+            )
+        else:
+            with ContextManagers(init_contexts):
                 model = LlamaForCausalLM(config)
+                init_weight(model)
+                
 
     model.to('cuda')
     if args.enable_gradient_checkpointing:
