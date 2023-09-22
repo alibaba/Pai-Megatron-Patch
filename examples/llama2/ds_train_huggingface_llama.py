@@ -289,6 +289,16 @@ def preprocess(sources, targets, tokenizer):
         label[:source_len] = -100
     return dict(input_ids=input_ids, labels=labels)
 
+def init_weight(model):
+
+    def _init_weight(module):
+        if hasattr(module, 'weight'):
+            nn.init.normal_(module.weight, 0., 0.1)
+        if hasattr(module, 'bias') and module.bias is not None:
+            nn.init.constant_(module.bias, 0)
+
+    model.apply(_init_weight)
+
 
 def main():
     training_args = TrainingArguments(
@@ -389,33 +399,36 @@ def main():
             raise ImportError('FlashAttention is not available, please install with '
                               'pip install flash-attn')
         logger.info(f"enable flash attention {fa_version}")
-        with ContextManagers(init_contexts):
-            if args.load:
-                model = LlamaForCausalLMWithFlash.from_pretrained(
-                    args.load,
-                    from_tf=False,
-                    config=config,
-                    revision='main',
-                    use_auth_token=None,
-                    low_cpu_mem_usage=False,
-                )
-            else:
+        if args.load:
+            # init_contexts will be constructed in the `from_pretrained`
+            model = LlamaForCausalLMWithFlash.from_pretrained(
+                args.load,
+                from_tf=False,
+                config=config,
+                revision='main',
+                use_auth_token=None,
+                low_cpu_mem_usage=False,
+            )
+        else:
+            with ContextManagers(init_contexts):
                 model = LlamaForCausalLMWithFlash(config)
-
+                init_weight(model)
     else:
         logger.info("disable flash attention")
-        with ContextManagers(init_contexts):
-            if args.load:
-                model = LlamaForCausalLM.from_pretrained(
-                    args.load,
-                    from_tf=False,
-                    config=config,
-                    revision='main',
-                    use_auth_token=None,
-                    low_cpu_mem_usage=False,
-                )
-            else:
+        if args.load:
+            model = LlamaForCausalLM.from_pretrained(
+                args.load,
+                from_tf=False,
+                config=config,
+                revision='main',
+                use_auth_token=None,
+                low_cpu_mem_usage=False,
+            )
+        else:
+            with ContextManagers(init_contexts):
                 model = LlamaForCausalLM(config)
+                init_weight(model)
+                
 
     model.to('cuda')
     if args.enable_gradient_checkpointing:
