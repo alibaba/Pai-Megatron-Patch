@@ -1,6 +1,5 @@
 #!/bin/bash
-# sh run_evaluate_huggingface_qwen.sh dsw /workspace/Megatron-LM-23.04 /workspace/PAI-Megatron-Patch/ 70B 1 2048 80 0 fp16 /mnt/llama-datasets/wudao_train.jsonl /mnt/llama2-ckpts/Ziya-LLaMA-13B/
-
+# sh run_evaluate_huggingface_qwen.sh dsw /workspace/Megatron-LM-main /workspace/github/Pai-Megatron-Patch 14B 1 2048 80 0 fp16 /mnt/qwen-datasets/wudao_train.json /mnt/qwen-ckpts/qwen-14b
 set -e
 ENV=$1
 MEGATRON_PATH=$2
@@ -42,19 +41,13 @@ HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
 
-elif [ $MODEL_SIZE = 13B ]; then
+elif [ $MODEL_SIZE = 14B ]; then
 
 NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
-INTERMEDIATE_SIZE=13824
-
-elif [ $MODEL_SIZE = 70B ]; then
-
-NUM_LAYERS=80
-HIDDEN_SIZE=8192
-NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=28672
+INTERMEDIATE_SIZE=13696
+NUM_HEAD_KV=40
 
 fi
 
