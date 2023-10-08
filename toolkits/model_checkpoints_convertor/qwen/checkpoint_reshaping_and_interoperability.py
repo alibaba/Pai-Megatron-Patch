@@ -720,9 +720,14 @@ def convert_checkpoint_from_megatron_to_transformers(args):
         auto_map={
         "AutoConfig": "configuration_qwen.QWenConfig",
         "AutoModelForCausalLM": "modeling_qwen.QWenLMHeadModel"},
-        architectures="QWenLMHeadModel"
+        architectures="QWenLMHeadModel",
+        vocab_size=152064,
+        hidden_size=5120,
+        num_hidden_layers=40,
+        num_attention_heads=40,
+        intermediate_size=27392,
+        seq_length=2048,
     )
-
     output_state_dict = {}
 
     checkpoint_version = state_dict.get("checkpoint_version", 3.0)
@@ -743,9 +748,6 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     word_embeddings = []
     word_embeddings_layernorm_weight = []
     word_embeddings_layernorm_bias = []
-
-    # import pdb
-    # pdb.set_trace()
 
     for tp_rank in range(tp_size):
         embeddings = get_element_from_dict_by_path(
