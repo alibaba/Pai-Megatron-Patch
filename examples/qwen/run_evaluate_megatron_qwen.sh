@@ -1,5 +1,5 @@
 #!/bin/bash
-# sh run_evaluate_megatron_qwen.sh dsw /root/Megatron-LM-main ${WORK_DIR}/PAI-Megatron-Patch/ 7B 1 2048 2048 85 fp16 1 1 ${WORK_DIR}/qwen-datasets/wudao_train.json ${WORK_DIR}/qwen-ckpts/qwen-7b-hf-to-megatron-tp1-pp1
+# sh run_evaluate_megatron_qwen.sh dsw /workspace/Megatron-LM-main /workspace/github/Pai-Megatron-Patch 14B 1 2048 80 213 fp16 1 1 /mnt/qwen-datasets/wudao_train.json /mnt/qwen-ckpts/qwen-14b-hf-to-mg-tp1-pp1
 set -e
 ENV=$1
 MEGATRON_PATH=$2
@@ -44,29 +44,13 @@ NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
 NUM_HEAD_KV=32
 
-elif [ $MODEL_SIZE = 13B ]; then
+elif [ $MODEL_SIZE = 14B ]; then
 
 NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
-INTERMEDIATE_SIZE=13824
+INTERMEDIATE_SIZE=13696
 NUM_HEAD_KV=40
-
-elif [ $MODEL_SIZE = 65B ]; then
-
-NUM_LAYERS=80
-HIDDEN_SIZE=8192
-NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=22016
-NUM_HEAD_KV=64
-
-elif [ $MODEL_SIZE = 70B ]; then
-
-NUM_LAYERS=80
-HIDDEN_SIZE=8192
-NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=28672
-NUM_HEAD_KV=8
 
 fi
 
