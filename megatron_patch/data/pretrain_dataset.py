@@ -609,7 +609,7 @@ def build_pretrain_glm130b_datasets_from_idxmap(data_prefix,
     """
     data_prefix = data_prefix[0]
     # Indexed dataset.
-    indexed_dataset = get_indexed_dataset_(data_prefix, data_impl, skip_warmup)
+    indexed_dataset = get_indexed_dataset_(data_prefix, skip_warmup)
 
     total_num_of_documents = indexed_dataset.sizes.shape[0]
     splits = get_train_valid_test_split_(splits_string, total_num_of_documents)
@@ -742,7 +742,7 @@ def _build_train_valid_test_datasets(data_prefix, max_padding_length, data_impl,
                                      seed, skip_warmup,
                                      return_doc_ids=False):
     # Indexed dataset.
-    indexed_dataset = get_indexed_dataset_(data_prefix, data_impl, skip_warmup)
+    indexed_dataset = get_indexed_dataset_(data_prefix, skip_warmup)
     total_num_of_documents = indexed_dataset.sizes.shape[0]
     splits = get_train_valid_test_split_(splits_string, total_num_of_documents)
     # Print stats about the splits.
@@ -820,7 +820,7 @@ def build_pretrain_falcon_datasets_from_idxmap(data_prefix,
     """
     data_prefix = data_prefix[0]
     # Indexed dataset.
-    indexed_dataset = get_indexed_dataset_(data_prefix, data_impl, skip_warmup)
+    indexed_dataset = get_indexed_dataset_(data_prefix, skip_warmup)
     total_num_of_documents = indexed_dataset.sizes.shape[0]
     splits = get_train_valid_test_split_(splits_string, total_num_of_documents)
     # Print stats about the splits.

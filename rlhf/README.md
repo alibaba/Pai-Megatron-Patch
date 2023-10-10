@@ -9,7 +9,7 @@
 
 LLaMA2模型转换：
 ```bash
-cd PAI-Megatron-Patch/toolkits/model_checkpoints_convertor/gpt3_llama
+cd PAI-Megatron-Patch/toolkits/model_checkpoints_convertor/llama2
 bash model_convertor.sh \
 /path/to/Megatron-LM \
 /path/to/megatron_llama2_ckpt \
