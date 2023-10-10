@@ -213,4 +213,8 @@ def get_tasks_args(parser):
                        default=0.0,
                        help='the max-z weight for baichuan2')
 
+    group.add_argument('--data-impl', type=str, default='mmap',
+                       choices=['mmap', 'infer'],
+                       help='Implementation of indexed datasets.')
+
     return parser

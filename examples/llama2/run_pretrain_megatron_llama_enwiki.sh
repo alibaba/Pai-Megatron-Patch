@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_pretrain_megatron_llama.sh dsw /root/Megatron-LM-main/ ../../../PAI-Megatron-Patch/ 7B 2 2048 1e-5 1e-6 2048 2048 1 bf16 1 1 sel true true true true 100000 ${WORK_DIR}/wudao/wudao_llamabpe_text_document ${WORK_DIR}/llama2-ckpts/Llama-2-7b-hf 10000000000 100000000 ${WORK_DIR}/output_patch
+#sh run_pretrain_megatron_llama_enwiki.sh dsw /root/Megatron-LM-main/ ../../../PAI-Megatron-Patch/ 7B 2 2048 1e-5 1e-6 2048 2048 1 bf16 1 1 sel true true true true 100000 ${WORK_DIR}/wiki/enwiki-20230526-pages-articles ${WORK_DIR}/llama2-ckpts/Llama-2-7b-hf 10000000000 100000000 ${WORK_DIR}/output_patch
 set -e
 ENV=$1
 MEGATRON_PATH=$2
@@ -20,6 +20,14 @@ NNODES=${WORLD_SIZE}
 NODE_RANK=${RANK}
 GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU}
 
+fi
+
+if [ ! -f gpt2-vocab.json ]; then
+    wget https://easynlp-dev.oss-cn-zhangjiakou.aliyuncs.com/225247/RapidformerPro/gpt2-vocab.json
+fi
+
+if [ ! -f gpt2-merges.txt ]; then
+    wget https://easynlp-dev.oss-cn-zhangjiakou.aliyuncs.com/225247/RapidformerPro/gpt2-merges.txt
 fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
@@ -54,7 +62,6 @@ NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
-NUM_HEAD_KV=32
 
 elif [ $MODEL_SIZE = 13B ]; then
 
@@ -62,7 +69,6 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13824
-NUM_HEAD_KV=40
 
 elif [ $MODEL_SIZE = 65B ]; then
 
@@ -70,7 +76,6 @@ NUM_LAYERS=80
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=22016
-NUM_HEAD_KV=64
 
 elif [ $MODEL_SIZE = 70B ]; then
 
@@ -78,7 +83,6 @@ NUM_LAYERS=80
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=28672
-NUM_HEAD_KV=8
 
 gqa_options=" \
 		    --group-query-attention \
@@ -189,7 +193,7 @@ megatron_options="  \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
         --num-attention-heads ${NUM_ATTN_HEADS} \
-        --intermediate-size ${INTERMEDIATE_SIZE} \
+        --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${SEQ_LEN} \
         --log-interval 1 \
@@ -203,16 +207,18 @@ megatron_options="  \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
-        --dataset LLama-SFT \
-        --DDP-impl local \
         --no-load-optim \
         --no-load-rng \
         --num-workers 8 \
         --seed 1234 \
         --max-padding-length ${PAD_LEN} \
+        --tokenizer-type GPT2BPETokenizer \
+        --patch-tokenizer-type GPT2BPETokenizer \
+        --vocab-file gpt2-vocab.json \
+        --merge-file gpt2-merges.txt \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --n-head-kv ${NUM_HEAD_KV} \
         --swiglu \
+        --normalization RMSNorm \
         --use-rotary-position-embeddings \
         --no-position-embedding \
         --untie-embeddings-and-output-weights \

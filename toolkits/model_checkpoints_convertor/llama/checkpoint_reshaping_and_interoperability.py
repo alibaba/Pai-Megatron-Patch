@@ -164,8 +164,7 @@ megatron_to_transformers = {
 
 transformers_to_megatron = {
     "self_attn.dense": "self_attention.dense",
-    "mlp.dense_h_to_4h_1": "mlp.dense_h_to_4h_1",
-    "mlp.dense_h_to_4h_2": "mlp.dense_h_to_4h_2",
+    "mlp.dense_h_to_4h": "mlp.dense_h_to_4h",
     "mlp.dense_4h_to_h": "mlp.dense_4h_to_h",
 }
 
@@ -173,8 +172,7 @@ tensor_parallel_params = [
     # megatron-lm layers to merge across tp ranks
     "self_attn.query_key_value.weight",
     "self_attn.dense.weight",
-    "mlp.dense_h_to_4h_1.weight",
-    "mlp.dense_h_to_4h_2.weight",
+    "mlp.dense_h_to_4h.weight",
     "mlp.dense_4h_to_h.weight"
 ]
 
@@ -183,8 +181,7 @@ tensor_parallel_params_70b = [
     "self_attn.query.weight",
     "self_attn.key_value.weight",
     "self_attn.dense.weight",
-    "mlp.dense_h_to_4h_1.weight",
-    "mlp.dense_h_to_4h_2.weight",
+    "mlp.dense_h_to_4h.weight",
     "mlp.dense_4h_to_h.weight"
 ]
 
@@ -194,8 +191,7 @@ tensor_parallel_params_mg = [
     "self_attention.query.weight",
     "self_attention.key_value.weight",
     "self_attention.dense.weight",
-    "mlp.dense_h_to_4h_1.weight",
-    "mlp.dense_h_to_4h_2.weight",
+    "mlp.dense_h_to_4h.weight",
     "mlp.dense_4h_to_h.weight"
 ]
 
@@ -390,7 +386,8 @@ def convert_checkpoint_from_transformers_to_megatron(args):
         if args.model_name == "llama-13b" or args.model_name == "llama-30b":
             num_checkpoints = len(sub_dirs) - 2
             state_dict = merge_transformers_sharded_states_13b(args.load_path, num_checkpoints)
-        elif args.model_name == "llama-7b" or args.model_name == "llama-65b" or args.model_name == "llama2-70b":
+        elif args.model_name == "llama-7b" or args.model_name == "llama-65b" or\
+                args.model_name == "llama2-70b" or args.model_name == "llama2-7b" or args.model_name == "llama2-13b":
             num_checkpoints = len(sub_dirs) - 1
             state_dict = merge_transformers_sharded_states_7b(args.load_path, num_checkpoints)
 
@@ -412,10 +409,14 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 torch.cat((q_weight, k_weight, v_weight))
 
         merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.dense.weight'] = state_dict['model.layers.' + str(layer_id) + '.self_attn.o_proj.weight']
-        merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h_1.weight'] = state_dict[
+
+        dense_h_to_4h_1_weight = state_dict[
             'model.layers.' + str(layer_id) + '.mlp.gate_proj.weight']
-        merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h_2.weight'] = state_dict[
+        dense_h_to_4h_2_weight = state_dict[
             'model.layers.' + str(layer_id) + '.mlp.up_proj.weight']
+        merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h.weight'] = torch.cat(
+            [dense_h_to_4h_1_weight, dense_h_to_4h_2_weight], dim=0)
+
         merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_4h_to_h.weight'] = state_dict[
             'model.layers.' + str(layer_id) + '.mlp.down_proj.weight']
         merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.input_layernorm.weight'] = state_dict[

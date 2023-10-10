@@ -25,6 +25,7 @@ from megatron.core import mpu
 from megatron.utils import average_losses_across_data_parallel_group
 from megatron.utils import calc_params_l2_norm
 from megatron.utils import check_adlr_autoresume_termination
+from megatron.core.utils import get_model_config
 
 from .checkpointing import load_checkpoint, save_checkpoint
 from .training import evaluate_and_print_results
@@ -157,7 +158,7 @@ def _build_train_valid_dataloaders(train_dataset,
 
 
 def _train(model, optimizer, opt_param_scheduler, forward_step,
-           train_dataloader, valid_dataloader, end_of_epoch_callback):
+           train_dataloader, valid_dataloader, end_of_epoch_callback, config):
     """
     Train the model.
 
@@ -210,7 +211,7 @@ def _train(model, optimizer, opt_param_scheduler, forward_step,
 
             # Train for one step.
             out = train_step(forward_step, batch, model, optimizer,
-                             opt_param_scheduler)
+                             opt_param_scheduler, config)
 
             losses_dict, skipped_iter, grad_norm, num_zeros_in_grad = out
             iteration += 1
@@ -336,10 +337,12 @@ def finetune(train_valid_datasets_provider,
                barrier=True)
     print_rank_0('training ...')
 
+    config = get_model_config(model[0])
+
     # Finetune the model.
     if args.epochs > 0:
         _train(model, optimizer, opt_param_scheduler, forward_step,
-               train_dataloader, valid_dataloader, end_of_epoch_callback)
+               train_dataloader, valid_dataloader, end_of_epoch_callback, config)
     # Or just evaluate.
     else:
         if end_of_epoch_callback is not None:

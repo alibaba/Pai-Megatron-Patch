@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_finetune_megatron_llama.sh dsw /root/Megatron-LM-23.04/ /workspace/PAI-Megatron-Patch/ 7B 1 1e-5 1e-6 2048 80 0 fp16 1 1 sel true false false  /mnt/llama2-datasets/wudao_train.json /mnt/llama2-datasets/wudao_valid.json /mnt/llama2-ckpts/llama-2-7b-hf-to-megatron-tp1-pp1 2 /mnt/output_llama2
+#sh run_finetune_megatron_llama.sh dsw /workspace/Megatron-LM/ /workspace/github/Pai-Megatron-Patch/ 7B 1 1e-5 1e-6 80 81 0 bf16 1 1 sel true false false  /mnt/llama2-datasets/wudao_train.json /mnt/llama2-datasets/wudao_valid.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 2 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATH=$2
@@ -51,7 +51,6 @@ NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
-NUM_HEAD_KV=32
 
 elif [ $MODEL_SIZE = 13B ]; then
 
@@ -59,7 +58,6 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13824
-NUM_HEAD_KV=40
 
 elif [ $MODEL_SIZE = 70B ]; then
 
@@ -67,7 +65,6 @@ NUM_LAYERS=80
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=28672
-NUM_HEAD_KV=8
 
 fi
 
@@ -138,7 +135,7 @@ megatron_options="  \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${SEQ_LEN}  \
-        --intermediate-size ${INTERMEDIATE_SIZE} \
+        --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --keep-last \
         --micro-batch-size ${BATCH_SIZE} \
         --epochs ${EPOCH} \
@@ -163,18 +160,18 @@ megatron_options="  \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
         --finetune \
-        --DDP-impl local \
         --no-load-optim \
         --no-load-rng \
         --seed 1234 \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
+        --swiglu \
+        --normalization RMSNorm \
         --use-rotary-position-embeddings \
         --no-position-embedding \
-        --swiglu \
         --untie-embeddings-and-output-weights \
-        --n-head-kv ${NUM_HEAD_KV} \
-        --patch-tokenizer-type LLamaTokenizer
+        --patch-tokenizer-type LLamaTokenizer \
+        --disable-bias-linear
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS finetune_megatron_llama.py
