@@ -1,6 +1,6 @@
 #!/bin/bash
-# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Megatron-LM-main/ /workspace/github/Pai-Megatron-Patch/ 7B 1 2048 2048 0 bf16 1 1 sel true false false false /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base-to-mg-tp1-pp1
-# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Megatron-LM-main/ /workspace/github/Pai-Megatron-Patch/ 13B 1 2048 2048 0 bf16 2 1 sel true false false false /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-13B-Base-to-mg-tp2-pp1
+# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Megatron-LM/ /workspace/github/Pai-Megatron-Patch/ 7B 1 2048 2048 0 bf16 2 1 sel true true true false /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base-to-mg-tp2-pp1
+# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Megatron-LM/ /workspace/github/Pai-Megatron-Patch/ 13B 1 2048 2048 0 bf16 2 1 sel true false true false /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-13B-Base-to-mg-tp2-pp1
 
 set -e
 ENV=$1
@@ -60,7 +60,7 @@ NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13696
 
 model_options=" \
-        --use-bloom-alibi-mask \
+        --use-alibi-mask \
         --position-embedding-type none"
 
 fi
@@ -147,13 +147,12 @@ megatron_options=" \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${SEQ_LEN} \
-        --intermediate-size ${INTERMEDIATE_SIZE} \
+        --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --log-interval 1 \
         --eval-interval 100 \
         --eval-iters 10 \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
-        --DDP-impl local \
         --no-load-optim \
         --no-load-rng \
         --num-workers 0 \
@@ -164,6 +163,7 @@ megatron_options=" \
         --patch-tokenizer-type BaichuanTokenizer \
         --swiglu \
         --no-query-key-layer-scaling \
+        --normalization RMSNorm \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear
         "

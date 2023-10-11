@@ -106,10 +106,6 @@ def get_tasks_args(parser):
                        action='store_true',
                        help='use alibi mask for baichuan model')
 
-    group.add_argument('--use-bloom-alibi-mask',
-                       action='store_true',
-                       help='use alibi mask for baichuan model')
-
     group.add_argument('--use-normhead',
                        action='store_true',
                        help='use-normhead')

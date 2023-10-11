@@ -26,10 +26,12 @@ from megatron.core.enums import ModelType
 from megatron.model.enums import AttnMaskType, LayerType, AttnType
 from megatron.model.fused_softmax import FusedScaleMaskSoftmax
 from megatron.model.fused_bias_gelu import bias_gelu_impl
-from megatron.core.models.common.rotary_pos_embedding import apply_rotary_pos_emb
 from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu, get_norm
 from megatron.core.tensor_parallel import gather_from_sequence_parallel_region_to_moe, reduce_scatter_to_sequence_parallel_region_from_moe
 from megatron.core.parallel_state import get_tensor_model_parallel_group, get_tensor_and_data_parallel_group
+
+
+from .rotary_pos_embedding import RotaryEmbedding, apply_rotary_pos_emb
 
 try:
     from einops import rearrange
@@ -609,6 +611,24 @@ class ParallelAttention(MegatronModule):
             input_is_parallel=True,
             skip_bias_add=True)
 
+        self.use_rotary_position_embeddings = \
+            args.position_embedding_type == 'rope'
+        if self.use_rotary_position_embeddings:
+            self.seq_length = args.seq_length
+            rotary_dim = args.hidden_size // args.num_attention_heads \
+                if args.kv_channels is None else args.kv_channels
+
+            if args.rotary_percent < 1.0:
+                rotary_dim = int(rotary_dim * args.rotary_percent)
+
+            # partial rotary embeddings, which is better than full rotary
+            # Wang and Komatsuzaki et al
+            # https://github.com/kingoflolz/mesh-transformer-jax/
+            self.rotary_emb = RotaryEmbedding(
+                rotary_dim,
+                args.max_position_embeddings
+            )
+
     def _checkpointed_attention_forward(self, query_layer, key_layer,
                                         value_layer, attention_mask,
                                         rotary_pos_emb=None):
@@ -641,7 +661,7 @@ class ParallelAttention(MegatronModule):
             dtype=self.params_dtype,
             device=torch.cuda.current_device())
 
-    def forward(self, hidden_states, attention_mask,
+    def forward(self, hidden_states, position_ids, attention_mask,
                 encoder_output=None, inference_params=None,
                 rotary_pos_emb=None):
         # hidden_states: [sq, b, h]
@@ -736,7 +756,20 @@ class ParallelAttention(MegatronModule):
             else:
                 rotary_pos_emb = ((rotary_pos_emb,) * 2)
 
+        kv_seq_len = key_layer.shape[0]
         if inference_params:
+            kv_seq_len += inference_params.sequence_len_offset
+            value_layer = value_layer.transpose(0, 1).transpose(1, 2)
+            query_layer = query_layer.transpose(0, 1).transpose(1, 2)
+            key_layer = key_layer.transpose(0, 1).transpose(1, 2)
+            cos, sin = self.rotary_emb(value_layer, kv_seq_len)
+            query_layer, key_layer = apply_rotary_pos_emb(
+                query_layer, key_layer, cos, sin, position_ids)
+
+            value_layer = value_layer.transpose(1, 2).transpose(0, 1)
+            query_layer = query_layer.transpose(1, 2).transpose(0, 1)
+            key_layer = key_layer.transpose(1, 2).transpose(0, 1)
+
             batch_start = inference_params.batch_size_offset
             batch_end = batch_start + key_layer.size(1)
             assert batch_end <= inference_key_memory.size(1)
@@ -774,6 +807,8 @@ class ParallelAttention(MegatronModule):
                 k_pos_emb = k_pos_emb[:sequence_end, :, :, :]
                 rotary_pos_emb = (q_pos_emb, k_pos_emb)
 
+
+
         # ==================================
         # core attention computation
         # ==================================
@@ -789,14 +824,25 @@ class ParallelAttention(MegatronModule):
         )
 
         # apply relative positional encoding (rotary embedding)
-        if rotary_pos_emb is not None:
-            q_pos_emb, k_pos_emb = rotary_pos_emb
-            query_layer = apply_rotary_pos_emb(query_layer, q_pos_emb)
-            key_layer = apply_rotary_pos_emb(key_layer, k_pos_emb)
-            # TODO, can apply positional embedding to value_layer so it has
-            # absolute positional embedding.
-            # otherwise, only relative positional embedding takes effect
-            # value_layer = apply_rotary_pos_emb(value_layer, k_pos_emb)
+        """
+        q_pos_emb, k_pos_emb = rotary_pos_emb
+        query_layer = apply_rotary_pos_emb(query_layer, q_pos_emb)
+        key_layer = apply_rotary_pos_emb(key_layer, k_pos_emb)
+        """
+        value_layer = value_layer.transpose(0, 1).transpose(1, 2)
+        query_layer = query_layer.transpose(0, 1).transpose(1, 2)
+        key_layer = key_layer.transpose(0, 1).transpose(1, 2)
+        cos, sin = self.rotary_emb(value_layer, kv_seq_len)
+        query_layer, key_layer = apply_rotary_pos_emb(
+            query_layer, key_layer, cos, sin, position_ids)
+
+        value_layer = value_layer.transpose(1, 2).transpose(0, 1)
+        query_layer = query_layer.transpose(1, 2).transpose(0, 1)
+        key_layer = key_layer.transpose(1, 2).transpose(0, 1)
+        # TODO, can apply positional embedding to value_layer so it has
+        # absolute positional embedding.
+        # otherwise, only relative positional embedding takes effect
+        # value_layer = apply_rotary_pos_emb(value_layer, k_pos_emb)
 
         if not self.use_flash_attn:
             if self.checkpoint_core_attention:
@@ -1144,7 +1190,7 @@ class ParallelTransformerLayer(MegatronModule):
 
         return retriever_output, norm_input, norm_output
 
-    def forward(self, hidden_states, attention_mask,
+    def forward(self, hidden_states, position_ids, attention_mask,
                 encoder_output=None, enc_dec_attn_mask=None,
                 retriever_input=None,
                 retriever_output=None,
@@ -1160,6 +1206,7 @@ class ParallelTransformerLayer(MegatronModule):
         attention_output, attention_bias = \
             self.self_attention(
                 norm_output,
+                position_ids,
                 attention_mask,
                 inference_params=inference_params,
                 rotary_pos_emb=rotary_pos_emb)
@@ -1591,7 +1638,7 @@ class ParallelTransformer(MegatronModule):
     def _get_layer(self, layer_number):
         return self.layers[layer_number]
 
-    def _checkpointed_forward(self, hidden_states, attention_mask,
+    def _checkpointed_forward(self, hidden_states, position_ids, attention_mask,
                               encoder_output, enc_dec_attn_mask,
                               rotary_pos_emb, is_first_microbatch):
         """Forward method with activation checkpointing."""
@@ -1622,13 +1669,13 @@ class ParallelTransformer(MegatronModule):
                         self.distribute_saved_activations,
                         tensor_parallel.get_cuda_rng_tracker,
                         mpu.get_tensor_model_parallel_group(),
-                        hidden_states, attention_mask, encoder_output,
+                        hidden_states, position_ids, attention_mask, encoder_output,
                         enc_dec_attn_mask, **te_forward_kwargs)
                 else:
                     hidden_states = tensor_parallel.checkpoint(
                         custom(l, l + self.recompute_num_layers),
                         self.distribute_saved_activations,
-                        hidden_states, attention_mask,
+                        hidden_states, position_ids, attention_mask,
                         encoder_output, enc_dec_attn_mask,
                         None, None, None, None, rotary_pos_emb)
 
@@ -1646,23 +1693,23 @@ class ParallelTransformer(MegatronModule):
                             self.distribute_saved_activations,
                             tensor_parallel.get_cuda_rng_tracker,
                             mpu.get_tensor_model_parallel_group(),
-                            hidden_states, attention_mask, encoder_output,
+                            hidden_states, position_ids, attention_mask, encoder_output,
                             enc_dec_attn_mask, **te_forward_kwargs)
                     else:
                         hidden_states = tensor_parallel.checkpoint(
                             custom(l, l + 1),
                             self.distribute_saved_activations,
-                            hidden_states, attention_mask,
+                            hidden_states, position_ids, attention_mask,
                             encoder_output, enc_dec_attn_mask,
                             None, None, None, None, rotary_pos_emb)
                 else:
                     if self.transformer_impl == 'transformer_engine':
                         hidden_states = custom(l, l + 1)(
-                            hidden_states, attention_mask, encoder_output,
+                            hidden_states, position_ids, attention_mask, encoder_output,
                             enc_dec_attn_mask, **te_forward_kwargs)
                     else:
                         hidden_states = custom(l, l + 1)(
-                            hidden_states, attention_mask,
+                            hidden_states, position_ids, attention_mask,
                             encoder_output, enc_dec_attn_mask,
                             None, None, None, None, rotary_pos_emb)
         else:
@@ -1680,7 +1727,7 @@ class ParallelTransformer(MegatronModule):
         forward_step_func"""
         self.input_tensor = input_tensor
 
-    def forward(self, hidden_states, attention_mask,
+    def forward(self, hidden_states, position_ids, attention_mask,
                 encoder_output=None, enc_dec_attn_mask=None,
                 retriever_input=None,
                 retriever_output=None,
@@ -1743,6 +1790,7 @@ class ParallelTransformer(MegatronModule):
                 # Forward pass.
                 if self.recompute_granularity == 'full':
                     hidden_states = self._checkpointed_forward(hidden_states,
+                                                               position_ids,
                                                                attention_mask,
                                                                encoder_output,
                                                                enc_dec_attn_mask,
@@ -1771,6 +1819,7 @@ class ParallelTransformer(MegatronModule):
 
                         hidden_states = layer(
                             hidden_states,
+                            position_ids,
                             attention_mask,
                             **forward_kwargs)
 

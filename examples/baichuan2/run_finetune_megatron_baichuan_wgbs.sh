@@ -66,7 +66,7 @@ NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13696
 
 model_options=" \
-        --use-bloom-alibi-mask \
+        --use-alibi-mask \
         --position-embedding-type none"
 
 fi
