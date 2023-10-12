@@ -13,12 +13,11 @@
 # limitations under the License.
 
 import torch
-import math
-from typing import Optional
 
 from megatron import get_args
 from megatron.core import mpu, tensor_parallel
 from megatron.core.enums import ModelType
+from megatron.core.models.common.rotary_pos_embedding import RotaryEmbedding
 from megatron.model.enums import AttnMaskType
 from megatron.model.enums import LayerType
 from megatron.model.module import MegatronModule
@@ -27,83 +26,7 @@ from megatron.model.utils import init_method_normal
 from megatron.model.utils import scaled_init_method_normal
 
 from .transformer import ParallelTransformer
-from .positional_embeddings import RotaryEmbedding
 from .layers import linear_with_grad_accumulation_and_async_allreduce
-
-def _get_interleave(n):
-    def _get_interleave_power_of_2(n):
-        start = 2 ** (-(2 ** -(math.log2(n) - 3)))
-        ratio = start
-        return [start * ratio**i for i in range(n)]
-
-    if math.log2(n).is_integer():
-        return _get_interleave_power_of_2(n)
-    else:
-        closest_power_of_2 = 2 ** math.floor(math.log2(n))
-        return (
-            _get_interleave_power_of_2(closest_power_of_2)
-            + _get_interleave(2 * closest_power_of_2)[0::2][: n - closest_power_of_2]
-        )
-
-
-def _fill_with_neg_inf(t):
-    """FP16-compatible function that fills a tensor with -inf."""
-    return t.float().fill_(float("-inf")).type_as(t)
-
-
-def _buffered_future_mask(tensor, maxpos, alibi, attn_heads):
-    _future_mask = torch.triu(_fill_with_neg_inf(torch.zeros([maxpos, maxpos])), 1)
-    _future_mask = _future_mask.unsqueeze(0) + alibi
-    new_future_mask = _future_mask.to(tensor)
-    return new_future_mask[: tensor.shape[0] * attn_heads, :maxpos, :maxpos]
-
-
-def _gen_alibi_mask(tensor, n_head, max_pos):
-    slopes = torch.Tensor(_get_interleave(n_head))
-    position_point = torch.arange(max_pos) - max_pos + 1
-    position_point = position_point.unsqueeze(0).unsqueeze(0).expand(n_head, -1, -1)
-    diag = torch.diag(position_point[0])
-    position_point = position_point - diag.unsqueeze(0).unsqueeze(0).transpose(-1, -2)
-    alibi = slopes.unsqueeze(1).unsqueeze(1) * position_point
-    alibi = alibi.view(n_head, 1, max_pos)
-    alibi_mask = torch.triu(_fill_with_neg_inf(torch.zeros([max_pos, max_pos])), 1)
-    alibi_mask = alibi_mask.unsqueeze(0) + alibi
-    return alibi_mask
-
-
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _make_causal_mask(
-        input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
-):
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
-    mask_cond = torch.arange(mask.size(-1), device=device)
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-    mask = mask.to(dtype)
-
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
-
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    if len(mask.size()) == 3:
-        bsz, src_len, _ = mask.size()
-        tgt_len = tgt_len if tgt_len is not None else src_len
-        expanded_mask = mask[:,None,:,:].expand(bsz, 1, tgt_len, src_len).to(dtype)
-    else:
-        bsz, src_len = mask.size()
-        tgt_len = tgt_len if tgt_len is not None else src_len
-        expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 def parallel_lm_logits(input_, word_embeddings_weight, parallel_output,
@@ -226,10 +149,6 @@ class Embedding(MegatronModule):
         init_method: weight initialization method
         num_tokentypes: size of the token-type embeddings. 0 value
                         will ignore this embedding
-        embedding_weights_in_fp32: casts word embedding weights to
-                                   fp32 before sampling. Required to
-                                   maintain reproducibility when
-                                   training in bf16.
     """
 
     def __init__(self,
@@ -238,8 +157,7 @@ class Embedding(MegatronModule):
                  max_sequence_length,
                  embedding_dropout_prob,
                  config,
-                 num_tokentypes=0,
-                 embedding_weights_in_fp32=False):
+                 num_tokentypes=0):
         super(Embedding, self).__init__()
 
         self.hidden_size = hidden_size
@@ -249,7 +167,6 @@ class Embedding(MegatronModule):
         args = get_args()
 
         # Word embeddings (parallel).
-        self.embedding_weights_in_fp32 = embedding_weights_in_fp32
         self.params_dtype = args.params_dtype
         self.word_embeddings = tensor_parallel.VocabParallelEmbedding(
             vocab_size, self.hidden_size, config=config, init_method=config.init_method)
@@ -314,12 +231,7 @@ class Embedding(MegatronModule):
 
     def forward(self, input_ids, position_ids, tokentype_ids=None):
         # Embeddings.
-        if self.embedding_weights_in_fp32:
-            self.word_embeddings = self.word_embeddings.to(torch.float32)
         words_embeddings = self.word_embeddings(input_ids)
-        if self.embedding_weights_in_fp32:
-            words_embeddings = words_embeddings.to(self.params_dtype)
-            self.word_embeddings = self.word_embeddings.to(self.params_dtype)
         if self.add_position_embedding:
             position_embeddings = self.position_embeddings(position_ids)
             embeddings = words_embeddings + position_embeddings
@@ -445,7 +357,6 @@ class TransformerLanguageModel(MegatronModule):
         self.pre_process = pre_process
         self.post_process = post_process
         self.hidden_size = config.hidden_size
-        self.num_attention_heads = config.num_attention_heads
         self.num_tokentypes = num_tokentypes
         self.init_method = config.init_method
         self.add_encoder = add_encoder
@@ -456,13 +367,7 @@ class TransformerLanguageModel(MegatronModule):
         self.encoder_hidden_state = None
         self.add_retriever = args.retro_add_retriever
         self.untie_embeddings_and_output_weights = args.untie_embeddings_and_output_weights
-        self.first_run = True
-        self.alibi_mask = None
-        self.seq_length_with_past = args.seq_length
-        self.seq_length = args.seq_length
-        self.use_alibi_mask = args.use_alibi_mask
-        self.n_head = args.num_attention_heads
-        self.max_cache_pos = args.seq_length
+
         # Embeddings.
         if self.pre_process:
             self.embedding = Embedding(self.hidden_size,
@@ -470,8 +375,7 @@ class TransformerLanguageModel(MegatronModule):
                                        args.max_position_embeddings,
                                        args.hidden_dropout,
                                        config,
-                                       self.num_tokentypes,
-                                       args.embedding_weights_in_fp32)
+                                       self.num_tokentypes)
             self._embedding_key = 'embedding'
 
         # Rotary positional embeddings
@@ -490,7 +394,7 @@ class TransformerLanguageModel(MegatronModule):
             # https://github.com/kingoflolz/mesh-transformer-jax/
             self.rotary_pos_emb = RotaryEmbedding(
                 rotary_dim,
-                max_position_embeddings=self.seq_length
+                seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
             )
 
         # Encoder (usually set to True, False if part of an encoder-decoder
@@ -565,72 +469,6 @@ class TransformerLanguageModel(MegatronModule):
         else:
             raise Exception('Stage must have at least either encoder or decoder')
 
-    def get_alibi_mask(self, tensor, seq_length_with_past):
-        if self.training:
-            slopes = torch.Tensor(_get_interleave(self.n_head))
-            position_point = (
-                torch.arange(seq_length_with_past) - seq_length_with_past + 1
-            )
-            position_point = (
-                position_point.unsqueeze(0)
-                .unsqueeze(0)
-                .expand(self.n_head, seq_length_with_past, -1)
-            )
-            diag = torch.diag(position_point[0])
-            position_point = position_point - diag.unsqueeze(0).unsqueeze(0).transpose(
-                -1, -2
-            )
-            alibi = slopes.unsqueeze(1).unsqueeze(1) * position_point
-            mask = _buffered_future_mask(
-                tensor, seq_length_with_past, alibi, self.n_head
-            )
-        else:
-            if self.first_run:
-                self.first_run = False
-                self.register_buffer(
-                    "future_mask",
-                    _gen_alibi_mask(tensor, self.n_head, self.max_cache_pos).to(
-                        tensor
-                    ),
-                    persistent=False,
-                )
-            if seq_length_with_past > self.max_cache_pos:
-                self.max_cache_pos = seq_length_with_past
-                self.register_buffer(
-                    "future_mask",
-                    _gen_alibi_mask(tensor, self.n_head, self.max_cache_pos).to(
-                        tensor
-                    ),
-                    persistent=False,
-                )
-            mask = self.future_mask[
-                : self.n_head, :seq_length_with_past, :seq_length_with_past
-            ]
-        return mask
-
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape,
-                inputs_embeds.dtype,
-                device=inputs_embeds.device,
-                past_key_values_length=past_key_values_length,
-            )
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
-                inputs_embeds.device
-            )
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
-
-        return combined_attention_mask
-
     def forward(self, enc_input_ids, enc_position_ids, enc_attn_mask,
                 dec_input_ids=None, dec_position_ids=None, dec_attn_mask=None,
                 retriever_input_ids=None,
@@ -648,65 +486,6 @@ class TransformerLanguageModel(MegatronModule):
         else:
             encoder_input = None
 
-        if self.use_alibi_mask:
-            if self.training:
-                if (
-                        self.alibi_mask is None
-                        or self.alibi_mask.shape[-1] != self.seq_length_with_past
-                ):
-                    self.alibi_mask = self.get_alibi_mask(
-                        encoder_input, self.seq_length_with_past
-                    )
-                alibi_mask = self.alibi_mask
-            else:
-                alibi_mask = self.get_alibi_mask(encoder_input, self.seq_length_with_past)
-
-            #TODO: Memory Issue
-            enc_attn_mask = None
-            if enc_attn_mask is not None:
-                if len(enc_attn_mask.shape) == 2:
-                    expanded_mask = enc_attn_mask.to(alibi_mask.dtype)
-                    expanded_mask = torch.tril(
-                        torch.gt(expanded_mask[:, :, None] * expanded_mask[:, None, :], 0)
-                    ) * torch.eq(expanded_mask[:, :, None] - expanded_mask[:, None, :], 0)
-                else:
-                    expanded_mask = enc_attn_mask
-                bsz = encoder_input.size(0)
-                src_len, tgt_len = alibi_mask.size()[-2:]
-                expanded_mask = (
-                    expanded_mask.unsqueeze(1)
-                    .expand(bsz, 1, src_len, tgt_len)
-                    .to(alibi_mask.dtype)
-                )
-                inverted_mask = 1.0 - expanded_mask
-                inverted_mask = inverted_mask.masked_fill(
-                    inverted_mask.to(torch.bool), torch.finfo(alibi_mask.dtype).min
-                )
-                enc_attn_mask = inverted_mask + alibi_mask.unsqueeze(0)
-
-            else:
-                enc_attn_mask = alibi_mask
-        else:
-            past_key_values_length = 0
-            batch_size = enc_input_ids.shape[0]
-            if enc_attn_mask is None:
-                enc_attn_mask = torch.ones(
-                    (batch_size, self.seq_length_with_past), dtype=torch.bool, device=enc_input_ids.device
-                )
-
-            enc_attn_mask = self._prepare_decoder_attention_mask(
-                enc_attn_mask, (batch_size, self.seq_length), encoder_input, past_key_values_length
-            )
-
-            if enc_position_ids is None:
-                device = enc_input_ids.device if enc_input_ids is not None else encoder_input.device
-                enc_position_ids = torch.arange(
-                    past_key_values_length, self.seq_length + past_key_values_length, dtype=torch.long, device=device
-                )
-                enc_position_ids = enc_position_ids.unsqueeze(0).view(-1, self.seq_length)
-            else:
-                enc_position_ids = enc_position_ids.view(-1, self.seq_length).long()
-
         # Retriever embedding.
         if self.add_retriever and self.pre_process:
             retriever_input = self.embedding(retriever_input_ids,
@@ -720,9 +499,9 @@ class TransformerLanguageModel(MegatronModule):
         if self.use_rotary_position_embeddings:
             if inference_params is not None:
                 rotary_pos_emb = \
-                    self.rotary_pos_emb(encoder_input, inference_params.max_sequence_length)
+                    self.rotary_pos_emb(inference_params.max_sequence_length)
             else:
-                rotary_pos_emb = self.rotary_pos_emb(encoder_input, self.seq_length)
+                rotary_pos_emb = self.rotary_pos_emb(self.seq_length)
 
         # Run encoder.
         if enc_hidden_states is None:
@@ -733,8 +512,7 @@ class TransformerLanguageModel(MegatronModule):
                     retriever_input=retriever_input,
                     retriever_attn_mask=retriever_attn_mask,
                     inference_params=inference_params,
-                    rotary_pos_emb=rotary_pos_emb,
-                    position_ids=enc_position_ids)
+                    rotary_pos_emb=rotary_pos_emb)
             else:
                 encoder_output = self.encoder_hidden_state
         else:
@@ -768,8 +546,7 @@ class TransformerLanguageModel(MegatronModule):
             encoder_output=encoder_output,
             enc_dec_attn_mask=enc_dec_attn_mask,
             inference_params=inference_params,
-            rotary_pos_emb=rotary_pos_emb,
-            position_ids=enc_position_ids)
+            rotary_pos_emb=rotary_pos_emb)
 
         if self.add_pooler and self.post_process:
             return decoder_output, encoder_output, pooled_output

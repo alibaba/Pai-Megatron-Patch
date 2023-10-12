@@ -151,6 +151,16 @@ def add_transformers_checkpoint_args(parser):
     return parser
 
 
+# The simple map of names for "automated" rules.
+megatron_to_transformers = {
+    "self_attention.dense": ".self_attn.o_proj.",
+    "mlp.dense_h_to_4h_1": ".mlp.gate_proj.",
+    "mlp.dense_h_to_4h_2": ".mlp.up_proj.",
+    "mlp.dense_4h_to_h": ".mlp.down_proj.",
+    "self_attention.rotary_emb":".self_attn.rotary_emb.inv_freq"
+}
+# transformers_to_megatron = {v[1:-1]: k for k, v in megatron_to_transformers.items()}
+
 transformers_to_megatron = {
     "self_attn.dense": "self_attention.dense",
     "mlp.dense_h_to_4h_1": "mlp.dense_h_to_4h_1",
@@ -174,12 +184,6 @@ tensor_parallel_params_mg = [
     "mlp.dense_h_to_4h.weight",
     "mlp.dense_4h_to_h.weight"
 ]
-
-megatron_to_transformers = {
-    "self_attention.dense": ".self_attn.o_proj.",
-    "mlp.dense_h_to_4h": [".mlp.gate_proj.",".mlp.up_proj."],
-    "mlp.dense_4h_to_h": ".mlp.down_proj.",
-}
 
 def recursive_print(name, val, spaces=0):
     """
@@ -379,6 +383,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
 
         internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h_2.weight'] =\
             dense_h_to_4h_2_weight
+
 
         internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_4h_to_h.weight'] = state_dict[
             'model.layers.' + str(layer_id) + '.mlp.down_proj.weight']
@@ -588,17 +593,17 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 layer_name = f"final_layernorm.{weight_or_bias}"
                 for i in range(args.target_tensor_model_parallel_size):
                     params_dict = get_element_from_dict_by_path(output_state_dict[i], "model.language_model.encoder")
-                    params_dict[layer_name] = params
+                    params_dict[layer_name] = params.clone()
 
             # add the LM head
             for i in range(args.target_tensor_model_parallel_size):
                 params_dict = get_element_from_dict_by_path(output_state_dict[i], "model.word_embeddings_for_head")
-                params_dict["weight"] = out_word_embed[i]
+                params_dict["weight"] = out_word_embed[i].clone()
 
             # add the LM head
             for i in range(args.target_tensor_model_parallel_size):
                 params_dict = get_element_from_dict_by_path(output_state_dict[i], "model.language_model.output_layer")
-                params_dict["weight"] = out_lm_head[i]
+                params_dict["weight"] = out_lm_head[i].clone()
 
         # saving the state dict as per the tp_rank and pp_rank
         for tp_rank in range(args.target_tensor_model_parallel_size):

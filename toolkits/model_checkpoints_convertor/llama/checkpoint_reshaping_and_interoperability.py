@@ -164,7 +164,8 @@ megatron_to_transformers = {
 
 transformers_to_megatron = {
     "self_attn.dense": "self_attention.dense",
-    "mlp.dense_h_to_4h": "mlp.dense_h_to_4h",
+    "mlp.dense_h_to_4h_1": "mlp.dense_h_to_4h_1",
+    "mlp.dense_h_to_4h_2": "mlp.dense_h_to_4h_2",
     "mlp.dense_4h_to_h": "mlp.dense_4h_to_h",
 }
 
@@ -172,7 +173,8 @@ tensor_parallel_params = [
     # megatron-lm layers to merge across tp ranks
     "self_attn.query_key_value.weight",
     "self_attn.dense.weight",
-    "mlp.dense_h_to_4h.weight",
+    "mlp.dense_h_to_4h_1.weight",
+    "mlp.dense_h_to_4h_2.weight",
     "mlp.dense_4h_to_h.weight"
 ]
 
@@ -391,75 +393,66 @@ def convert_checkpoint_from_transformers_to_megatron(args):
             num_checkpoints = len(sub_dirs) - 1
             state_dict = merge_transformers_sharded_states_7b(args.load_path, num_checkpoints)
 
-    merged_qkv_state_dict = {}
     config = GPT2Config.from_pretrained(args.load_path)
+
+    internal_state_dict = {}
+
     for layer_id in range(config.num_hidden_layers):
-        q_name = 'model.layers.'+str(layer_id)+'.self_attn.q_proj.weight'
-        k_name = 'model.layers.' + str(layer_id) + '.self_attn.k_proj.weight'
-        v_name = 'model.layers.' + str(layer_id) + '.self_attn.v_proj.weight'
-        q_weight = state_dict[q_name]
-        k_weight = state_dict[k_name]
-        v_weight = state_dict[v_name]
+        q_weight = state_dict['model.layers.'+str(layer_id)+'.self_attn.q_proj.weight']
+        k_weight = state_dict['model.layers.' + str(layer_id) + '.self_attn.k_proj.weight']
+        v_weight = state_dict['model.layers.' + str(layer_id) + '.self_attn.v_proj.weight']
 
         if args.model_name == "llama2-70b":
-            merged_qkv_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query.weight'] = q_weight
-            merged_qkv_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.key_value.weight'] = torch.cat((k_weight, v_weight))
+            internal_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query.weight'] = q_weight
+            internal_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.key_value.weight'] = torch.cat((k_weight, v_weight))
         else:
-            merged_qkv_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query_key_value.weight'] =\
+            internal_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query_key_value.weight'] =\
                 torch.cat((q_weight, k_weight, v_weight))
 
-        merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.dense.weight'] = state_dict['model.layers.' + str(layer_id) + '.self_attn.o_proj.weight']
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.dense.weight'] =\
+            state_dict['model.layers.' + str(layer_id) + '.self_attn.o_proj.weight']
 
         dense_h_to_4h_1_weight = state_dict[
             'model.layers.' + str(layer_id) + '.mlp.gate_proj.weight']
+
         dense_h_to_4h_2_weight = state_dict[
             'model.layers.' + str(layer_id) + '.mlp.up_proj.weight']
-        merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h.weight'] = torch.cat(
-            [dense_h_to_4h_1_weight, dense_h_to_4h_2_weight], dim=0)
 
-        merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_4h_to_h.weight'] = state_dict[
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h_1.weight'] =\
+            dense_h_to_4h_1_weight
+
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h_2.weight'] =\
+            dense_h_to_4h_2_weight
+
+
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_4h_to_h.weight'] = state_dict[
             'model.layers.' + str(layer_id) + '.mlp.down_proj.weight']
-        merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.input_layernorm.weight'] = state_dict[
+
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.input_layernorm.weight'] = state_dict[
             'model.layers.' + str(layer_id) + '.input_layernorm.weight']
-        """
-        input_layernorm_dtype = state_dict['model.layers.' + str(layer_id) + '.input_layernorm.weight'].dtype
-        merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.input_layernorm.bias'] = torch.zeros(merged_qkv_state_dict['transformer.layers.0.input_layernorm.weight'].shape,
-                                                                                                             dtype=input_layernorm_dtype)
-        """
-        merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.weight'] = state_dict[
+
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.weight'] = state_dict[
             'model.layers.' + str(layer_id) + '.post_attention_layernorm.weight']
-        """
-        merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.bias'] =\
-            torch.zeros(merged_qkv_state_dict['transformer.layers.0.post_attention_layernorm.weight'].shape,
-                                                                                                             dtype=input_layernorm_dtype)
-        """
 
         try:
-            merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.rotary_emb.inv_freq'] = state_dict[
+            internal_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.rotary_emb.inv_freq'] = state_dict[
                 'model.layers.' + str(layer_id) + '.self_attn.rotary_emb.inv_freq']
         except:
             base = config.rope_theta
             dim = 128
-            merged_qkv_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.rotary_emb.inv_freq'] =\
+            internal_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.rotary_emb.inv_freq'] =\
             1.0 / (base **
                    (torch.arange(0, dim, 2).float() / dim))
 
-    merged_qkv_state_dict["transformer.word_embeddings.weight"] = state_dict['model.embed_tokens.weight']
-    merged_qkv_state_dict["transformer.final_layernorm.weight"] = state_dict['model.norm.weight']
-    """
-    final_layernorm_dtype = state_dict['model.norm.weight'].dtype
-    merged_qkv_state_dict['transformer.final_layernorm.bias'] = \
-        torch.zeros(state_dict['model.norm.weight'].shape,
-                    dtype=final_layernorm_dtype)
-    """
-    merged_qkv_state_dict["transformer.lm_head.weight"] = state_dict['lm_head.weight']
-    state_dict = merged_qkv_state_dict
-
+    internal_state_dict["transformer.word_embeddings.weight"] = state_dict['model.embed_tokens.weight']
+    internal_state_dict["transformer.final_layernorm.weight"] = state_dict['model.norm.weight']
+    internal_state_dict["transformer.lm_head.weight"] = state_dict['lm_head.weight']
+    state_dict = internal_state_dict
 
     # Saving config and tokenzier files
 
     os.system("cp -rf "+args.load_path+"/*.json "+args.save_path)
-    os.system("cp -rf " + args.load_path + "/tokenizer.model " + args.save_path)
+    os.system("cp -rf " + args.load_path + "/tokenizer* " + args.save_path)
 
     # Saving the tracker file
     tracker_filepath = os.path.join(args.save_path, "latest_checkpointed_iteration.txt")
@@ -655,6 +648,30 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                         params_dict[layer_name] = (
                             params[i].clone() if (op_name + "." + weight in tensor_parallel_params_70b) else params.clone()
                         )
+
+            for i in range(args.target_tensor_model_parallel_size):
+
+                params_dict = get_element_from_dict_by_path(output_state_dict[i],
+                                                            "model.language_model.encoder")
+
+                dense_h_to_4h_1_name = 'mlp.dense_h_to_4h_1.weight'
+                dense_h_to_4h_1_layer_name = f"layers.{layer}.{dense_h_to_4h_1_name}"
+                dense_h_to_4h_1_weight = params_dict[dense_h_to_4h_1_layer_name]
+
+                dense_h_to_4h_2_name = 'mlp.dense_h_to_4h_2.weight'
+                dense_h_to_4h_2_layer_name = f"layers.{layer}.{dense_h_to_4h_2_name}"
+                dense_h_to_4h_2_weight = params_dict[dense_h_to_4h_2_layer_name]
+
+                dense_h_to_4h_name = 'mlp.dense_h_to_4h.weight'
+                dense_h_to_4h_layer_name = f"layers.{layer}.{dense_h_to_4h_name}"
+
+                params_dict[dense_h_to_4h_layer_name] = torch.cat(
+                [dense_h_to_4h_1_weight, dense_h_to_4h_2_weight], dim=0)
+
+                del params_dict[dense_h_to_4h_1_layer_name]
+                del params_dict[dense_h_to_4h_2_layer_name]
+
+
         if pp_rank == args.target_pipeline_model_parallel_size - 1:
             # handle final layernorm
             for weight_or_bias in ["weight"]:

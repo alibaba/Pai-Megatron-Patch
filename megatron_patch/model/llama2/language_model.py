@@ -17,15 +17,14 @@ import torch
 from megatron import get_args
 from megatron.core import mpu, tensor_parallel
 from megatron.core.enums import ModelType
-from megatron.core.models.common.rotary_pos_embedding import RotaryEmbedding
 from megatron.model.enums import AttnMaskType
 from megatron.model.enums import LayerType
 from megatron.model.module import MegatronModule
-from .transformer import ParallelTransformer
 from megatron.model.utils import get_linear_layer
 from megatron.model.utils import init_method_normal
 from megatron.model.utils import scaled_init_method_normal
 
+from .transformer import ParallelTransformer
 
 def parallel_lm_logits(input_, word_embeddings_weight, parallel_output,
                        bias=None):
@@ -368,6 +367,7 @@ class TransformerLanguageModel(MegatronModule):
                                        self.num_tokentypes)
             self._embedding_key = 'embedding'
 
+        """
         # Rotary positional embeddings
         self.use_rotary_position_embeddings = \
             args.position_embedding_type == 'rope'
@@ -386,6 +386,7 @@ class TransformerLanguageModel(MegatronModule):
                 rotary_dim,
                 seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
             )
+        """
 
         # Encoder (usually set to True, False if part of an encoder-decoder
         # architecture and in encoder-only stage).
@@ -486,18 +487,32 @@ class TransformerLanguageModel(MegatronModule):
 
         # Rotary positional embeddings
         rotary_pos_emb = None
+        """
         if self.use_rotary_position_embeddings:
             if inference_params is not None:
                 rotary_pos_emb = \
                     self.rotary_pos_emb(inference_params.max_sequence_length)
             else:
                 rotary_pos_emb = self.rotary_pos_emb(self.seq_length)
+        """
+
+        if enc_position_ids is None:
+            past_key_values_length = 0
+            seq_length = self.seq_length
+            device = enc_input_ids.device\
+                if enc_input_ids is not None else encoder_input.device
+            position_ids = torch.arange(past_key_values_length,
+                                        seq_length + past_key_values_length,
+                                        dtype=torch.long,
+                                        device=device)
+            enc_position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
 
         # Run encoder.
         if enc_hidden_states is None:
             if self.encoder is not None:
                 encoder_output = self.encoder(
                     encoder_input,
+                    enc_position_ids,
                     enc_attn_mask,
                     retriever_input=retriever_input,
                     retriever_attn_mask=retriever_attn_mask,

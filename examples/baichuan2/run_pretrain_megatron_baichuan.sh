@@ -1,5 +1,7 @@
 #!/bin/bash
-#sh run_pretrain_megatron_baichuan.sh dsw /workspace/Megatron-LM-main/ /workspace/github/Pai-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 2048 0 bf16 2 1 sel true false false false 100000 /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base-to-mg-tp2-pp1 100000000 10000 /mnt/output_baichuan2
+#sh run_pretrain_megatron_baichuan.sh dsw /workspace/Megatron-LM/ /workspace/github/Pai-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 2048 0 bf16 2 1 sel true true true false 100000 /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base-to-mg-tp2-pp1 100000000 10000 /mnt/output_baichuan2
+#sh run_pretrain_megatron_baichuan.sh dsw /workspace/Megatron-LM/ /workspace/github/Pai-Megatron-Patch/ 13B 1 8 1e-5 1e-6 2048 2048 0 bf16 2 1 sel true false true false 100000 /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-13B-Base-to-mg-tp2-pp1 100000000 10000 /mnt/output_baichuan2
+
 set -e
 ENV=$1
 MEGATRON_PATH=$2
@@ -66,7 +68,7 @@ NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13696
 
 model_options=" \
-        --use-bloom-alibi-mask \
+        --use-alibi-mask \
         --position-embedding-type none"
 
 fi
@@ -156,7 +158,6 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
         --split 98,2,0 \
-        --data-impl mmap \
         --data-path ${DATASET_PATH}
         --lr ${LR} \
         --min-lr ${MIN_LR} \
@@ -174,7 +175,7 @@ megatron_options="  \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
         --num-attention-heads ${NUM_ATTN_HEADS} \
-        --intermediate-size ${INTERMEDIATE_SIZE} \
+        --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${SEQ_LEN} \
         --log-interval 1 \
@@ -188,7 +189,6 @@ megatron_options="  \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
-        --DDP-impl local \
         --no-load-optim \
         --no-load-rng \
         --num-workers 8 \
@@ -198,6 +198,7 @@ megatron_options="  \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type BaichuanTokenizer \
         --swiglu \
+        --normalization RMSNorm \
         --no-query-key-layer-scaling \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear
