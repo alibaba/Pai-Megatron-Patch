@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_finetune_megatron_qwen.sh dsw /workspace/Megatron-LM-main /workspace/github/Pai-Megatron-Patch 7B 1 1e-5 1e-6 2048 80 85 bf16 1 1 sel true false false  /mnt/qwen-datasets/wudao_train.json /mnt/qwen-datasets/wudao_valid.json /mnt/qwen-ckpts/qwen-7b-hf-to-mg-tp1-pp1 2 /mnt/output_megatron_qwen/
+#sh run_finetune_megatron_qwen.sh dsw /workspace/Megatron-LM /workspace/github/Pai-Megatron-Patch 7B 1 1e-5 1e-6 80 81 85 bf16 1 1 sel true true true false  /mnt/qwen-datasets/wudao_train.json /mnt/qwen-datasets/wudao_valid.json /mnt/qwen-ckpts/qwen-7b-hf-to-mg-tp1-pp1 2 /mnt/output_megatron_qwen/
 set -e
 ENV=$1
 MEGATRON_PATH=$2
@@ -38,11 +38,12 @@ AC=${14}
 DO=${15}
 FL=${16}
 SP=${17}
-TRAIN_DATASET_PATH=${18}
-VALID_DATASET_PATH=${19}
-PRETRAIN_CHECKPOINT_PATH=${20}
-EPOCH=${21}
-OUTPUT_BASEPATH=${22}
+TE=${18}
+TRAIN_DATASET_PATH=${19}
+VALID_DATASET_PATH=${20}
+PRETRAIN_CHECKPOINT_PATH=${21}
+EPOCH=${22}
+OUTPUT_BASEPATH=${23}
 
 
 if [ $MODEL_SIZE = 7B ]; then
@@ -51,7 +52,6 @@ NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
-NUM_HEAD_KV=32
 
 elif [ $MODEL_SIZE = 14B ]; then
 
@@ -59,9 +59,9 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13696
-NUM_HEAD_KV=40
 
 fi
+
 
 if [ $AC = full ]; then
     activation_checkpoint_options=" \
@@ -81,6 +81,13 @@ if [ $PR = fp16 ]; then
 elif [ $PR = bf16 ]; then
     pr_options=" \
         --bf16"
+elif [ $PR = fp8 ]; then
+    pr_options=" \
+        --bf16
+        --fp8-hybrid \
+        --fp8-amax-compute-algo max \
+        --fp8-amax-history-len 1024 \
+        --transformer-impl transformer_engine"
 fi
 
 if [ $DO = true ]; then
@@ -101,6 +108,15 @@ elif [ $FL = false ]; then
                     "
 fi
 
+if [ $TE = true ]; then
+    te_options=" \
+		    --transformer-impl transformer_engine"
+
+elif [ $TE = false ]; then
+    te_options=" \
+                    "
+fi
+
 if [ $SP = true ] && [ $TP -gt 1 ]; then
     sp_options=" \
 		    --sequence-parallel"
@@ -108,6 +124,11 @@ if [ $SP = true ] && [ $TP -gt 1 ]; then
 elif [ $SP = false ]; then
     sp_options=" \
                     "
+fi
+
+if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
+    load_options=" \
+            --load $PRETRAIN_CHECKPOINT_PATH"
 fi
 
 FT_NAME="${ENV}-finetune-megatron-qwen-${MODEL_SIZE}-lr-${LR}-ep-${EPOCH}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}--do-${DO}-tp-${TP}-ac-${AC}-sp-${SP}"
@@ -130,7 +151,7 @@ megatron_options="  \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${SEQ_LEN}  \
-        --intermediate-size ${INTERMEDIATE_SIZE} \
+        --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --keep-last \
         --micro-batch-size ${BATCH_SIZE} \
         --epochs ${EPOCH} \
@@ -155,28 +176,23 @@ megatron_options="  \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
         --finetune \
-        --DDP-impl local \
         --no-load-optim \
         --no-load-rng \
         --seed 1234 \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --use-rotary-position-embeddings \
+        --patch-tokenizer-type QwenTokenizer \
         --swiglu \
-        --n-head-kv ${NUM_HEAD_KV} \
+        --normalization RMSNorm \
         --use-rotary-position-embeddings \
-        --position-embedding-type rope \
-        --layernorm-epsilon 1e-6 \
         --no-position-embedding \
         --untie-embeddings-and-output-weights \
-        --patch-tokenizer-type QwenTokenizer \
-        --recompute-activations \
-        --sequence-parallel
+        --disable-bias-linear \
+        --norm-epsilon 1e-6
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS finetune_megatron_qwen.py
- ${megatron_options} ${activation_checkpoint_options} ${do_options} ${pr_options} ${sp_options} ${flash_options}"
-
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_finetune_megatron_baichuan_wgbs.sh dsw /root/Megatron-LM-23.04/ /workspace/PAI-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 80 0 fp16 1 1 sel true true true false 500 /mnt/llama2-datasets/code_alpaca.json /mnt/baichuan2-ckpts/baichuan2-7b-hf-to-megatron-tp1-pp1 1000 100 /mnt/output_baichuan
+#sh run_finetune_megatron_baichuan_wgbs.sh dsw /root/Megatron-LM/ /workspace/PAI-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 80 0 fp16 1 1 sel true true true false 500 /mnt/llama2-datasets/code_alpaca.json /mnt/baichuan2-ckpts/baichuan2-7b-hf-to-megatron-tp1-pp1 1000 100 /mnt/output_baichuan
 set -e
 ENV=$1
 MEGATRON_PATH=$2
@@ -12,7 +12,7 @@ MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=4
+GPUS_PER_NODE=8
 
 elif [ $ENV = dlc ]; then
 
@@ -43,8 +43,8 @@ TE=${19}
 SAVE_INTERVAL=${20}
 DATASET_PATH=${21}
 PRETRAIN_CHECKPOINT_PATH=${22}
-TRAIN_ITERS=${23} # TRAIN_ITERS = num_samples * epoch / global_batch_size
-WARMUP_ITERS=${24} 
+TRAIN_TOKENS=${23}
+WARMUP_TOKENS=${24}
 OUTPUT_BASEPATH=${25}
 
 
@@ -139,7 +139,9 @@ elif [ $SP = false ]; then
                     "
 fi
 
-LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${WARMUP_ITERS} ))
+TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 
 NAME="${ENV}-pretrain-megatron-baichuan-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
@@ -154,7 +156,6 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
         --split 98,2,0 \
-        --data-impl mmap \
         --data-path ${DATASET_PATH}
         --lr ${LR} \
         --min-lr ${MIN_LR} \
@@ -172,7 +173,7 @@ megatron_options="  \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
         --num-attention-heads ${NUM_ATTN_HEADS} \
-        --intermediate-size ${INTERMEDIATE_SIZE} \
+        --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${SEQ_LEN} \
         --log-interval 1 \
@@ -186,8 +187,6 @@ megatron_options="  \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
-        --DDP-impl local \
-        --no-save-optim \
         --no-load-optim \
         --no-load-rng \
         --num-workers 8 \
@@ -198,13 +197,14 @@ megatron_options="  \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type BaichuanTokenizer \
         --swiglu \
+        --normalization RMSNorm \
         --no-query-key-layer-scaling \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megatron_baichuan.py
- ${megatron_options} ${activation_checkpoint_options} ${do_options} ${pr_options} ${sp_options} ${flash_options} ${load_options} ${te_options} ${model_options}"
+ ${model_options} ${megatron_options} ${activation_checkpoint_options} ${do_options} ${pr_options} ${sp_options} ${flash_options} ${load_options} ${te_options} ${model_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

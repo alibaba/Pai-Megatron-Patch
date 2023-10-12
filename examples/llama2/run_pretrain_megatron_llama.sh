@@ -62,13 +62,6 @@ HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13824
 
-elif [ $MODEL_SIZE = 65B ]; then
-
-NUM_LAYERS=80
-HIDDEN_SIZE=8192
-NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=22016
-
 elif [ $MODEL_SIZE = 70B ]; then
 
 NUM_LAYERS=80
@@ -76,15 +69,6 @@ HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=28672
 
-gqa_options=" \
-		    --group-query-attention \
-		    --num-query-groups 8"
-
-fi
-
-if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
-    load_options=" \
-		    --load $PRETRAIN_CHECKPOINT_PATH"
 fi
 
 if [ $AC = full ]; then
@@ -150,6 +134,11 @@ elif [ $SP = false ]; then
                     "
 fi
 
+if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
+    load_options=" \
+            --load $PRETRAIN_CHECKPOINT_PATH"
+fi
+
 TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
@@ -205,18 +194,17 @@ megatron_options="  \
         --seed 1234 \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
+        --patch-tokenizer-type LLamaTokenizer \
         --swiglu \
         --normalization RMSNorm \
         --use-rotary-position-embeddings \
         --no-position-embedding \
         --untie-embeddings-and-output-weights \
-        --patch-tokenizer-type LLamaTokenizer \
         --disable-bias-linear
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megatron_llama.py
- ${megatron_options} ${activation_checkpoint_options} ${do_options} ${pr_options} ${sp_options} ${flash_options} ${load_options} ${gqa_options} ${te_options}"
-
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

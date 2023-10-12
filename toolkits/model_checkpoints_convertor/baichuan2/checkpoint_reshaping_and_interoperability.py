@@ -150,8 +150,6 @@ def add_transformers_checkpoint_args(parser):
 
     return parser
 
-
-# The simple map of names for "automated" rules.
 megatron_to_transformers = {
     "self_attention.dense": ".self_attn.o_proj.",
     "mlp.dense_h_to_4h_1": ".mlp.gate_proj.",
@@ -159,7 +157,6 @@ megatron_to_transformers = {
     "mlp.dense_4h_to_h": ".mlp.down_proj.",
     "self_attention.rotary_emb":".self_attn.rotary_emb.inv_freq"
 }
-# transformers_to_megatron = {v[1:-1]: k for k, v in megatron_to_transformers.items()}
 
 transformers_to_megatron = {
     "self_attn.dense": "self_attention.dense",
@@ -400,7 +397,6 @@ def convert_checkpoint_from_transformers_to_megatron(args):
     state_dict = internal_state_dict
 
     # Saving config and tokenzier files
-
     os.system("cp -rf "+args.load_path+"/*.json "+args.save_path)
     os.system("cp -rf " + args.load_path + "/tokenizer* " + args.save_path)
 

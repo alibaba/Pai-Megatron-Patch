@@ -13,21 +13,19 @@
 # limitations under the License.
 
 import torch
-import torch.nn.functional as F
 
 from megatron import get_args
 from megatron.core import mpu, tensor_parallel
 from megatron.core.enums import ModelType
 from megatron.core.models.common.rotary_pos_embedding import RotaryEmbedding
-
 from megatron.model.enums import AttnMaskType
 from megatron.model.enums import LayerType
 from megatron.model.module import MegatronModule
-from .transformer import ParallelTransformer
 from megatron.model.utils import get_linear_layer
 from megatron.model.utils import init_method_normal
 from megatron.model.utils import scaled_init_method_normal
 
+from .transformer import ParallelTransformer
 
 def parallel_lm_logits(input_, word_embeddings_weight, parallel_output,
                        bias=None):
@@ -66,23 +64,7 @@ def get_language_model(config, num_tokentypes, add_pooler,
                        add_decoder=False,
                        decoder_attn_mask_type=AttnMaskType.causal,
                        pre_process=True, post_process=True):
-    """
-    Build and return a language model along with the key to save.
-
-    Args:
-        config: an object of Config class specifying the configuration for the language model
-        num_tokentypes (int): The number of token types.
-        add_pooler (bool): Flag to indicate whether to add a pooler.
-        encoder_attn_mask_type (str): The type of attention mask for the encoder.
-        add_encoder (bool, optional): Flag to indicate whether to add an encoder. Defaults to True.
-        add_decoder (bool, optional): Flag to indicate whether to add a decoder. Defaults to False.
-        decoder_attn_mask_type (str, optional): The type of attention mask for the decoder. Defaults to AttnMaskType.causal.
-        pre_process (bool, optional): Flag to indicate whether to apply pre-processing. Defaults to True.
-        post_process (bool, optional): Flag to indicate whether to apply post-processing. Defaults to True.
-
-    Returns:
-        tuple: A tuple containing the language model and the key used for saving checkpoints.
-    """
+    """Build language model and return along with the key to save."""
     args = get_args()
     if config.init_method is None:
         config.init_method = init_method_normal(config.init_method_std)
@@ -129,6 +111,11 @@ class Pooler(MegatronModule):
 
 
     def forward(self, hidden_states, sequence_index=0):
+        # hidden_states: [s, b, h]
+        # sequence_index: index of the token to pool.
+
+        # gather data along sequence dimensions
+        # same pooler is run on all tensor parallel nodes
         if self.sequence_parallel:
             hidden_states = tensor_parallel.gather_from_sequence_parallel_region(
                 hidden_states,
@@ -143,7 +130,7 @@ class Pooler(MegatronModule):
 class Embedding(MegatronModule):
     """Language model embeddings.
 
-    Args:
+    Arguments:
         hidden_size: hidden size
         vocab_size: vocabulary size
         max_sequence_length: maximum size of sequence. This
@@ -160,8 +147,7 @@ class Embedding(MegatronModule):
                  max_sequence_length,
                  embedding_dropout_prob,
                  config,
-                 num_tokentypes=0,
-                 embedding_weights_in_fp32=False):
+                 num_tokentypes=0):
         super(Embedding, self).__init__()
 
         self.hidden_size = hidden_size
@@ -171,7 +157,6 @@ class Embedding(MegatronModule):
         args = get_args()
 
         # Word embeddings (parallel).
-        self.embedding_weights_in_fp32 = embedding_weights_in_fp32
         self.params_dtype = args.params_dtype
         self.word_embeddings = tensor_parallel.VocabParallelEmbedding(
             vocab_size, self.hidden_size, config=config, init_method=config.init_method)
@@ -218,20 +203,9 @@ class Embedding(MegatronModule):
             self.tokentype_embeddings.weight.shared = True
 
     def add_tokentype_embeddings(self, num_tokentypes):
-        """
-        Add token-type embeddings to the language model.
-
-        This function is provided so we can add token-type embeddings in case the pretrained model does not have it.
+        """Add token-type embedding. This function is provided so we can add
+        token-type embeddings in case the pretrained model does not have it.
         This allows us to load the model normally and then add this embedding.
-
-        Args:
-            num_tokentypes: the number of token types
-
-        Raises:
-            Exception: if the tokentype embeddings are already initialized
-
-        Returns:
-            None
         """
         if self.tokentype_embeddings is not None:
             raise Exception('tokentype embeddings is already initialized')
@@ -247,12 +221,7 @@ class Embedding(MegatronModule):
 
     def forward(self, input_ids, position_ids, tokentype_ids=None):
         # Embeddings.
-        if self.embedding_weights_in_fp32:
-            self.word_embeddings = self.word_embeddings.to(torch.float32)
         words_embeddings = self.word_embeddings(input_ids)
-        if self.embedding_weights_in_fp32:
-            words_embeddings = words_embeddings.to(self.params_dtype)
-            self.word_embeddings = self.word_embeddings.to(self.params_dtype)
         if self.add_position_embedding:
             position_embeddings = self.position_embeddings(position_ids)
             embeddings = words_embeddings + position_embeddings
@@ -396,13 +365,11 @@ class TransformerLanguageModel(MegatronModule):
                                        args.max_position_embeddings,
                                        args.hidden_dropout,
                                        config,
-                                       self.num_tokentypes,
-                                       args.embedding_weights_in_fp32)
+                                       self.num_tokentypes)
             self._embedding_key = 'embedding'
 
         # Rotary positional embeddings
-        self.use_rotary_position_embeddings = \
-            args.position_embedding_type == 'rope'
+        self.use_rotary_position_embeddings = args.use_rotary_position_embeddings
         if self.use_rotary_position_embeddings:
             self.seq_length = args.seq_length
             rotary_dim = args.hidden_size // args.num_attention_heads \
@@ -604,7 +571,7 @@ class TransformerLanguageModel(MegatronModule):
 
     def load_state_dict(self, state_dict, strict=True):
         """Customized load."""
-
+        args = get_args()
         # Embedding.
         if self.pre_process:
             if self._embedding_key in state_dict:
@@ -641,7 +608,10 @@ class TransformerLanguageModel(MegatronModule):
                     state_dict_self_attention[key] = state_dict_[key]
             state_dict_ = state_dict_self_attention
 
-            self.encoder.load_state_dict(state_dict_, strict=strict)
+            if args.transformer_impl == "transformer_engine":
+                self.encoder.load_state_dict(state_dict_, strict=False)
+            else:
+                self.encoder.load_state_dict(state_dict_, strict=strict)
 
         # Pooler.
         if self.post_process:

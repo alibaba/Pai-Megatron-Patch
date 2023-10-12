@@ -1,4 +1,5 @@
 #!/bin/bash
+# sh run_evaluate_huggingface_qwen.sh dsw /workspace/Megatron-LM /workspace/github/Pai-Megatron-Patch 7B 1 2048 80 0 fp16 /mnt/qwen-datasets/wudao_train.json /mnt/qwen-ckpts/qwen-7b-hf
 # sh run_evaluate_huggingface_qwen.sh dsw /workspace/Megatron-LM-main /workspace/github/Pai-Megatron-Patch 14B 1 2048 80 0 fp16 /mnt/qwen-datasets/wudao_train.json /mnt/qwen-ckpts/qwen-14b
 set -e
 ENV=$1
