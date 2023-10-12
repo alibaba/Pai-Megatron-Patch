@@ -58,7 +58,8 @@ NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
 
 model_options=" \
-        --use-rotary-position-embeddings"
+        --use-rotary-position-embeddings \
+        --no-position-embedding"
 
 elif [ $MODEL_SIZE = 13B ]; then
 
@@ -205,7 +206,7 @@ megatron_options="  \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megatron_baichuan.py
- ${megatron_options} ${activation_checkpoint_options} ${do_options} ${pr_options} ${sp_options} ${flash_options} ${load_options} ${te_options} ${model_options}"
+ ${model_options} ${megatron_options} ${activation_checkpoint_options} ${do_options} ${pr_options} ${sp_options} ${flash_options} ${load_options} ${te_options} ${model_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

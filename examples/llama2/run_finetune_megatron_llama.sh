@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_finetune_megatron_llama.sh dsw /workspace/Megatron-LM/ /workspace/github/Pai-Megatron-Patch/ 7B 1 1e-5 1e-6 80 81 0 bf16 1 1 sel true false false  /mnt/llama2-datasets/wudao_train.json /mnt/llama2-datasets/wudao_valid.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 2 /mnt/output_patch_test
+#sh run_finetune_megatron_llama.sh dsw /workspace/Megatron-LM/ /workspace/github/Pai-Megatron-Patch/ 7B 1 1e-5 1e-6 80 81 0 bf16 1 1 sel true true true false  /mnt/llama2-datasets/wudao_train.json /mnt/llama2-datasets/wudao_valid.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 2 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATH=$2
@@ -38,11 +38,12 @@ AC=${14}
 DO=${15}
 FL=${16}
 SP=${17}
-TRAIN_DATASET_PATH=${18}
-VALID_DATASET_PATH=${19}
-PRETRAIN_CHECKPOINT_PATH=${20}
-EPOCH=${21}
-OUTPUT_BASEPATH=${22}
+TE=${18}
+TRAIN_DATASET_PATH=${19}
+VALID_DATASET_PATH=${20}
+PRETRAIN_CHECKPOINT_PATH=${21}
+EPOCH=${22}
+OUTPUT_BASEPATH=${23}
 
 
 if [ $MODEL_SIZE = 7B ]; then
@@ -86,6 +87,13 @@ if [ $PR = fp16 ]; then
 elif [ $PR = bf16 ]; then
     pr_options=" \
         --bf16"
+elif [ $PR = fp8 ]; then
+    pr_options=" \
+        --bf16
+        --fp8-hybrid \
+        --fp8-amax-compute-algo max \
+        --fp8-amax-history-len 1024 \
+        --transformer-impl transformer_engine"
 fi
 
 if [ $DO = true ]; then
@@ -103,6 +111,15 @@ if [ $FL = true ]; then
 
 elif [ $FL = false ]; then
     flash_options=" \
+                    "
+fi
+
+if [ $TE = true ]; then
+    te_options=" \
+		    --transformer-impl transformer_engine"
+
+elif [ $TE = false ]; then
+    te_options=" \
                     "
 fi
 
@@ -165,18 +182,17 @@ megatron_options="  \
         --seed 1234 \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
+        --patch-tokenizer-type LLamaTokenizer \
         --swiglu \
         --normalization RMSNorm \
         --use-rotary-position-embeddings \
         --no-position-embedding \
         --untie-embeddings-and-output-weights \
-        --patch-tokenizer-type LLamaTokenizer \
         --disable-bias-linear
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS finetune_megatron_llama.py
- ${megatron_options} ${activation_checkpoint_options} ${do_options} ${pr_options} ${sp_options} ${flash_options}"
-
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

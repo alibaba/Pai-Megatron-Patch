@@ -150,18 +150,27 @@ def add_transformers_checkpoint_args(parser):
 
     return parser
 
+megatron_to_transformers = {
+    "self_attention.dense": ".attn.c_proj.",
+    "mlp.dense_h_to_4h_1": ".mlp.w1.",
+    "mlp.dense_h_to_4h_2": ".mlp.w2.",
+    "mlp.dense_4h_to_h": ".mlp.c_proj.",
+}
 
 transformers_to_megatron = {
     "self_attn.dense": "self_attention.dense",
-    "mlp.dense_h_to_4h": "mlp.dense_h_to_4h",
+    "mlp.dense_h_to_4h_1": "mlp.dense_h_to_4h_1",
+    "mlp.dense_h_to_4h_2": "mlp.dense_h_to_4h_2",
     "mlp.dense_4h_to_h": "mlp.dense_4h_to_h",
 }
 
 tensor_parallel_params = [
     # megatron-lm layers to merge across tp ranks
     "self_attn.query_key_value.weight",
+    "self_attn.query_key_value.bias",
     "self_attn.dense.weight",
-    "mlp.dense_h_to_4h.weight",
+    "mlp.dense_h_to_4h_1.weight",
+    "mlp.dense_h_to_4h_2.weight",
     "mlp.dense_4h_to_h.weight"
 ]
 
@@ -173,11 +182,7 @@ tensor_parallel_params_mg = [
     "mlp.dense_4h_to_h.weight"
 ]
 
-megatron_to_transformers = {
-    "self_attention.dense": ".attn.c_proj.",
-    "mlp.dense_h_to_4h": [".mlp.w2.",".mlp.w1."],
-    "mlp.dense_4h_to_h": ".mlp.c_proj.",
-}
+
 
 def recursive_print(name, val, spaces=0):
     """
@@ -377,16 +382,19 @@ def convert_checkpoint_from_transformers_to_megatron(args):
         else:
             print("Unrecognized model name, choose from qwen-7b, qwen-14b!")
             exit(1)
-    megatron_state_dict = {}
+
     config = GPT2Config.from_pretrained(args.load_path)
+
+    internal_state_dict = {}
+
     for layer_id in range(config.num_hidden_layers):
-        megatron_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query_key_value.weight'] =\
+        internal_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query_key_value.weight'] =\
             hf_state_dict['transformer.h.'+str(layer_id)+'.attn.c_attn.weight']
 
-        megatron_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query_key_value.bias'] =\
+        internal_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query_key_value.bias'] =\
             hf_state_dict['transformer.h.'+str(layer_id)+'.attn.c_attn.bias']
 
-        megatron_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.dense.weight'] =\
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.dense.weight'] =\
             hf_state_dict['transformer.h.' + str(layer_id) + '.attn.c_proj.weight']
 
         dense_h_to_4h_1_weight = hf_state_dict[
@@ -395,41 +403,28 @@ def convert_checkpoint_from_transformers_to_megatron(args):
         dense_h_to_4h_2_weight = hf_state_dict[
             'transformer.h.' + str(layer_id) + '.mlp.w2.weight']
 
-        megatron_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h.weight'] =\
-            torch.cat([dense_h_to_4h_2_weight, dense_h_to_4h_1_weight], dim=0)
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h_1.weight'] =\
+            dense_h_to_4h_1_weight
 
-        megatron_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_4h_to_h.weight'] =\
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h_2.weight'] =\
+            dense_h_to_4h_2_weight
+
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_4h_to_h.weight'] =\
             hf_state_dict['transformer.h.' + str(layer_id) + '.mlp.c_proj.weight']
 
 
-        megatron_state_dict['transformer.layers.' + str(layer_id) + '.input_layernorm.weight'] = hf_state_dict[
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.input_layernorm.weight'] = hf_state_dict[
             'transformer.h.' + str(layer_id) + '.ln_1.weight']
 
-        """
-        input_layernorm_dtype = hf_state_dict['transformer.h.' + str(layer_id) + '.ln_1.weight'].dtype
-        megatron_state_dict['transformer.layers.' + str(layer_id) + '.input_layernorm.bias'] =\
-            torch.zeros(megatron_state_dict['transformer.layers.0.input_layernorm.weight'].shape, dtype=input_layernorm_dtype)
-        """
 
-        megatron_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.weight'] = hf_state_dict[
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.weight'] = hf_state_dict[
             'transformer.h.' + str(layer_id) + '.ln_2.weight']
 
-        """
-        megatron_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.bias'] =\
-            torch.zeros(megatron_state_dict['transformer.layers.0.post_attention_layernorm.weight'].shape,
-                                                                                                             dtype=input_layernorm_dtype)
-        """
 
-    megatron_state_dict["transformer.word_embeddings.weight"] = hf_state_dict['transformer.wte.weight']
-    megatron_state_dict["transformer.final_layernorm.weight"] = hf_state_dict['transformer.ln_f.weight']
-    """
-    final_layernorm_dtype = hf_state_dict['transformer.ln_f.weight'].dtype
-    megatron_state_dict['transformer.final_layernorm.bias'] = \
-        torch.zeros(hf_state_dict['transformer.ln_f.weight'].shape,
-                    dtype=final_layernorm_dtype)
-    """
-    megatron_state_dict["transformer.lm_head.weight"] = hf_state_dict['lm_head.weight']
-    state_dict = megatron_state_dict
+    internal_state_dict["transformer.word_embeddings.weight"] = hf_state_dict['transformer.wte.weight']
+    internal_state_dict["transformer.final_layernorm.weight"] = hf_state_dict['transformer.ln_f.weight']
+    internal_state_dict["transformer.lm_head.weight"] = hf_state_dict['lm_head.weight']
+    state_dict = internal_state_dict
 
     # Saving config and tokenzier files
     os.system("cp -rf "+args.load_path+"/*.json "+args.save_path)
@@ -610,9 +605,31 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                         params[i].clone() if (op_name + "." + weight_or_bias in tensor_parallel_params) else params.clone()
                     )
 
+            for i in range(args.target_tensor_model_parallel_size):
+
+                params_dict = get_element_from_dict_by_path(output_state_dict[i],
+                                                            "model.language_model.encoder")
+
+                dense_h_to_4h_1_name = 'mlp.dense_h_to_4h_1.weight'
+                dense_h_to_4h_1_layer_name = f"layers.{layer}.{dense_h_to_4h_1_name}"
+                dense_h_to_4h_1_weight = params_dict[dense_h_to_4h_1_layer_name]
+
+                dense_h_to_4h_2_name = 'mlp.dense_h_to_4h_2.weight'
+                dense_h_to_4h_2_layer_name = f"layers.{layer}.{dense_h_to_4h_2_name}"
+                dense_h_to_4h_2_weight = params_dict[dense_h_to_4h_2_layer_name]
+
+                dense_h_to_4h_name = 'mlp.dense_h_to_4h.weight'
+                dense_h_to_4h_layer_name = f"layers.{layer}.{dense_h_to_4h_name}"
+
+                params_dict[dense_h_to_4h_layer_name] = torch.cat(
+                [dense_h_to_4h_2_weight, dense_h_to_4h_1_weight], dim=0)
+
+                del params_dict[dense_h_to_4h_1_layer_name]
+                del params_dict[dense_h_to_4h_2_layer_name]
+
+
         if pp_rank == args.target_pipeline_model_parallel_size - 1:
             # handle final layernorm
-            #for weight_or_bias in ["weight", "bias"]:
             for weight_or_bias in ["weight"]:
                 params = state_dict[f"transformer.final_layernorm.{weight_or_bias}"].to(dtype)
                 layer_name = f"final_layernorm.{weight_or_bias}"

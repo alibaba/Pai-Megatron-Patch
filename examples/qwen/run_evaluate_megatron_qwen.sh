@@ -1,5 +1,6 @@
 #!/bin/bash
-# sh run_evaluate_megatron_qwen.sh dsw /workspace/Megatron-LM-main /workspace/github/Pai-Megatron-Patch 14B 1 2048 80 213 fp16 1 1 /mnt/qwen-datasets/wudao_train.json /mnt/qwen-ckpts/qwen-14b-hf-to-mg-tp1-pp1
+# sh run_evaluate_megatron_qwen.sh dsw /workspace/Megatron-LM /workspace/github/Pai-Megatron-Patch 7B 1 80 80 85 bf16 2 1 sel true true true false /mnt/qwen-datasets/wudao_train.json /mnt/qwen-ckpts/qwen-7b-hf-to-mg-tp2-pp1
+# sh run_evaluate_megatron_qwen.sh dsw /workspace/Megatron-LM /workspace/github/Pai-Megatron-Patch 14B 1 80 80 213 bf16 2 1 sel true true true false /mnt/qwen-datasets/wudao_train.json /mnt/qwen-ckpts/qwen-14b-hf-to-mg-tp2-pp1
 set -e
 ENV=$1
 MEGATRON_PATH=$2
@@ -7,12 +8,12 @@ MEGATRON_PATCH_PATH=$3
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=6,7
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=1
+GPUS_PER_NODE=2
 
 elif [ $ENV = dlc ]; then
 
@@ -32,9 +33,13 @@ EXTRA_VOCAB_SIZE=$8
 PR=$9
 TP=${10}
 PP=${11}
-DATASET_PATH=${12}
-PRETRAIN_CHECKPOINT_PATH=${13}
-
+AC=${12}
+DO=${13}
+FL=${14}
+SP=${15}
+TE=${16}
+DATASET_PATH=${17}
+PRETRAIN_CHECKPOINT_PATH=${18}
 
 if [ $MODEL_SIZE = 7B ]; then
 
@@ -42,7 +47,6 @@ NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
-NUM_HEAD_KV=32
 
 elif [ $MODEL_SIZE = 14B ]; then
 
@@ -50,16 +54,71 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13696
-NUM_HEAD_KV=40
 
+fi
+
+
+if [ $AC = full ]; then
+    activation_checkpoint_options=" \
+		    --recompute-method uniform \
+		    --recompute-granularity full"
+elif [ $AC = sel ]; then
+    activation_checkpoint_options=" \
+        --recompute-activations"
+elif [ $AC = none ]; then
+    activation_checkpoint_options=" \
+                    "
 fi
 
 if [ $PR = fp16 ]; then
     pr_options=" \
-            --fp16"
+		    --fp16"
 elif [ $PR = bf16 ]; then
     pr_options=" \
         --bf16"
+elif [ $PR = fp8 ]; then
+    pr_options=" \
+        --bf16
+        --fp8-hybrid \
+        --fp8-amax-compute-algo max \
+        --fp8-amax-history-len 1024 \
+        --transformer-impl transformer_engine"
+fi
+
+if [ $DO = true ]; then
+    do_options=" \
+		    --use-distributed-optimizer"
+
+elif [ $DO = false ]; then
+    do_options=" \
+                    "
+fi
+
+if [ $FL = true ]; then
+    flash_options=" \
+		    --use-flash-attn"
+
+elif [ $FL = false ]; then
+    flash_options=" \
+                    "
+fi
+
+if [ $TE = true ]; then
+    te_options=" \
+		    --transformer-impl transformer_engine"
+
+elif [ $TE = false ]; then
+    te_options=" \
+                    "
+fi
+
+if [ $SP = true ] && [ $TP -gt 1 ]; then
+    sp_options=" \
+		    --sequence-parallel"
+
+elif [ $SP = false ]; then
+    sp_options=" \
+                    "
 fi
 
 if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
@@ -76,35 +135,31 @@ megatron_options=" \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${SEQ_LEN} \
-        --intermediate-size ${INTERMEDIATE_SIZE} \
+        --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --log-interval 1 \
         --eval-interval 100 \
         --eval-iters 10 \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
-        --DDP-impl local \
         --no-load-optim \
         --no-load-rng \
         --seed 1234 \
         --num-workers 0 \
         --dataset LLama-SFT \
-        --use-distributed-optimizer \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --n-head-kv ${NUM_HEAD_KV} \
+        --patch-tokenizer-type QwenTokenizer \
         --swiglu \
+        --normalization RMSNorm \
         --use-rotary-position-embeddings \
-        --position-embedding-type rope \
-        --layernorm-epsilon 1e-6 \
         --no-position-embedding \
         --untie-embeddings-and-output-weights \
-        --patch-tokenizer-type QwenTokenizer \
-        --recompute-activations \
-        --sequence-parallel
+        --disable-bias-linear \
+        --norm-epsilon 1e-6
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_megatron_qwen.py
- ${megatron_options} ${pr_options} ${load_options}"
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

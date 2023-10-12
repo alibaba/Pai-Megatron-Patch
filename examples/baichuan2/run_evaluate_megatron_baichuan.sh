@@ -50,7 +50,8 @@ NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
 
 model_options=" \
-        --use-rotary-position-embeddings"
+        --use-rotary-position-embeddings \
+        --no-position-embedding"
 
 elif [ $MODEL_SIZE = 13B ]; then
 
@@ -63,11 +64,6 @@ model_options=" \
         --use-alibi-mask \
         --position-embedding-type none"
 
-fi
-
-if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
-    load_options=" \
-		    --load $PRETRAIN_CHECKPOINT_PATH"
 fi
 
 if [ $AC = full ]; then
@@ -155,21 +151,20 @@ megatron_options=" \
         --pipeline-model-parallel-size ${PP} \
         --no-load-optim \
         --no-load-rng \
-        --num-workers 0 \
         --seed 1234 \
+        --num-workers 0 \
         --dataset LLama-SFT \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type BaichuanTokenizer \
         --swiglu \
-        --no-query-key-layer-scaling \
         --normalization RMSNorm \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_megatron_baichuan.py
- ${megatron_options} ${activation_checkpoint_options} ${do_options} ${pr_options} ${sp_options} ${flash_options} ${load_options} ${te_options} ${model_options}"
+ ${model_options} ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

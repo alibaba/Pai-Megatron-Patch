@@ -8,7 +8,7 @@ MEGATRON_PATCH_PATH=$3
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=6,7
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
@@ -41,7 +41,6 @@ TE=${16}
 DATASET_PATH=${17}
 PRETRAIN_CHECKPOINT_PATH=${18}
 
-
 if [ $MODEL_SIZE = 7B ]; then
 
 NUM_LAYERS=32
@@ -55,13 +54,6 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13824
-
-elif [ $MODEL_SIZE = 65B ]; then
-
-NUM_LAYERS=80
-HIDDEN_SIZE=8192
-NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=22016
 
 elif [ $MODEL_SIZE = 70B ]; then
 
@@ -162,12 +154,12 @@ megatron_options=" \
         --dataset LLama-SFT \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
+        --patch-tokenizer-type LLamaTokenizer \
         --swiglu \
         --normalization RMSNorm \
         --use-rotary-position-embeddings \
         --no-position-embedding \
         --untie-embeddings-and-output-weights \
-        --patch-tokenizer-type LLamaTokenizer \
         --disable-bias-linear
         "
 
