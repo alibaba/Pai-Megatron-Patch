@@ -152,7 +152,7 @@ def add_transformers_checkpoint_args(parser):
 
 megatron_to_transformers = {
     "self_attention.dense": ".attn.c_proj.",
-    "mlp.dense_h_to_4h_1": ".mlp.w1.",
+    "mlp.dense_h_to_4h": [".mlp.w2.",".mlp.w1."],
     "mlp.dense_h_to_4h_2": ".mlp.w2.",
     "mlp.dense_4h_to_h": ".mlp.c_proj.",
 }
@@ -177,6 +177,7 @@ tensor_parallel_params = [
 tensor_parallel_params_mg = [
     # megatron-lm layers to merge across tp ranks
     "self_attention.query_key_value.weight",
+    "self_attention.query_key_value.bias",
     "self_attention.dense.weight",
     "mlp.dense_h_to_4h.weight",
     "mlp.dense_4h_to_h.weight"
@@ -701,9 +702,12 @@ def convert_checkpoint_from_megatron_to_transformers(args):
         )
 
     # Saving config and tokenzier files
-    config_path = '/'.join(args.load_path.split('/')[:-1])
+    config_path = '/'.join(args.load_path.split('/')[:-2]) if args.load_path.endswith('/') else '/'.join(args.load_path.split('/')[:-1])
+    print(config_path, "\ncp -rf "+config_path+"/*.json " + args.save_path)
     os.system("cp -rf "+config_path+"/*.json " + args.save_path)
-    os.system("cp -rf " + config_path + "/tokenizer.model " + args.save_path)
+    os.system("cp -rf " + config_path + "/tokenizer* " + args.save_path)
+    os.system("cp -rf " + config_path + "/*.py " + args.save_path)
+    os.system("cp -rf " + config_path + "/qwen.* " + args.save_path)
 
     activation_function = "gelu"
 
@@ -877,9 +881,12 @@ def convert_checkpoint_from_megatron_to_transformers(args):
             elif weight_or_bias == "weight":
                 if 'dense_h_to_4h' in op_name:
                     out_name = megatron_to_transformers[op_name]
-                    para_dict = torch.split(params, params.shape[0]//2)
-                    for index, para in enumerate(para_dict):
-                        output_state_dict[layer_name + out_name[index] + "weight"] = para.clone()
+                    para_dict = {i:[] for i in out_name}
+                    for index, mat in enumerate(torch.split(params, params.shape[0]//tp_size)):
+                        for index_new, mat_sep in enumerate(torch.split(mat, mat.shape[0]//2)):
+                            para_dict[out_name[index_new]].append(mat_sep.clone())
+                    for name, para in para_dict.items():
+                        output_state_dict[layer_name + name + "weight"] = torch.cat(para)
                 else:
                     out_name = megatron_to_transformers[op_name]
                     output_state_dict[layer_name + out_name + "weight"] = params.clone()
