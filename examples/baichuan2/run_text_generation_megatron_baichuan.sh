@@ -1,11 +1,12 @@
 #!/bin/bash
-# bash run_text_generation_megatron_llama.sh dsw /workspace/Megatron-LM /workspace/PAI-Megatron-Patch /mnt/llama-ckpts/Ziya-LLaMA-13B-to-megatron-tp1-pp1 13B 1 1 1024 80 0 fp16 0 512 512 /mnt/llama-datasets/gen.jsonl /mnt/llama-datasets/cn_output.txt 0.85 1 1
+# bash run_text_generation_megatron_baichuan.sh dsw ../../../Megatron-LM ../../ ../../../baichuan/baichuan-7b-base-hf-to-megatron-tp1-pp1/ 7B 1 1 1024 80 0 fp16 0 512 512 /mnt/workspace/gen.jsonl /mnt/workspace/cn_output.txt 0.85 1 1
+# bash run_text_generation_megatron_baichuan.sh dsw ../../../Megatron-LM ../../ ../../../baichuan/baichuan-13b-base-hf-to-megatron-tp1-pp1/ 13B 1 1 1024 80 0 bf16 0 512 512 /mnt/workspace/gen.jsonl /mnt/workspace/cn_output.txt 0.85 1 1
 set -e
 ENV=$1
-export CUDA_VISIBLE_DEVICES=0,1,2,3
+export CUDA_VISIBLE_DEVICES=2,3
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
-GPUS_PER_NODE=1
+GPUS_PER_NODE=2
 NNODES=1
 NODE_RANK=0
 export CUDA_DEVICE_MAX_CONNECTIONS=1
@@ -39,23 +40,21 @@ NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
-NUM_HEAD_KV=32
+
+model_options=" \
+        --use-rotary-position-embeddings \
+        --no-position-embedding"
 
 elif [ $MODEL_SIZE = 13B ]; then
 
 NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
-INTERMEDIATE_SIZE=13824
-NUM_HEAD_KV=40
+INTERMEDIATE_SIZE=13696
 
-elif [ $MODEL_SIZE = 70B ]; then
-
-NUM_LAYERS=80
-HIDDEN_SIZE=8192
-NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=28672
-NUM_HEAD_KV=8
+model_options=" \
+        --use-alibi-mask \
+        --position-embedding-type none"
 
 fi
 
@@ -103,19 +102,16 @@ rapidformer_options="  \
         --max-padding-length ${PAD_LEN} \
         --use-distributed-optimizer \
         --swiglu \
-        --use-rotary-position-embeddings \
-        --no-position-embedding \
         --untie-embeddings-and-output-weights \
-        --patch-tokenizer-type LLamaTokenizer \
         --normalization RMSNorm \
-        --no-position-embedding \
-        --n-head-kv ${NUM_HEAD_KV} \
+        --patch-tokenizer-type BaichuanTokenizer \
+        --no-query-key-layer-scaling \
         --repetition-penalty ${REPETITION_PENALTY} \
         --disable-bias-linear
     "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS generate_text_megatron_llama.py
- ${rapidformer_options} ${load_options} ${input_options} ${pr_options}"
+run_cmd="torchrun $DISTRIBUTED_ARGS generate_text_megatron_baichuan.py
+ ${rapidformer_options} ${load_options} ${input_options} ${pr_options} ${model_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

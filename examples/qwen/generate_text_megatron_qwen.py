@@ -15,11 +15,10 @@
 from megatron.core.enums import ModelType
 from megatron import get_args
 from megatron.initialize import initialize_megatron
-
 from megatron.arguments import core_transformer_config_from_args
-from megatron_patch.generation.gpt_predictor import GPTPredictor
-from megatron_patch.model.llama2.gpt_model import GPTModel
 from megatron_patch.tokenizer import build_tokenizer
+from megatron_patch.generation.gpt_predictor import GPTPredictor
+from megatron_patch.model.qwen.gpt_model import GPTModel
 from megatron_patch.arguments import get_tasks_args
 
 class MegatronGPTPredictor(GPTPredictor):
@@ -32,7 +31,6 @@ class MegatronGPTPredictor(GPTPredictor):
                          parallel_output=True,
                          pre_process=pre_process,
                          post_process=post_process)
-
         return model
 
 

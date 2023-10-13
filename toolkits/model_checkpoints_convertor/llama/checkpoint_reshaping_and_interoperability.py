@@ -153,8 +153,7 @@ def add_transformers_checkpoint_args(parser):
 
 megatron_to_transformers = {
     "self_attention.dense": ".self_attn.o_proj.",
-    "mlp.dense_h_to_4h_1": ".mlp.gate_proj.",
-    "mlp.dense_h_to_4h_2": ".mlp.up_proj.",
+    "mlp.dense_h_to_4h": [".mlp.gate_proj.",".mlp.up_proj."],
     "mlp.dense_4h_to_h": ".mlp.down_proj.",
     "self_attention.rotary_emb":".self_attn.rotary_emb.inv_freq"
 }
@@ -966,8 +965,17 @@ def convert_checkpoint_from_megatron_to_transformers(args):
 
             # Transpose the weights.
             elif weight_or_bias == "weight":
-                out_name = megatron_to_transformers[op_name]
-                output_state_dict[layer_name + out_name + "weight"] = params.clone()
+                if 'dense_h_to_4h' in op_name:
+                    out_name = megatron_to_transformers[op_name]
+                    para_dict = {i:[] for i in out_name}
+                    for index, mat in enumerate(torch.split(params, params.shape[0]//tp_size)):
+                        for index_new, mat_sep in enumerate(torch.split(mat, mat.shape[0]//2)):
+                            para_dict[out_name[index_new]].append(mat_sep.clone())
+                    for name, para in para_dict.items():
+                        output_state_dict[layer_name + name + "weight"] = torch.cat(para)
+                else:
+                    out_name = megatron_to_transformers[op_name]
+                    output_state_dict[layer_name + out_name + "weight"] = params.clone()
 
             # Copy the bias.
             # Ignore them

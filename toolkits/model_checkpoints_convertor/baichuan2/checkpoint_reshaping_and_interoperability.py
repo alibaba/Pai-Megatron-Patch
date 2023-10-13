@@ -152,8 +152,7 @@ def add_transformers_checkpoint_args(parser):
 
 megatron_to_transformers = {
     "self_attention.dense": ".self_attn.o_proj.",
-    "mlp.dense_h_to_4h_1": ".mlp.gate_proj.",
-    "mlp.dense_h_to_4h_2": ".mlp.up_proj.",
+    "mlp.dense_h_to_4h": [".mlp.gate_proj.", ".mlp.up_proj."],
     "mlp.dense_4h_to_h": ".mlp.down_proj.",
     "self_attention.rotary_emb":".self_attn.rotary_emb.inv_freq"
 }
