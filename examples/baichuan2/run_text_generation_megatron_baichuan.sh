@@ -43,7 +43,7 @@ INTERMEDIATE_SIZE=11008
 
 model_options=" \
         --use-rotary-position-embeddings \
-        --no-position-embedding"
+        --position-embedding-type rope"
 
 elif [ $MODEL_SIZE = 13B ]; then
 

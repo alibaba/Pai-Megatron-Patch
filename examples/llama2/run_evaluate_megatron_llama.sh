@@ -157,8 +157,8 @@ megatron_options=" \
         --patch-tokenizer-type LLamaTokenizer \
         --swiglu \
         --normalization RMSNorm \
-        --use-rotary-position-embeddings \
-        --no-position-embedding \
+        --use-llama2-rotary-position-embeddings \
+        --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear
         "

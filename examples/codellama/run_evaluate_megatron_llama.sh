@@ -102,7 +102,7 @@ megatron_options=" \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --swiglu \
         --use-rotary-position-embeddings \
-        --no-position-embedding \
+        --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --patch-tokenizer-type LLamaTokenizer \
         --recompute-activations \

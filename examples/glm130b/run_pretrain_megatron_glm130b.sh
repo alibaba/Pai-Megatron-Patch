@@ -175,8 +175,8 @@ megatron_options=" \
         --generation-length ${GEN_LEN} \
         --apply-residual-connection-post-layernorm \
         --geglu \
-        --no-position-embedding \
         --use-rotary-position-embeddings \
+        --position-embedding-type rope \
         --patch-tokenizer-type IcetkGLM130BTokenizer
         "
 

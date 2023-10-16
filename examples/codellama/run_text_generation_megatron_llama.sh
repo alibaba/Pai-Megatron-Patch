@@ -105,10 +105,9 @@ rapidformer_options="  \
         --use-distributed-optimizer \
         --swiglu \
         --use-rotary-position-embeddings \
-        --no-position-embedding \
+        --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --patch-tokenizer-type LLamaTokenizer \
-        --no-position-embedding \
         --n-head-kv ${NUM_HEAD_KV} \
         --repetition-penalty ${REPETITION_PENALTY} \
     "

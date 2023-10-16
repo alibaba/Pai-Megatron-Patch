@@ -1,7 +1,6 @@
 #!/bin/bash
-# sh run_evaluate_huggingface_llama.sh dsw /workspace/Megatron-LM /workspace/PAI-Megatron-Patch/ 7B 1 2048 80 1 fp16 /mnt/llama-datasets/alpaca_data.json /mnt/llama-ckpts/llama-7b-hf/
+# sh run_evaluate_huggingface_llama.sh dsw /workspace/Megatron-LM /workspace/github/Pai-Megatron-Patch/ 7B 1 80 80 0 bf16 /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf/
 # sh run_evaluate_huggingface_llama.sh dsw /workspace/Megatron-LM /workspace/PAI-Megatron-Patch/ 13B 1 2048 80 0 fp16 /mnt/llama-datasets/wudao_train.jsonl /mnt/llama-ckpts/Ziya-LLaMA-13B/
-# sh run_evaluate_huggingface_llama.sh dsw /workspace/Megatron-LM-23.04 /workspace/PAI-Megatron-Patch/ 70B 1 2048 80 0 fp16 /mnt/llama-datasets/wudao_train.jsonl /mnt/llama2-ckpts/Ziya-LLaMA-13B/
 
 set -e
 ENV=$1
@@ -88,7 +87,6 @@ megatron_options=" \
         --eval-iters 10 \
         --tensor-model-parallel-size 1 \
         --pipeline-model-parallel-size 1 \
-        --DDP-impl local \
         --no-load-optim \
         --num-workers 0 \
         --dataset LLama-SFT \

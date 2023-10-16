@@ -23,6 +23,7 @@ from megatron.model.module import MegatronModule
 from megatron.model.utils import get_linear_layer
 from megatron.model.utils import init_method_normal
 from megatron.model.utils import scaled_init_method_normal
+from megatron.core.models.common.rotary_pos_embedding import RotaryEmbedding
 
 from .transformer import ParallelTransformer
 
@@ -367,7 +368,6 @@ class TransformerLanguageModel(MegatronModule):
                                        self.num_tokentypes)
             self._embedding_key = 'embedding'
 
-        """
         # Rotary positional embeddings
         if args.use_rotary_position_embeddings:
             self.seq_length = args.seq_length
@@ -384,7 +384,10 @@ class TransformerLanguageModel(MegatronModule):
                 rotary_dim,
                 seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
             )
-        """
+            self.use_rotary_position_embeddings = True
+        elif args.use_llama2_rotary_position_embeddings:
+            self.use_rotary_position_embeddings = False
+
 
         # Encoder (usually set to True, False if part of an encoder-decoder
         # architecture and in encoder-only stage).
@@ -485,14 +488,13 @@ class TransformerLanguageModel(MegatronModule):
 
         # Rotary positional embeddings
         rotary_pos_emb = None
-        """
         if self.use_rotary_position_embeddings:
             if inference_params is not None:
                 rotary_pos_emb = \
                     self.rotary_pos_emb(inference_params.max_sequence_length)
             else:
                 rotary_pos_emb = self.rotary_pos_emb(self.seq_length)
-        """
+
 
         if enc_position_ids is None:
             past_key_values_length = 0

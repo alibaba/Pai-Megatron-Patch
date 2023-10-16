@@ -219,8 +219,8 @@ megatron_options="  \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --swiglu \
         --normalization RMSNorm \
-        --use-rotary-position-embeddings \
-        --no-position-embedding \
+        --use-llama2-rotary-position-embeddings \
+        --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --patch-tokenizer-type LLamaTokenizer \
         --disable-bias-linear
