@@ -185,7 +185,7 @@ megatron_options="  \
         --swiglu \
         --normalization RMSNorm \
         --use-rotary-position-embeddings \
-        --no-position-embedding \
+        --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear \
         --norm-epsilon 1e-6

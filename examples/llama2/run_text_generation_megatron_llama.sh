@@ -103,12 +103,11 @@ rapidformer_options="  \
         --max-padding-length ${PAD_LEN} \
         --use-distributed-optimizer \
         --swiglu \
-        --use-rotary-position-embeddings \
-        --no-position-embedding \
+        --use-llama2-rotary-position-embeddings \
+        --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --patch-tokenizer-type LLamaTokenizer \
         --normalization RMSNorm \
-        --no-position-embedding \
         --n-head-kv ${NUM_HEAD_KV} \
         --repetition-penalty ${REPETITION_PENALTY} \
         --disable-bias-linear

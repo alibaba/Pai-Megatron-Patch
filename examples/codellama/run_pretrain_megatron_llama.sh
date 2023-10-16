@@ -182,7 +182,7 @@ megatron_options="  \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --use-rotary-position-embeddings \
-        --no-position-embedding \
+        --position-embedding-type rope \
         --n-head-kv ${NUM_HEAD_KV} \
         --swiglu \
         --untie-embeddings-and-output-weights \

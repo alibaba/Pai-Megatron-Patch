@@ -213,4 +213,8 @@ def get_tasks_args(parser):
                        choices=['mmap', 'infer'],
                        help='Implementation of indexed datasets.')
 
+    group.add_argument('--use-llama2-rotary-position-embeddings', action='store_true',
+                       help='Use llama2 rotary positional embeddings or not. '
+                       'Deprecated: use --position-embedding-type')
+
     return parser
