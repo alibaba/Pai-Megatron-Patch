@@ -232,7 +232,8 @@ def convert_checkpoint_from_transformers_to_te(args):
         if args.model_name == "llama-13b" or args.model_name == "llama-30b":
             num_checkpoints = len(sub_dirs) - 2
             hf_state_dict = merge_transformers_sharded_states_13b(args.load_path, num_checkpoints)
-        elif args.model_name == "llama-7b" or args.model_name == "llama-65b" or args.model_name == "llama2-70b":
+        elif args.model_name == "llama-7b" or args.model_name == "llama-65b" or \
+             args.model_name == "llama2-70b" or args.model_name == "llama2-7b" or args.model_name == "llama2-13b":
             num_checkpoints = len(sub_dirs) - 1
             hf_state_dict = merge_transformers_sharded_states_7b(args.load_path, num_checkpoints)
 
@@ -269,24 +270,11 @@ def convert_checkpoint_from_transformers_to_te(args):
         internal_state_dict['transformer.layers.' + str(layer_id) + '.input_layernorm.weight'] = hf_state_dict[
             'model.layers.' + str(layer_id) + '.input_layernorm.weight']
 
-        input_layernorm_dtype = hf_state_dict['model.layers.' + str(layer_id) + '.input_layernorm.weight'].dtype
-
-        internal_state_dict['transformer.layers.' + str(layer_id) + '.input_layernorm.bias'] =\
-            torch.zeros(internal_state_dict['transformer.layers.0.input_layernorm.weight'].shape, dtype=input_layernorm_dtype)
-
         internal_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.weight'] =\
             hf_state_dict['model.layers.' + str(layer_id) + '.post_attention_layernorm.weight']
 
-        internal_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.bias'] =\
-            torch.zeros(internal_state_dict['transformer.layers.0.post_attention_layernorm.weight'].shape, dtype=input_layernorm_dtype)
-
-
     internal_state_dict["transformer.word_embeddings.weight"] = hf_state_dict['model.embed_tokens.weight']
     internal_state_dict["transformer.final_layernorm.weight"] = hf_state_dict['model.norm.weight']
-    final_layernorm_dtype = hf_state_dict['model.norm.weight'].dtype
-    internal_state_dict['transformer.final_layernorm.bias'] = \
-        torch.zeros(hf_state_dict['model.norm.weight'].shape,
-                    dtype=final_layernorm_dtype)
     internal_state_dict["transformer.lm_head.weight"] = hf_state_dict['lm_head.weight']
 
     # Saving config and tokenzier files
@@ -495,7 +483,7 @@ def convert_checkpoint_from_transformers_to_te(args):
 
         if pp_rank == args.target_pipeline_model_parallel_size - 1:
             # handle final layernorm
-            for weight_or_bias in ["weight", "bias"]:
+            for weight_or_bias in ["weight"]:
                 params = internal_state_dict[f"transformer.final_layernorm.{weight_or_bias}"].to(dtype)
                 layer_name = f"final_layernorm.{weight_or_bias}"
                 for i in range(args.target_tensor_model_parallel_size):

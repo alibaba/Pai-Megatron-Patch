@@ -8,7 +8,7 @@ SOURCE_CKPT_PATH=$2
 TARGET_CKPT_PATH=$3
 TP=$4
 PP=$5
-MN=$6 #llama-7b (also for llama2-7b/13b), llama-13b, llama-30b, llama-65b, llama2-70b
+MN=$6 #llama-7b, llama-13b, llama-30b, llama-65b, llama2-7b, llama2-13b, llama2-70b
 EXTRA_VOCAB_SIZE=$7
 
 export PYTHONPATH=${MEGATRON_PATH}:$PYTHONPATH

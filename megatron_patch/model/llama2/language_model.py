@@ -512,12 +512,13 @@ class TransformerLanguageModel(MegatronModule):
             if self.encoder is not None:
                 encoder_output = self.encoder(
                     encoder_input,
-                    enc_position_ids,
                     enc_attn_mask,
                     retriever_input=retriever_input,
                     retriever_attn_mask=retriever_attn_mask,
                     inference_params=inference_params,
-                    rotary_pos_emb=rotary_pos_emb)
+                    rotary_pos_emb=rotary_pos_emb,
+                    position_ids=enc_position_ids
+                )
             else:
                 encoder_output = self.encoder_hidden_state
         else:
