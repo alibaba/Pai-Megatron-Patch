@@ -21,6 +21,12 @@ In the reinforcement learning section, the patch offers PPO training workflows, 
 <img src=patch_en.png width=600 height=400 />
 </div>
 
+## Installation
+
+```bash
+$ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
+```
+
 ## Technical Reports
 
 - [阿里云机器学习PAI开源AI大模型训练工具Pai-Megatron-Patch, 助力大模型技术落地](https://zhuanlan.zhihu.com/p/655942437)
