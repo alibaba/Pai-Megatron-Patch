@@ -191,7 +191,8 @@ tensor_parallel_params_70b = [
     "self_attn.query.weight",
     "self_attn.key_value.weight",
     "self_attn.dense.weight",
-    "mlp.dense_h_to_4h.weight",
+    "mlp.dense_h_to_4h_1.weight",
+    "mlp.dense_h_to_4h_2.weight",
     "mlp.dense_4h_to_h.weight"
 ]
 
@@ -668,6 +669,23 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 del params_dict[dense_h_to_4h_1_layer_name]
                 del params_dict[dense_h_to_4h_2_layer_name]
 
+                if args.model_name == "llama2-70b":
+                    query_name = 'self_attention.query.weight'
+                    query_layer_name = f"layers.{layer}.{query_name}"
+                    query_weight = params_dict[query_layer_name]
+
+                    kv_name = 'self_attention.key_value.weight'
+                    kv_layer_name = f"layers.{layer}.{kv_name}"
+                    kv_weight = params_dict[kv_layer_name]
+
+                    qkv_name = 'self_attention.query_key_value.weight'
+                    qkv_layer_name = f"layers.{layer}.{qkv_name}"
+
+                    params_dict[qkv_layer_name] = torch.cat(
+                    [query_weight, kv_weight], dim=0)
+
+                    del params_dict[query_layer_name]
+                    del params_dict[kv_layer_name]
 
         if pp_rank == args.target_pipeline_model_parallel_size - 1:
             # handle final layernorm

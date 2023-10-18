@@ -39,7 +39,8 @@ NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
-NUM_HEAD_KV=32
+
+gqa_options=""
 
 elif [ $MODEL_SIZE = 13B ]; then
 
@@ -47,7 +48,8 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13824
-NUM_HEAD_KV=40
+
+gqa_options=""
 
 elif [ $MODEL_SIZE = 70B ]; then
 
@@ -55,7 +57,10 @@ NUM_LAYERS=80
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=28672
-NUM_HEAD_KV=8
+
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups 8"
 
 fi
 
@@ -108,13 +113,12 @@ rapidformer_options="  \
         --untie-embeddings-and-output-weights \
         --patch-tokenizer-type LLamaTokenizer \
         --normalization RMSNorm \
-        --n-head-kv ${NUM_HEAD_KV} \
         --repetition-penalty ${REPETITION_PENALTY} \
         --disable-bias-linear
     "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS generate_text_megatron_llama.py
- ${rapidformer_options} ${load_options} ${input_options} ${pr_options}"
+ ${rapidformer_options} ${load_options} ${input_options} ${pr_options} ${gqa_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
