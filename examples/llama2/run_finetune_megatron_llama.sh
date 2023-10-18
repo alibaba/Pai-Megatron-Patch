@@ -53,6 +53,8 @@ HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
 
+gqa_options=""
+
 elif [ $MODEL_SIZE = 13B ]; then
 
 NUM_LAYERS=40
@@ -60,12 +62,18 @@ HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13824
 
+gqa_options=""
+
 elif [ $MODEL_SIZE = 70B ]; then
 
 NUM_LAYERS=80
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=28672
+
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups 8"
 
 fi
 
@@ -132,6 +140,11 @@ elif [ $SP = false ]; then
                     "
 fi
 
+if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
+    load_options=" \
+            --load $PRETRAIN_CHECKPOINT_PATH"
+fi
+
 FT_NAME="${ENV}-finetune-megatron-llama-${MODEL_SIZE}-lr-${LR}-ep-${EPOCH}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}--do-${DO}-tp-${TP}-ac-${AC}-sp-${SP}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
 mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
@@ -192,7 +205,7 @@ megatron_options="  \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS finetune_megatron_llama.py
- ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options}"
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
