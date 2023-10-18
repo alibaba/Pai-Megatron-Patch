@@ -154,6 +154,8 @@ megatron_to_transformers = {
     "self_attention.dense": ".attn.c_proj.",
     "mlp.dense_h_to_4h": [".mlp.w2.",".mlp.w1."],
     "mlp.dense_h_to_4h_2": ".mlp.w2.",
+    "input_norm":".ln_1.",
+    "post_attention_norm":".ln_2.",
     "mlp.dense_4h_to_h": ".mlp.c_proj.",
 }
 
@@ -708,6 +710,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     os.system("cp -rf " + config_path + "/tokenizer* " + args.save_path)
     os.system("cp -rf " + config_path + "/*.py " + args.save_path)
     os.system("cp -rf " + config_path + "/qwen.* " + args.save_path)
+    os.system("rm -rf "+args.load_path+"/mp_rank*/distrib*")
 
     activation_function = "gelu"
 
@@ -906,7 +909,10 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     # The final layernorm.
     print("Converting final layernorm")
     params = get_element_from_dict_by_path(tp_state_dicts[0], str(path))
-    output_state_dict["transformer.ln_f.weight"] = params["final_layernorm.weight"].to(dtype).clone()
+    try:
+        output_state_dict["transformer.ln_f.weight"] = params["final_layernorm.weight"].to(dtype).clone()
+    except:
+        output_state_dict["transformer.ln_f.weight"] = params["final_norm.weight"].to(dtype).clone()
 
     # For LM head, transformers' wants the matrix to weight embeddings.
     print("Converting LM head")
