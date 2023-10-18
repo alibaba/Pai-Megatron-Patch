@@ -1,5 +1,5 @@
 #!/bin/bash
-# bash run_ds_train_huggingface_llama.sh dsw 7B 1 2 1e-5 2048 bf16 2 true true ${WORK_DIR}/llama2-datasets/wudao_train.json ${WORK_DIR}/llama2-datasets/wudao_valid.json ${WORK_DIR}/llama2-ckpts/Llama-2-7b-hf 2 ${WORK_DIR}/output_llama2
+# bash run_ds_train_huggingface_llama.sh dsw 7B 1 2 1e-5 2048 bf16 2 true true /mnt/llama2-datasets/wudao_train.json /mnt/llama2-datasets/wudao_valid.json /mnt/llama2-ckpts/Llama-2-7b-hf 2 /mnt/output_llama2
 
 set -e
 ENV=$1

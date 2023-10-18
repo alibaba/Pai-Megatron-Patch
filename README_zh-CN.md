@@ -44,6 +44,11 @@ Pai-Megatron-Patch中包含模型库，分词器，模型转换，强化学习�
 <img src=patch.png width=600 height=400 />
 </div>
 
+## 安装
+
+```bash
+$ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
+```
 
 ## 快速开始
 

@@ -1,9 +1,9 @@
 #!/bin/bash
-#sh run_pretrain_megatron_llama.sh dsw /workspace/Megatron-LM/ /workspace/github/Pai-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 2048 0 bf16 1 1 sel true true true false 100000 /mnt/llama2-datasets/wudao_llamabpe_text_document /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 10000000000 100000000 /mnt/output_patch_test
+#sh run_pretrain_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 8 1e-5 1e-6 2048 2048 0 bf16 1 1 sel true true true false 100000 /mnt/llama2-datasets/wudao_llamabpe_text_document /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 10000000000 100000000 /mnt/output_patch_test
 set -e
 ENV=$1
-MEGATRON_PATH=$2
-MEGATRON_PATCH_PATH=$3
+MEGATRON_PATCH_PATH=$2
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
@@ -24,28 +24,28 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$4
-BATCH_SIZE=$5
-GLOBAL_BATCH_SIZE=$6
-LR=$7
-MIN_LR=$8
-SEQ_LEN=$9
-PAD_LEN=${10}
-EXTRA_VOCAB_SIZE=${11}
-PR=${12}
-TP=${13}
-PP=${14}
-AC=${15}
-DO=${16}
-FL=${17}
-SP=${18}
-TE=${19}
-SAVE_INTERVAL=${20}
-DATASET_PATH=${21}
-PRETRAIN_CHECKPOINT_PATH=${22}
-TRAIN_TOKENS=${23}
-WARMUP_TOKENS=${24}
-OUTPUT_BASEPATH=${25}
+MODEL_SIZE=$3
+BATCH_SIZE=$4
+GLOBAL_BATCH_SIZE=$5
+LR=$6
+MIN_LR=$7
+SEQ_LEN=$8
+PAD_LEN=$9
+EXTRA_VOCAB_SIZE=${10}
+PR=${11}
+TP=${12}
+PP=${13}
+AC=${14}
+DO=${15}
+FL=${16}
+SP=${17}
+TE=${18}
+SAVE_INTERVAL=${19}
+DATASET_PATH=${20}
+PRETRAIN_CHECKPOINT_PATH=${21}
+TRAIN_TOKENS=${22}
+WARMUP_TOKENS=${23}
+OUTPUT_BASEPATH=${24}
 
 
 if [ $MODEL_SIZE = 7B ]; then
