@@ -485,7 +485,7 @@ def convert_checkpoint_from_transformers_to_te(args):
             # handle final layernorm
             for weight_or_bias in ["weight"]:
                 params = internal_state_dict[f"transformer.final_layernorm.{weight_or_bias}"].to(dtype)
-                layer_name = f"final_layernorm.{weight_or_bias}"
+                layer_name = f"final_norm.{weight_or_bias}"
                 for i in range(args.target_tensor_model_parallel_size):
                     params_dict = get_element_from_dict_by_path(output_state_dict[i], "model.language_model.encoder")
                     params_dict[layer_name] = params.clone()
