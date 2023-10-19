@@ -1,11 +1,12 @@
 #!/bin/bash
-# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Megatron-LM/ /workspace/github/Pai-Megatron-Patch/ 7B 1 2048 2048 0 bf16 2 1 sel true true true false /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base-to-mg-tp2-pp1
-# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Megatron-LM/ /workspace/github/Pai-Megatron-Patch/ 13B 1 2048 2048 0 bf16 2 1 sel true false true false /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-13B-Base-to-mg-tp2-pp1
+# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 7B 1 2048 2048 0 bf16 2 1 sel true true true false /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base-to-mg-tp2-pp1
+# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 13B 1 2048 2048 0 bf16 2 1 sel true false true false /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-13B-Base-to-mg-tp2-pp1
+# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 7B 1 2048 2048 0 bf16 2 1 sel true false true true /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base-to-te-tp2-pp1
 
 set -e
 ENV=$1
-MEGATRON_PATH=$2
-MEGATRON_PATCH_PATH=$3
+MEGATRON_PATCH_PATH=$2
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
@@ -26,21 +27,21 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$4
-BATCH_SIZE=$5
-SEQ_LEN=$6
-PAD_LEN=$7
-EXTRA_VOCAB_SIZE=$8
-PR=$9
-TP=${10}
-PP=${11}
-AC=${12}
-DO=${13}
-FL=${14}
-SP=${15}
-TE=${16}
-DATASET_PATH=${17}
-PRETRAIN_CHECKPOINT_PATH=${18}
+MODEL_SIZE=$3
+BATCH_SIZE=$4
+SEQ_LEN=$5
+PAD_LEN=$6
+EXTRA_VOCAB_SIZE=$7
+PR=$8
+TP=$9
+PP=${10}
+AC=${11}
+DO=${12}
+FL=${13}
+SP=${14}
+TE=${15}
+DATASET_PATH=${16}
+PRETRAIN_CHECKPOINT_PATH=${17}
 
 if [ $MODEL_SIZE = 7B ]; then
 

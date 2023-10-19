@@ -24,8 +24,7 @@ seed = 1234
 random.seed(seed)
 np.random.seed(seed)
 torch.manual_seed(seed)
-
-from transformers import AutoTokenizer, GPT2Config, LlamaConfig
+from transformers import AutoTokenizer, GPT2Config
 
 
 def add_args(parser):
@@ -123,6 +122,7 @@ def add_args(parser):
 tensor_parallel_params = [
     # megatron-lm layers to merge across tp ranks
     "self_attn.query_key_value.weight",
+    "self_attn.query_key_value.bias",
     "self_attn.dense.weight",
     "mlp.dense_h_to_4h_1.weight",
     "mlp.dense_h_to_4h_2.weight",
@@ -177,7 +177,7 @@ def merge_transformers_sharded_states_7b(path, num_checkpoints):
     return state_dict
 
 
-def merge_transformers_sharded_states_13b(path, num_checkpoints):
+def merge_transformers_sharded_states_14b(path, num_checkpoints):
     """
     Merge sharded checkpoints from transformers into a single checkpoint.
     Args:
@@ -185,11 +185,33 @@ def merge_transformers_sharded_states_13b(path, num_checkpoints):
         num_checkpoints (int): the number of checkpoints to merge
     """
     state_dict = {}
-    for i in range(0, num_checkpoints + 1):
-        checkpoint_path = os.path.join(path, f"pytorch_model-{i:05d}-of-{num_checkpoints:05d}.bin")
-        current_chunk = torch.load(checkpoint_path, map_location="cpu")
+    for i in range(1, num_checkpoints + 1):
+        checkpoint_path = os.path.join(path, f"model-{i:05d}-of-{num_checkpoints:05d}.safetensors")
+        print(checkpoint_path)
+        current_chunk = torch.load(checkpoint_path)
         state_dict.update(current_chunk)
     return state_dict
+
+
+def get_megatron_sharded_states(args, tp_size, pp_size, pp_rank):
+    """
+    Get sharded checkpoints from NVIDIA Megatron-LM checkpoint based on the provided tensor parallel size, pipeline
+    parallel size and pipeline parallel rank.
+    Args:
+        args (argparse.Namespace): the arguments to the script
+        tp_size (int): the tensor parallel size
+        pp_size (int): the pipeline parallel size
+        pp_rank (int): the pipeline parallel rank
+    """
+    tp_state_dicts = []
+    for i in range(tp_size):
+        sub_dir_name = f"mp_rank_{i:02d}" if pp_size == 1 else f"mp_rank_{i:02d}_{pp_rank:03d}"
+        checkpoint_name = os.listdir(os.path.join(args.load_path, sub_dir_name))[0]
+        checkpoint_path = os.path.join(args.load_path, sub_dir_name, checkpoint_name)
+        state_dict = torch.load(checkpoint_path, map_location="cpu")
+        tp_state_dicts.append(state_dict)
+    return tp_state_dicts
+
 
 def get_element_from_dict_by_path(d, path):
     """
@@ -224,39 +246,40 @@ def convert_checkpoint_from_transformers_to_te(args):
         exit(1)
 
     # load the transformers model state dict and config
-    sub_dirs = [x for x in os.listdir(args.load_path) if x.startswith("pytorch_model")]
+    sub_dirs = [x for x in os.listdir(args.load_path) if x.startswith("pytorch_model") or x.endswith("safetensors") ]
     if len(sub_dirs) == 1:
         checkpoint_name = "pytorch_model.bin"
         hf_state_dict = torch.load(os.path.join(args.load_path, checkpoint_name), map_location="cpu")
     else:
-        if args.model_name == "llama-13b" or args.model_name == "llama-30b":
-            num_checkpoints = len(sub_dirs) - 2
-            hf_state_dict = merge_transformers_sharded_states_13b(args.load_path, num_checkpoints)
-        elif args.model_name == "llama-7b" or args.model_name == "llama-65b" or \
-             args.model_name == "llama2-70b" or args.model_name == "llama2-7b" or args.model_name == "llama2-13b":
+        if args.model_name == "qwen-7b":
             num_checkpoints = len(sub_dirs) - 1
             hf_state_dict = merge_transformers_sharded_states_7b(args.load_path, num_checkpoints)
+        elif args.model_name == "qwen-14b":
+            from transformers import AutoModelForCausalLM
+            hf_state_dict = AutoModelForCausalLM.from_pretrained(args.load_path, trust_remote_code=True).state_dict()
+        else:
+            print("Unrecognized model name, choose from qwen-7b, qwen-14b!")
+            exit(1)
+
+    config = GPT2Config.from_pretrained(args.load_path)
 
     internal_state_dict = {}
-    config = GPT2Config.from_pretrained(args.load_path)
+
     for layer_id in range(config.num_hidden_layers):
-        q_name = 'model.layers.'+str(layer_id)+'.self_attn.q_proj.weight'
-        k_name = 'model.layers.' + str(layer_id) + '.self_attn.k_proj.weight'
-        v_name = 'model.layers.' + str(layer_id) + '.self_attn.v_proj.weight'
-        q_weight = hf_state_dict[q_name]
-        k_weight = hf_state_dict[k_name]
-        v_weight = hf_state_dict[v_name]
-
         internal_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query_key_value.weight'] =\
-            torch.cat((q_weight, k_weight, v_weight))
+            hf_state_dict['transformer.h.'+str(layer_id)+'.attn.c_attn.weight']
 
-        internal_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.dense.weight'] = hf_state_dict['model.layers.' + str(layer_id) + '.self_attn.o_proj.weight']
+        internal_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query_key_value.bias'] =\
+            hf_state_dict['transformer.h.'+str(layer_id)+'.attn.c_attn.bias']
+
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.dense.weight'] =\
+            hf_state_dict['transformer.h.' + str(layer_id) + '.attn.c_proj.weight']
 
         dense_h_to_4h_1_weight = hf_state_dict[
-            'model.layers.' + str(layer_id) + '.mlp.gate_proj.weight']
+            'transformer.h.' + str(layer_id) + '.mlp.w1.weight']
 
         dense_h_to_4h_2_weight = hf_state_dict[
-            'model.layers.' + str(layer_id) + '.mlp.up_proj.weight']
+            'transformer.h.' + str(layer_id) + '.mlp.w2.weight']
 
         internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h_1.weight'] =\
             dense_h_to_4h_1_weight
@@ -264,22 +287,23 @@ def convert_checkpoint_from_transformers_to_te(args):
         internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h_2.weight'] =\
             dense_h_to_4h_2_weight
 
-        internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_4h_to_h.weight'] = hf_state_dict[
-            'model.layers.' + str(layer_id) + '.mlp.down_proj.weight']
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_4h_to_h.weight'] =\
+            hf_state_dict['transformer.h.' + str(layer_id) + '.mlp.c_proj.weight']
+
 
         internal_state_dict['transformer.layers.' + str(layer_id) + '.input_layernorm.weight'] = hf_state_dict[
-            'model.layers.' + str(layer_id) + '.input_layernorm.weight']
+            'transformer.h.' + str(layer_id) + '.ln_1.weight']
 
-        internal_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.weight'] =\
-            hf_state_dict['model.layers.' + str(layer_id) + '.post_attention_layernorm.weight']
+        internal_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.weight'] = hf_state_dict[
+            'transformer.h.' + str(layer_id) + '.ln_2.weight']
 
-    internal_state_dict["transformer.word_embeddings.weight"] = hf_state_dict['model.embed_tokens.weight']
-    internal_state_dict["transformer.final_layernorm.weight"] = hf_state_dict['model.norm.weight']
+    internal_state_dict["transformer.word_embeddings.weight"] = hf_state_dict['transformer.wte.weight']
+    internal_state_dict["transformer.final_layernorm.weight"] = hf_state_dict['transformer.ln_f.weight']
     internal_state_dict["transformer.lm_head.weight"] = hf_state_dict['lm_head.weight']
 
     # Saving config and tokenzier files
     os.system("cp -rf "+args.load_path+"/*.json "+args.save_path)
-    os.system("cp -rf " + args.load_path + "/tokenizer.model " + args.save_path)
+    os.system("cp -rf " + args.load_path + "/qwen.tiktoken " + args.save_path)
 
     # Saving the tracker file
     tracker_filepath = os.path.join(args.save_path, "latest_checkpointed_iteration.txt")
@@ -299,7 +323,7 @@ def convert_checkpoint_from_transformers_to_te(args):
         "pipeline_model_parallel_size": args.target_pipeline_model_parallel_size,
         "make_vocab_size_divisible_by": args.make_vocab_size_divisible_by,
         "rank": 0,
-        "tokenizer_type": "LLamaTokenizer",
+        "tokenizer_type": "QwenTokenizer",
     }
 
     margs = types.SimpleNamespace()
@@ -415,7 +439,7 @@ def convert_checkpoint_from_transformers_to_te(args):
                     out_name = "layernorm_mlp"
                     layer_name = f"layers.{layer}.{out_name}.{weight}"
 
-                elif op_name.startswith("self_attn.query_key_value") and weight_or_bias == "weight":
+                elif op_name.startswith("self_attn.query_key_value"):
                     # transformers stores D X (3*D) but Megatron-LM expects (3*D) X D.
                     params = transformers_to_megatron_fix_query_key_value_ordering(
                         params,
@@ -476,7 +500,7 @@ def convert_checkpoint_from_transformers_to_te(args):
                 dense_h_to_4h_layer_name = f"layers.{layer}.{out_name}.{weight}"
 
                 params_dict[dense_h_to_4h_layer_name] = torch.cat(
-                [dense_h_to_4h_1_weight, dense_h_to_4h_2_weight], dim=0)
+                [dense_h_to_4h_2_weight, dense_h_to_4h_1_weight], dim=0)
 
                 del params_dict[dense_h_to_4h_1_layer_name]
                 del params_dict[dense_h_to_4h_2_layer_name]

@@ -1,9 +1,9 @@
 #!/bin/bash
-#sh run_finetune_megatron_qwen.sh dsw /workspace/Megatron-LM /workspace/github/Pai-Megatron-Patch 7B 1 1e-5 1e-6 80 81 85 bf16 1 1 sel true true true false  /mnt/qwen-datasets/wudao_train.json /mnt/qwen-datasets/wudao_valid.json /mnt/qwen-ckpts/qwen-7b-hf-to-mg-tp1-pp1 2 /mnt/output_megatron_qwen/
+#sh run_finetune_megatron_qwen.sh dsw /workspace/Pai-Megatron-Patch 7B 1 1e-5 1e-6 80 81 85 bf16 1 1 sel true true true false  /mnt/qwen-datasets/wudao_train.json /mnt/qwen-datasets/wudao_valid.json /mnt/qwen-ckpts/qwen-7b-hf-to-mg-tp1-pp1 2 /mnt/output_megatron_qwen/
 set -e
 ENV=$1
-MEGATRON_PATH=$2
-MEGATRON_PATCH_PATH=$3
+MEGATRON_PATCH_PATH=$2
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
@@ -24,26 +24,26 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$4  #7B, 13B, 70B
-BATCH_SIZE=$5
-LR=$6
-MIN_LR=$7
-SEQ_LEN=$8
-PAD_LEN=$9
-EXTRA_VOCAB_SIZE=${10}
-PR=${11}
-TP=${12}
-PP=${13}
-AC=${14}
-DO=${15}
-FL=${16}
-SP=${17}
-TE=${18}
-TRAIN_DATASET_PATH=${19}
-VALID_DATASET_PATH=${20}
-PRETRAIN_CHECKPOINT_PATH=${21}
-EPOCH=${22}
-OUTPUT_BASEPATH=${23}
+MODEL_SIZE=$3  #7B, 14B
+BATCH_SIZE=$4
+LR=$5
+MIN_LR=$6
+SEQ_LEN=$7
+PAD_LEN=$8
+EXTRA_VOCAB_SIZE=$9
+PR=${10}
+TP=${11}
+PP=${12}
+AC=${13}
+DO=${14}
+FL=${15}
+SP=${16}
+TE=${17}
+TRAIN_DATASET_PATH=${18}
+VALID_DATASET_PATH=${19}
+PRETRAIN_CHECKPOINT_PATH=${20}
+EPOCH=${21}
+OUTPUT_BASEPATH=${22}
 
 
 if [ $MODEL_SIZE = 7B ]; then

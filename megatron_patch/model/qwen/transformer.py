@@ -1796,9 +1796,16 @@ class ParallelTransformer(MegatronModule):
         """Customize load."""
 
         # Handle renaming layernorm -> norm in component names
+        args = get_args()
         state_dict_ = {}
         for key in state_dict.keys():
-            newkey = key.replace("layernorm", "norm")
-            state_dict_[newkey] = state_dict[key]
+            if args.transformer_impl != "transformer_engine":
+                newkey = key.replace("layernorm", "norm")
+                state_dict_[newkey] = state_dict[key]
+            else:
+                state_dict_[key] = state_dict[key]
 
-        super().load_state_dict(state_dict_, strict)
+        if args.use_llama2_rotary_position_embeddings:
+            super().load_state_dict(state_dict_, strict)
+        else:
+            super().load_state_dict(state_dict_, False)
