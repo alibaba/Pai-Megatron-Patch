@@ -1,9 +1,9 @@
 #!/bin/bash
-# sh run_evaluate_huggingface_baichuan.sh dsw /root/Megatron-LM-23.04/ /workspace/PAI-Megatron-Patch/ 13B 1 2048 80 0 fp16 /mnt/baichuan-datasets/alpaca_data.json /mnt/baichuan-ckpts/baichuan-13b-base
+# sh run_evaluate_huggingface_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 13B 1 2048 80 0 fp16 /mnt/baichuan-datasets/alpaca_data.json /mnt/baichuan-ckpts/baichuan-13b-base
 set -e
 ENV=$1
-MEGATRON_PATH=$2
-MEGATRON_PATCH_PATH=$3
+MEGATRON_PATCH_PATH=$2
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
@@ -24,14 +24,14 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$4
-BATCH_SIZE=$5
-SEQ_LEN=$6
-PAD_LEN=$7
-EXTRA_VOCAB_SIZE=$8
-PR=$9
-DATASET_PATH=${10}
-PRETRAIN_CHECKPOINT_PATH=${11}
+MODEL_SIZE=$3
+BATCH_SIZE=$4
+SEQ_LEN=$5
+PAD_LEN=$6
+EXTRA_VOCAB_SIZE=$7
+PR=$8
+DATASET_PATH=$9
+PRETRAIN_CHECKPOINT_PATH=${10}
 
 if [ $MODEL_SIZE = 7B ]; then
 
