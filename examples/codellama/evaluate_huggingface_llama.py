@@ -27,6 +27,7 @@ from megatron.initialize import initialize_megatron
 from megatron.model import DistributedDataParallel as LocalDDP
 from megatron.model import Float16Module
 from megatron.utils import unwrap_model
+from megatron.arguments import core_transformer_config_from_args
 
 from megatron_patch.data.evaluate_dataset import build_evaluation_dataset
 from megatron_patch.finetune_utils import build_data_loader
@@ -34,6 +35,7 @@ from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import get_model
 from megatron_patch.arguments import get_tasks_args
+
 
 def get_model_provider():
     """Based on evaluation metric set the parallel-output flag and
@@ -66,7 +68,8 @@ def forward_step(batch, model):
     output = unwrapped_model(input_ids=input_ids,
                              labels=labels,
                              attention_mask=attention_mask)
-    send_forward(output)
+    config = core_transformer_config_from_args(args)
+    send_forward(output, config)
     if parallel_state.is_pipeline_last_stage():
         print_rank_0(output.loss)
         return output.loss

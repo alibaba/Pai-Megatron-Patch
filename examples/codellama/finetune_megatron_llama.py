@@ -18,19 +18,25 @@ import torch
 from megatron import get_args
 from megatron.initialize import initialize_megatron
 from megatron.utils import average_losses_across_data_parallel_group
-
+from megatron.utils import get_ltor_masks_and_position_ids
 from megatron_patch.data.finetune_dataset import LLamaDataset
 from megatron_patch.finetune_utils import finetune
 from megatron_patch.model.llama2.gpt_model import GPTModel
 from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.arguments import get_tasks_args
+from megatron.arguments import core_transformer_config_from_args
+
 
 def model_provider(pre_process=True, post_process=True):
-    model = GPTModel(num_tokentypes=0,
-                     parallel_output=True,
-                     pre_process=pre_process,
-                     post_process=post_process)
+    config = core_transformer_config_from_args(get_args())
+    model = GPTModel(
+        config,
+        num_tokentypes=0,
+        parallel_output=True,
+        pre_process=pre_process,
+        post_process=post_process
+    )
     return model
 
 
@@ -45,6 +51,7 @@ def train_valid_datasets_provider():
 
 
 def forward_step(data_iterator, model):
+    args = get_args()
     tokenizer = get_tokenizer()
 
     try:
@@ -54,12 +61,18 @@ def forward_step(data_iterator, model):
 
     tokens_ = data_iterator['input_ids'].long().cuda().contiguous()
     labels = tokens_[:, 1:].contiguous()
-    input_ids = tokens_[:, :-1].contiguous()
-    loss_mask = data_iterator['loss_mask'].long().cuda()
-    loss_mask = loss_mask[..., 1:].contiguous()
-    attention_mask = input_ids.ne(tokenizer.pad_token_id)
+    tokens = tokens_[:, :-1].contiguous()
 
-    output_tensor = model(input_ids=input_ids,
+    # Get the masks and postition ids.
+    attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+        tokens,
+        tokenizer.eod,
+        args.reset_position_ids,
+        args.reset_attention_mask,
+        args.eod_mask_loss)
+
+    output_tensor = model(input_ids=tokens,
+                          position_ids=position_ids,
                           attention_mask=attention_mask,
                           labels=labels)
 
