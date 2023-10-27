@@ -16,16 +16,20 @@ from megatron.core.enums import ModelType
 from megatron import get_args
 from megatron.initialize import initialize_megatron
 
+from megatron.arguments import core_transformer_config_from_args
 from megatron_patch.generation.gpt_predictor import GPTPredictor
 from megatron_patch.model.llama2.gpt_model import GPTModel
+from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.arguments import get_tasks_args
 
 class MegatronGPTPredictor(GPTPredictor):
     def model_provider(self, pre_process=True, post_process=True):
         args = get_args()
-        args.model_type = ModelType.encoder_or_decoder
-        model = GPTModel(num_tokentypes=0,
-                         parallel_output=False,
+        build_tokenizer(args)
+        config = core_transformer_config_from_args(get_args())
+        model = GPTModel(config,
+                         num_tokentypes=0,
+                         parallel_output=True,
                          pre_process=pre_process,
                          post_process=post_process)
 

@@ -17,7 +17,12 @@ import torch
 import os
 
 from megatron.core.enums import ModelType
+from megatron.data.gpt_dataset import build_train_valid_test_datasets
+from megatron.utils import get_ltor_masks_and_position_ids
+from megatron import print_rank_0
+from megatron.arguments import core_transformer_config_from_args
 from megatron import get_args
+from megatron import get_timers
 from megatron.core import tensor_parallel
 from megatron.utils import average_losses_across_data_parallel_group
 
@@ -32,69 +37,129 @@ from megatron_patch.arguments import get_tasks_args
 def model_provider(pre_process=True, post_process=True):
     args = get_args()
     build_tokenizer(args)
-    model = GPTModel(num_tokentypes=0,
-                     parallel_output=True,
-                     pre_process=pre_process,
-                     post_process=post_process)
+    config = core_transformer_config_from_args(get_args())
+    model = GPTModel(
+        config,
+        num_tokentypes=0,
+        parallel_output=True,
+        pre_process=pre_process,
+        post_process=post_process
+    )
     return model
 
 
-def train_valid_test_datasets_provider(train_val_test_num_samples):
+def get_batch(data_iterator):
+    """Generate a batch"""
     args = get_args()
-    args.data_path = args.data_path[0].split(',')
-    if os.path.isfile(args.data_path[-1]):
-        train_ds, valid_ds, test_ds = \
-            build_pretrain_llama_datasets_from_original(
-                data_prefix=args.data_path,
-                max_padding_length=args.max_padding_length)
-    else:
-        train_ds, valid_ds, test_ds = \
-            build_pretrain_llama_datasets_from_idxmap(
-                data_prefix=args.data_path,
-                max_padding_length=args.max_padding_length,
-                data_impl=args.data_impl,
-                splits_string=args.split,
-                train_valid_test_num_samples=train_val_test_num_samples,
-                seed=args.seed,
-                skip_warmup=(not args.mmap_warmup)
-            )
+    tokenizer = get_tokenizer()
 
-    return train_ds, valid_ds, test_ds
+    datatype = torch.int64
+
+    if args.dataset != "LLama-SFT":
+        keys = ['text']
+        if data_iterator is not None:
+            data = next(data_iterator)
+        else:
+            data = None
+        data_b = tensor_parallel.broadcast_data(keys, data, datatype)
+        # Unpack.
+        tokens_ = data_b['text'].long()
+    else:
+        keys = ['input_ids', 'labels']
+        if data_iterator is not None:
+            data = next(data_iterator)
+        else:
+            data = None
+        data_b = tensor_parallel.broadcast_data(keys, data, datatype)
+        tokens_ = data_b['input_ids'].long()
+
+    labels = tokens_[:, 1:].contiguous()
+    tokens = tokens_[:, :-1].contiguous()
+
+    # Get the masks and postition ids.
+    attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+        tokens,
+        tokenizer.eod,
+        args.reset_position_ids,
+        args.reset_attention_mask,
+        args.eod_mask_loss)
+
+    return tokens, labels, loss_mask, attention_mask, position_ids
+
+def loss_func(loss_mask, output_tensor):
+    losses = output_tensor.float()
+    loss_mask = loss_mask.view(-1).float()
+    loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+
+    # Reduce loss for logging.
+    averaged_loss = average_losses_across_data_parallel_group([loss])
+
+    return loss, {'lm loss': averaged_loss[0]}
 
 
 def forward_step(data_iterator, model):
-    tokenizer = get_tokenizer()
-    keys = ['input_ids', 'labels', 'loss_mask']
-    datatype = torch.int64
-    if data_iterator is not None:
-        data = next(data_iterator)
-    else:
-        data = None
+    """Forward step."""
+    args = get_args()
+    timers = get_timers()
 
-    batch = tensor_parallel.broadcast_data(keys, data, datatype)
-    tokens_ = batch['input_ids'].long().cuda().contiguous()
-    labels = tokens_[:, 1:].contiguous()
-    input_ids = tokens_[:, :-1].contiguous()
-    loss_mask = batch['loss_mask'].long().cuda()
-    loss_mask = loss_mask[..., 1:].contiguous()
-    attention_mask = input_ids.ne(tokenizer.pad_token_id)
-    output_tensor = model(input_ids=input_ids,
-                          attention_mask=attention_mask,
+    # Get the batch.
+    timers('batch-generator', log_level=2).start()
+    tokens, labels, loss_mask, attention_mask, position_ids = get_batch(
+        data_iterator)
+    timers('batch-generator').stop()
+
+    output_tensor = model(tokens, position_ids, attention_mask,
                           labels=labels)
-
-    def loss_func(loss_mask, output_tensor):
-        losses = output_tensor.float()
-        loss_mask = loss_mask.view(-1).float()
-        loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
-        averaged_loss = average_losses_across_data_parallel_group([loss])
-        return loss, {'lm loss': averaged_loss[0]}
 
     return output_tensor, partial(loss_func, loss_mask)
 
 
-if __name__ == '__main__':
-    pretrain(train_valid_test_datasets_provider,
-             model_provider,
+def train_valid_test_datasets_provider(train_val_test_num_samples):
+    """Build train, valid, and test datasets."""
+    args = get_args()
+
+    print_rank_0('> building train, validation, and test datasets '
+                 'for GPT ...')
+
+    if args.dataset == "LLama-SFT":
+        if os.path.isfile(args.data_path[0]):
+            train_ds, valid_ds, test_ds = \
+                build_pretrain_llama_datasets_from_original(
+                    data_prefix=args.data_path,
+                    max_padding_length=args.max_padding_length)
+        else:
+            train_ds, valid_ds, test_ds = \
+                build_pretrain_llama_datasets_from_idxmap(
+                    data_prefix=args.data_path,
+                    max_padding_length=args.max_padding_length,
+                    data_impl=args.data_impl,
+                    splits_string=args.split,
+                    train_valid_test_num_samples=train_val_test_num_samples,
+                    seed=args.seed,
+                    skip_warmup=(not args.mmap_warmup)
+                )
+
+    else:
+        train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
+            data_prefix=args.data_path,
+            data_impl=args.data_impl,
+            splits_string=args.split,
+            train_valid_test_num_samples=train_val_test_num_samples,
+            seq_length=args.seq_length,
+            seed=args.seed,
+            skip_warmup=(not args.mmap_warmup),
+            train_data_prefix=args.train_data_path,
+            valid_data_prefix=args.valid_data_path,
+            test_data_prefix=args.test_data_path)
+
+    print_rank_0("> finished creating datasets ...")
+
+    return train_ds, valid_ds, test_ds
+
+
+if __name__ == "__main__":
+
+    pretrain(train_valid_test_datasets_provider, model_provider,
              ModelType.encoder_or_decoder,
              forward_step,
              extra_args_provider=get_tasks_args)

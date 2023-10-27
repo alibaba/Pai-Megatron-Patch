@@ -1,5 +1,5 @@
 #!/bin/bash
-# bash run_ds_train_huggingface_llama.sh dsw 7B 1 2 1e-5 2048 bf16 2 true true ${WORK_DIR}/llama2-datasets/wudao_train.json ${WORK_DIR}/llama2-datasets/wudao_valid.json ${WORK_DIR}/llama2-ckpts/Llama-2-7b-hf 2 ${WORK_DIR}/output_llama2
+# bash run_ds_train_huggingface_llama.sh dsw 7B 1 2 1e-5 2048 bf16 2 true true /mnt/llama2-datasets/wudao_train.json /mnt/llama2-datasets/wudao_valid.json /mnt/llama2-ckpts/Llama-2-7b-hf 2 /mnt/output_llama2
 
 set -e
 ENV=$1
@@ -53,19 +53,12 @@ HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13824
 
-elif [ $MODEL_SIZE = 65B ]; then
+elif [ $MODEL_SIZE = 34B ]; then
 
-NUM_LAYERS=80
+NUM_LAYERS=48
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=22016
-
-elif [ $MODEL_SIZE = 70B ]; then
-
-NUM_LAYERS=80
-HIDDEN_SIZE=8192
-NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=28672
 
 fi
 

@@ -1,9 +1,9 @@
 #!/bin/bash
-#sh run_pretrain_megatron_llama.sh dsw /root/Megatron-LM-23.04/ /workspace/PAI-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 80 0 fp16 1 1 sel true true true 100000 /mnt/llama2-datasets/wudao_llamabpe_text_document /mnt/llama2-ckpts/llama-2-7b-hf-to-megatron-tp1-pp1 100000000 10000 /mnt/output_llama2
+#sh run_pretrain_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 8 1e-5 1e-6 2048 2048 0 bf16 1 1 sel true true true false 100000 /mnt/llama2-datasets/wudao_llamabpe_text_document /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 10000000000 100000000 /mnt/output_patch_test
 set -e
 ENV=$1
-MEGATRON_PATH=$2
-MEGATRON_PATCH_PATH=$3
+MEGATRON_PATCH_PATH=$2
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
@@ -24,21 +24,22 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$4  #7B, 13B, 70B
-BATCH_SIZE=$5
-GLOBAL_BATCH_SIZE=$6
-LR=$7
-MIN_LR=$8
-SEQ_LEN=$9
-PAD_LEN=${10}
-EXTRA_VOCAB_SIZE=${11}
-PR=${12}
-TP=${13}
-PP=${14}
-AC=${15}
-DO=${16}
-FL=${17}
-SP=${18}
+MODEL_SIZE=$3
+BATCH_SIZE=$4
+GLOBAL_BATCH_SIZE=$5
+LR=$6
+MIN_LR=$7
+SEQ_LEN=$8
+PAD_LEN=$9
+EXTRA_VOCAB_SIZE=${10}
+PR=${11}
+TP=${12}
+PP=${13}
+AC=${14}
+DO=${15}
+FL=${16}
+SP=${17}
+TE=${18}
 SAVE_INTERVAL=${19}
 DATASET_PATH=${20}
 PRETRAIN_CHECKPOINT_PATH=${21}
@@ -53,7 +54,8 @@ NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
-NUM_HEAD_KV=32
+
+gqa_options=""
 
 elif [ $MODEL_SIZE = 13B ]; then
 
@@ -61,7 +63,8 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13824
-NUM_HEAD_KV=40
+
+gqa_options=""
 
 elif [ $MODEL_SIZE = 34B ]; then
 
@@ -69,13 +72,11 @@ NUM_LAYERS=48
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=22016
-NUM_HEAD_KV=8
 
-fi
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups 8"
 
-if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
-    load_options=" \
-		    --load $PRETRAIN_CHECKPOINT_PATH"
 fi
 
 if [ $AC = full ]; then
@@ -96,6 +97,13 @@ if [ $PR = fp16 ]; then
 elif [ $PR = bf16 ]; then
     pr_options=" \
         --bf16"
+elif [ $PR = fp8 ]; then
+    pr_options=" \
+        --bf16
+        --fp8-hybrid \
+        --fp8-amax-compute-algo max \
+        --fp8-amax-history-len 1024 \
+        --transformer-impl transformer_engine"
 fi
 
 if [ $DO = true ]; then
@@ -116,6 +124,15 @@ elif [ $FL = false ]; then
                     "
 fi
 
+if [ $TE = true ]; then
+    te_options=" \
+		    --transformer-impl transformer_engine"
+
+elif [ $TE = false ]; then
+    te_options=" \
+                    "
+fi
+
 if [ $SP = true ] && [ $TP -gt 1 ]; then
     sp_options=" \
 		    --sequence-parallel"
@@ -125,11 +142,16 @@ elif [ $SP = false ]; then
                     "
 fi
 
+if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
+    load_options=" \
+            --load $PRETRAIN_CHECKPOINT_PATH"
+fi
+
 TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 
-NAME="${ENV}-pretrain-megatron-llama-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
+NAME="${ENV}-pretrain-megatron-gpt3-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
 mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
 mkdir -p "${OUTPUT_BASEPATH}/log/"
@@ -142,7 +164,6 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
         --split 98,2,0 \
-        --data-impl mmap \
         --data-path ${DATASET_PATH}
         --lr ${LR} \
         --min-lr ${MIN_LR} \
@@ -160,11 +181,11 @@ megatron_options="  \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
         --num-attention-heads ${NUM_ATTN_HEADS} \
-        --intermediate-size ${INTERMEDIATE_SIZE} \
+        --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
-        --max-position-embeddings 16384 \
+        --max-position-embeddings ${SEQ_LEN} \
         --log-interval 1 \
-        --eval-interval 100 \
+        --eval-interval 10000 \
         --eval-iters 10 \
         --save-interval ${SAVE_INTERVAL} \
         --tensorboard-queue-size 1 \
@@ -174,24 +195,24 @@ megatron_options="  \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
-        --DDP-impl local \
+        --dataset LLama-SFT \
         --no-load-optim \
         --no-load-rng \
         --num-workers 8 \
         --seed 1234 \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --use-rotary-position-embeddings \
-        --position-embedding-type rope \
-        --n-head-kv ${NUM_HEAD_KV} \
+        --patch-tokenizer-type LLamaTokenizer \
         --swiglu \
+        --normalization RMSNorm \
+        --use-llama2-rotary-position-embeddings \
+        --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
-        --patch-tokenizer-type LLamaTokenizer
+        --disable-bias-linear
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megatron_llama.py
- ${megatron_options} ${activation_checkpoint_options} ${do_options} ${pr_options} ${sp_options} ${flash_options} ${load_options}"
-
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
