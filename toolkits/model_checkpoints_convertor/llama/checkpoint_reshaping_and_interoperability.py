@@ -946,23 +946,30 @@ def convert_checkpoint_from_megatron_to_transformers(args):
 
             # Transpose the Q matrix for query for Llama70b.
             elif (
-                op_name == "attention.query" or op_name == "self_attention.query"
+                op_name == "attention.query_key_value" or op_name == "self_attention.query_key_value"
             ) and weight_or_bias == "weight" and args.model_name == "llama2-70b":
 
+                tp_states = torch.chunk(params, args.target_tensor_model_parallel_size, dim=0)
+                query = torch.cat([i[:1024] for i in tp_states])
+                key_value = torch.cat([i[1024:] for i in tp_states])
                 out_val = megatron_to_transformers_fix_query_key_value_ordering(
-                    params,
+                    query,
                     checkpoint_version,
                     1,
                     heads,
                     hidden_size_per_head,
                 )
-
-                # Megatron stores (3*D) x D but transformers-GPT2 expects D x 3*D.
-                # out_val = out_val.transpose(0, 1).contiguous()
-                # Store.
-
-                # Split to QKV matrix
                 output_state_dict[layer_name + f".self_attn.q_proj.weight"] = out_val.clone()
+                out_val = megatron_to_transformers_fix_query_key_value_ordering(
+                    key_value,
+                    checkpoint_version,
+                    2,
+                    8,
+                    hidden_size_per_head,
+                )
+                KV = {0:'k_proj',1:'v_proj'}
+                for index, matrix in enumerate(torch.split(out_val, out_val.shape[0]//2, 0)):
+                    output_state_dict[layer_name + f".self_attn.{KV[index]}.weight"] = matrix.clone()
 
             # Transpose the KV matrix for query for Llama70b.
             elif (
