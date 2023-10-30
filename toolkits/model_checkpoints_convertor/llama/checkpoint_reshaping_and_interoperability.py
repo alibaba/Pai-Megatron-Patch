@@ -950,8 +950,9 @@ def convert_checkpoint_from_megatron_to_transformers(args):
             ) and weight_or_bias == "weight" and args.model_name == "llama2-70b":
 
                 tp_states = torch.chunk(params, args.target_tensor_model_parallel_size, dim=0)
-                query = torch.cat([i[:1024] for i in tp_states])
-                key_value = torch.cat([i[1024:] for i in tp_states])
+                tp_dim = 8192 // args.target_tensor_model_parallel_size
+                query = torch.cat([i[:tp_dim] for i in tp_states])
+                key_value = torch.cat([i[tp_dim:] for i in tp_states])
                 out_val = megatron_to_transformers_fix_query_key_value_ordering(
                     query,
                     checkpoint_version,
