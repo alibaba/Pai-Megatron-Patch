@@ -354,10 +354,10 @@ def convert_checkpoint_from_transformers_to_te(args):
 
     # Transformer layers
     print("converting transformer layers")
-    if config.num_hidden_layers % args.target_tensor_model_parallel_size != 0:
+    if config.num_hidden_layers % args.target_pipeline_model_parallel_size != 0:
         raise ValueError(
-            f"Number of layers ({config.num_hidden_layers}) must be divisible by number of tensor parallelism"
-            f" ({args.target_tensor_model_parallel_size})"
+            f"Number of layers ({config.num_hidden_layers}) must be divisible by number of pipeline parallelism"
+            f" ({args.target_pipeline_model_parallel_size})"
         )
     num_layers = config.num_hidden_layers // args.target_pipeline_model_parallel_size
     layer_re = re.compile("transformer.layers\.(\d+)\.([a-z0-9_.]+)\.([a-z]+)")
