@@ -208,6 +208,16 @@ def build_tokenizer(args):
     elif args.patch_tokenizer_type == 'GPT2BPETokenizer':
         from megatron import get_tokenizer
         tokenizer = get_tokenizer()
+
+    elif args.patch_tokenizer_type == 'VicunaTokenizerFromHF':
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(args.load,
+                                                  model_max_length=args.seq_length,
+                                                  padding_side="right",
+                                                  use_fast=False)
+        tokenizer.pad_token = tokenizer.unk_token
+        args.padded_vocab_size = 32000
+
     else:
         raise NotImplementedError('{} tokenizer is not '
                                   'implemented.'.format(
