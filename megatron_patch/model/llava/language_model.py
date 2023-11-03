@@ -487,20 +487,8 @@ class TransformerLanguageModel(MegatronModule):
                 enc_hidden_states=None, output_enc_hidden=False, images=None):
 
         image_features = self.encode_images(images)
-        # Encoder embedding.
-        #enc_input_ids: [batch_size, seq_len]
-        #encoder_input: [seq_len, batch_size, hidden_size]
-        """
-        if self.pre_process:
-            encoder_input = self.embedding(enc_input_ids, enc_position_ids,
-                                           tokentype_ids=tokentype_ids)
-        else:
-            encoder_input = None
-        """
-
         new_input_embeds = []
         cur_image_idx = 0
-
         for batch_idx, cur_input_ids in enumerate(enc_input_ids):
             cur_position_ids = enc_position_ids[batch_idx]
             if (cur_input_ids == IMAGE_TOKEN_INDEX).sum() == 0:

@@ -120,7 +120,6 @@ def preprocess_plain(
     for target, source in zip(targets, sources):
         tokenized_len = len(tokenizer_image_token(source[0]['value'], tokenizer))
         target[:tokenized_len] = IGNORE_INDEX
-
     return dict(input_ids=input_ids, labels=targets)
 
 def preprocess(
@@ -245,6 +244,15 @@ class LazySupervisedDataset(torch.utils.data.Dataset):
             sources,
             self.tokenizer,
             has_image=('image' in self.list_data_dict[i]))
+
+        if self.args.max_padding_length <= len(data_dict["input_ids"][0]):
+            data_dict["input_ids"][0] = data_dict["input_ids"][0][:self.args.max_padding_length]
+            data_dict["labels"][0] = data_dict["labels"][0][:self.args.max_padding_length]
+        else:
+            padding_len = self.args.max_padding_length-len(data_dict["input_ids"][0])
+            data_dict["input_ids"][0] = torch.cat([data_dict["input_ids"][0], torch.full((padding_len,), IGNORE_INDEX, dtype=torch.int)])
+            data_dict["labels"][0] = torch.cat([data_dict["labels"][0], torch.full((padding_len,), IGNORE_INDEX, dtype=torch.int)])
+
         if isinstance(i, int):
             data_dict = dict(input_ids=data_dict["input_ids"][0],
                              labels=data_dict["labels"][0])

@@ -61,18 +61,18 @@ def get_batch(data_iterator):
     data_text = tensor_parallel.broadcast_data(text_keys, data_text, torch.int64)
     data_image = tensor_parallel.broadcast_data(img_keys, data_image, torch.bfloat16)
     tokens_ = data_text['input_ids'].long()
+    labels_ = data_text['labels'].long()
     images = data_image['image']
-    labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
+    labels = labels_[:, 1:].contiguous()
 
     # Get the masks and postition ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         tokens,
-        tokenizer.eod,
+        IGNORE_INDEX,
         args.reset_position_ids,
         args.reset_attention_mask,
-        args.eod_mask_loss)
-
+        True)
     return tokens, labels, loss_mask, attention_mask, position_ids, images
 
 def loss_func(loss_mask, output_tensor):
