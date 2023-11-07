@@ -237,9 +237,8 @@ class LLamaDataset(torch.utils.data.Dataset):
             datapath (str): The path of the dataset.
             max_padding_length (int): The maximum length to pad the input sequences to.
         """
-
-        self.IGNORE_INDEX = -100
         self.tokenizer = get_tokenizer()
+        self.IGNORE_INDEX = self.tokenizer.pad_token_id
         self.max_padding_length = max_padding_length
         PROMPT_DICT = {
             'prompt_input':
@@ -325,7 +324,7 @@ class LLamaDataset(torch.utils.data.Dataset):
                 text,
                 return_tensors='np',
                 padding='max_length',
-                max_length=self.max_padding_length,
+                max_length=self.max_padding_length+1,
                 truncation=True,
             ) for text in strings
         ]

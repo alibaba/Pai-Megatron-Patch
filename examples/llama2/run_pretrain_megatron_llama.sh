@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_pretrain_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 8 1e-5 1e-6 2048 2049 0 bf16 1 1 sel true true true false 100000 /mnt/llama2-datasets/alpaca_zh.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 10000000000 100000000 /mnt/output_patch_test
+#sh run_pretrain_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 8 1e-5 1e-6 2048 2048 0 bf16 1 1 sel true true true false 100000 /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 10000000000 100000000 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -7,12 +7,12 @@ MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=1
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=8
+GPUS_PER_NODE=1
 
 elif [ $ENV = dlc ]; then
 
@@ -50,7 +50,7 @@ OUTPUT_BASEPATH=${24}
 
 if [ $MODEL_SIZE = 7B ]; then
 
-NUM_LAYERS=32
+NUM_LAYERS=2
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
