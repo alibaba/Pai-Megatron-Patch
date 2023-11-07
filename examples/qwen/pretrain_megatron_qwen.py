@@ -79,10 +79,10 @@ def get_batch(data_iterator):
     # Get the masks and postition ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         tokens,
-        tokenizer.eod,
+        tokenizer.pad_token_id,
         args.reset_position_ids,
         args.reset_attention_mask,
-        args.eod_mask_loss)
+        True)
 
     return tokens, labels, loss_mask, attention_mask, position_ids
 
