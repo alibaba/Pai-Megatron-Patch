@@ -20,6 +20,7 @@ import random
 import re
 from abc import ABC, abstractmethod
 import numpy as np
+import torch
 from torch.utils.data import Dataset
 
 class AbstractDataset(ABC, Dataset):
@@ -528,11 +529,18 @@ class GLMDataset(GPTDataset):
         return train_sample
 
 
-class LLamaDataset(GPTDataset):
-    """LLAMA dataset class."""
+class LLamaDataset(torch.utils.data.Dataset):
+    """A class for processing a LLama text dataset"""
     def __init__(self, datapaths, tokenizer, max_padding_length):
-        self.IGNORE_INDEX = -100
+        """
+        Initializes the dataset.
+        Args:
+            path(str): The path of the dataset file.
+            tokenizer(object): The tokenizer object.
+            max_padding_length(int): The maximum length of the padding to the sequences.
+        """
         self.tokenizer = tokenizer
+        self.IGNORE_INDEX = tokenizer.pad_token_id
         self.max_padding_length = max_padding_length
         PROMPT_DICT = {
             'prompt_input':
@@ -550,17 +558,19 @@ class LLamaDataset(GPTDataset):
         list_data_dict = self.jload(datapaths[0])
         prompt_input, prompt_no_input = PROMPT_DICT[
             'prompt_input'], PROMPT_DICT['prompt_no_input']
+
         sources = [
             prompt_input.format_map(example) if example.get('input', '') != ''
             else prompt_no_input.format_map(example)
             for example in list_data_dict
         ]
         if 'output' in list_data_dict[0].keys():
-            temp = 'output'
+            key = 'output'
         elif 'content' in list_data_dict[0].keys():
-            temp = 'content'
+            key = 'content'
+
         targets = [
-            f"{example[temp]}{tokenizer.eos_token}"
+            f"{example[key]}{tokenizer.eos_token}"
             for example in list_data_dict
         ]
         data_dict = self.preprocess(sources, targets, tokenizer)
@@ -575,11 +585,18 @@ class LLamaDataset(GPTDataset):
 
     def _make_r_io_base(self, f, mode: str):
         if not isinstance(f, io.IOBase):
-            f = open(f, mode=mode)
+            f = open(f, mode=mode, encoding='utf-8')
         return f
 
     def jload(self, f, mode='r'):
-        """Load a .json file into a dictionary."""
+        """
+        Load a .json file into a dictionary.
+        Args:
+            f: The file object or string representing the file path.
+            mode: The mode in which to open the file (e.g., 'r', 'w', 'a').
+        Returns:
+            A dictionary containing the contents of the JSON file.
+        """
         f = self._make_r_io_base(f, mode)
         jdict = json.load(f)
         f.close()
@@ -589,11 +606,21 @@ class LLamaDataset(GPTDataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
+        idx = 0
         raw_sample = self.samples[idx]
         return self.gpt_convert_example_to_feature(raw_sample)
 
     def preprocess(self, sources, targets, tokenizer):
-        """Preprocess the data by tokenizing."""
+        """
+        Preprocess the data by tokenizing.
+        Args:
+            sources (List[str]): a list of source strings
+            targets (List[str]): a list of target strings
+            tokenizer (Tokenizer): a tokenizer object used for tokenization
+        Returns:
+            dict: a dictionary containing the input_ids and labels for the examples
+        """
+
         examples = [s + t for s, t in zip(sources, targets)]
         examples_tokenized, sources_tokenized = [
             self.tokenize(strings, tokenizer)
@@ -607,7 +634,15 @@ class LLamaDataset(GPTDataset):
         return dict(input_ids=input_ids, labels=labels)
 
     def tokenize(self, strings, tokenizer):
-        """Tokenize a list of strings."""
+        """
+        Tokenize a list of strings.
+        Args:
+            strings (List[str]): a list of strings to be tokenized
+            tokenizer (Tokenizer): a tokenizer object used for tokenization
+        Returns:
+            dict: a dictionary containing the input_ids and labels for the tokenized strings
+        """
+
         tokenized_list = [
             tokenizer(
                 text,
@@ -632,14 +667,13 @@ class LLamaDataset(GPTDataset):
         )
 
     def gpt_convert_example_to_feature(self, sample):
+        """
+        Convert a single sample containing input_id, label and loss_mask into a format suitable for GPT training.
+        """
         input_ids, labels = sample
-        loss_mask = np.ones(labels.shape, dtype=np.int64)
-        loss_mask[labels == self.IGNORE_INDEX] = 0
-        loss_mask[labels == self.tokenizer.pad_token_id] = 0
         train_sample = {
             'input_ids': input_ids,
-            'labels': labels,
-            'loss_mask': loss_mask
+            'labels': labels
         }
 
         return train_sample

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from megatron import print_rank_0
 from megatron.tokenizer.tokenizer import _vocab_size_with_padding
 
@@ -190,6 +191,14 @@ def build_tokenizer(args):
         tokenizer.eos_token_id = tokenizer.eod_id
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
+    elif args.patch_tokenizer_type == 'MistralTokenizer':
+        from .tokenization_mistral import MistralTokenizer
+        tokenizer = MistralTokenizer(os.path.join(args.load, "tokenizer.model"))
+        tokenizer.pad_token_id = tokenizer.pad_id
+        tokenizer.eos_token_id = tokenizer.eos_id
+        tokenizer.eos_token = tokenizer.decode(tokenizer.eos_id)
+        args.padded_vocab_size = tokenizer.n_words + args.extra_vocab_size
+
     elif args.patch_tokenizer_type == 'BloomTokenizerFromCustom':
         print_rank_0('Using Customized Bloom tokenizer.')
         from transformers import BloomTokenizerFast as BloomTokenizer
@@ -224,7 +233,8 @@ def build_tokenizer(args):
                                       args.patch_tokenizer_type))
 
     if args.patch_tokenizer_type != 'IcetkGLM130BTokenizer' and\
-            args.patch_tokenizer_type != 'GPT2BPETokenizer':
+            args.patch_tokenizer_type != 'GPT2BPETokenizer' and\
+            args.patch_tokenizer_type != 'MistralTokenizer':
         tokenizer.eod = tokenizer.eos_token_id
 
     global _GLOBAL_TOKENIZER

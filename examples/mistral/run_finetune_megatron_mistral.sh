@@ -1,7 +1,5 @@
 #!/bin/bash
-#sh run_evaluate_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 80 80 0 bf16 2 1 sel true true true false /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp2-pp1/
-#sh run_evaluate_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 13B 1 80 80 0 bf16 2 1 sel true true true false /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-13b-hf-to-mg-tp2-pp1/
-#sh run_evaluate_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 80 80 0 bf16 2 1 sel true false true true /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-te-tp2-pp1/
+#sh run_finetune_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 1e-5 1e-6 80 81 0 bf16 1 1 sel true true true false  /mnt/llama2-datasets/wudao_train.json /mnt/llama2-datasets/wudao_valid.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 2 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -9,12 +7,12 @@ MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=1
+GPUS_PER_NODE=8
 
 elif [ $ENV = dlc ]; then
 
@@ -26,21 +24,27 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$3
+MODEL_SIZE=$3  #7B, 13B, 70B
 BATCH_SIZE=$4
-SEQ_LEN=$5
-PAD_LEN=$6
-EXTRA_VOCAB_SIZE=$7
-PR=$8
-TP=$9
-PP=${10}
-AC=${11}
-DO=${12}
-FL=${13}
-SP=${14}
-TE=${15}
-DATASET_PATH=${16}
-PRETRAIN_CHECKPOINT_PATH=${17}
+LR=$5
+MIN_LR=$6
+SEQ_LEN=$7
+PAD_LEN=$8
+EXTRA_VOCAB_SIZE=$9
+PR=${10}
+TP=${11}
+PP=${12}
+AC=${13}
+DO=${14}
+FL=${15}
+SP=${16}
+TE=${17}
+TRAIN_DATASET_PATH=${18}
+VALID_DATASET_PATH=${19}
+PRETRAIN_CHECKPOINT_PATH=${20}
+EPOCH=${21}
+OUTPUT_BASEPATH=${22}
+
 
 if [ $MODEL_SIZE = 7B ]; then
 
@@ -141,26 +145,54 @@ if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
             --load $PRETRAIN_CHECKPOINT_PATH"
 fi
 
+FT_NAME="${ENV}-finetune-megatron-llama-${MODEL_SIZE}-lr-${LR}-ep-${EPOCH}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}--do-${DO}-tp-${TP}-ac-${AC}-sp-${SP}"
+mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
+mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
+mkdir -p "${OUTPUT_BASEPATH}/log/"
+current_time=$(date "+%Y.%m.%d-%H.%M.%S")
+TENSORBOARD_DIR="${OUTPUT_BASEPATH}/tensorboard/${FT_NAME}_${current_time}"
+mkdir -p ${TENSORBOARD_DIR}
 
-megatron_options=" \
-        --data-path ${DATASET_PATH}
-        --micro-batch-size ${BATCH_SIZE} \
+FINETUNE_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${FT_NAME}"
+
+megatron_options="  \
+        --load ${PRETRAIN_CHECKPOINT_PATH} \
+        --save ${FINETUNE_CHECKPOINT_PATH} \
+        --train-data ${TRAIN_DATASET_PATH} \
+        --valid-data ${VALID_DATASET_PATH} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --seq-length ${SEQ_LEN} \
-        --max-position-embeddings ${SEQ_LEN} \
+        --max-position-embeddings ${SEQ_LEN}  \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
+        --keep-last \
+        --micro-batch-size ${BATCH_SIZE} \
+        --epochs ${EPOCH} \
+        --lr ${LR} \
+        --min-lr ${MIN_LR} \
+        --lr-decay-style cosine \
+        --weight-decay 0.1 \
+        --clip-grad 1.0 \
+        --adam-beta1 0.9 \
+        --adam-beta2 0.95 \
+        --init-method-std 0.01 \
+        --num-workers 0\
         --log-interval 1 \
-        --eval-interval 100 \
+        --eval-interval 1000 \
         --eval-iters 10 \
+        --save-interval 1000000 \
+        --tensorboard-queue-size 1 \
+        --tensorboard-dir ${TENSORBOARD_DIR} \
+        --log-timers-to-tensorboard \
+        --log-batch-size-to-tensorboard \
+        --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
+        --finetune \
         --no-load-optim \
         --no-load-rng \
         --seed 1234 \
-        --num-workers 0 \
-        --dataset LLama-SFT \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type LLamaTokenizer \
@@ -172,7 +204,7 @@ megatron_options=" \
         --disable-bias-linear
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_megatron_llama.py
+run_cmd="torchrun $DISTRIBUTED_ARGS finetune_megatron_mistral.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}

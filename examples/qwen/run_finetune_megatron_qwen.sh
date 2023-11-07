@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_finetune_megatron_qwen.sh dsw /workspace/Pai-Megatron-Patch 7B 1 1e-5 1e-6 80 81 85 bf16 1 1 sel true true true false  /mnt/qwen-datasets/wudao_train.json /mnt/qwen-datasets/wudao_valid.json /mnt/qwen-ckpts/qwen-7b-hf-to-mg-tp1-pp1 2 /mnt/output_megatron_qwen/
+#sh run_finetune_megatron_qwen.sh dsw /workspace/Pai-Megatron-Patch 7B 1 1e-5 1e-6 80 80 85 bf16 1 1 sel true true true false  /mnt/qwen-datasets/wudao_train.json /mnt/qwen-datasets/wudao_valid.json /mnt/qwen-ckpts/qwen-7b-hf-to-mg-tp1-pp1 2 /mnt/output_megatron_qwen/
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2

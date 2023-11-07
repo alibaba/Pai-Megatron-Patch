@@ -32,7 +32,7 @@ from megatron.arguments import core_transformer_config_from_args
 from megatron_patch.checkpointing import load_checkpoint
 from megatron_patch.data.evaluate_dataset import build_evaluation_dataset
 from megatron_patch.finetune_utils import build_data_loader
-from megatron_patch.model.llama2.gpt_model import GPTModel
+from megatron_patch.model.mistral.gpt_model import GPTModel
 from megatron_patch.arguments import get_tasks_args
 from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
@@ -65,22 +65,27 @@ def get_batch(batch):
     keys = ['input_ids', 'labels']
     datatype = torch.int64
 
+    # Broadcast data.
+    # if data_iterator is not None:
+    #     data = next(data_iterator)
+    # else:
+    #     data = None
     data_b = tensor_parallel.broadcast_data(keys, batch, datatype)
 
     # Unpack.
     tokens_ = data_b['input_ids'].long()
     labels = data_b['labels'].long().cuda()
     tokens = tokens_.contiguous().cuda()
+
     # Get the masks and postition ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         labels,
-        tokenizer.pad_token_id,   # eod
+        -100,   # eod
         args.reset_position_ids,
         args.reset_attention_mask,
         True)
 
     return tokens, labels, loss_mask, attention_mask, position_ids
-
 def forward_step(batch, model):
     """Forward step."""
     args = get_args()
@@ -90,7 +95,6 @@ def forward_step(batch, model):
     tokens, labels, loss_mask, attention_mask, position_ids = get_batch(
         batch)
     timers('batch-generator').stop()
-
     # Tell the model what our actual batch size will be
     args.micro_batch_size = len(labels)
     input_tensor = recv_forward(tokens.shape, tokens.dtype)
