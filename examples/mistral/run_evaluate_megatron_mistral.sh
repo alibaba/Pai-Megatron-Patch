@@ -1,7 +1,5 @@
 #!/bin/bash
-#sh run_evaluate_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 80 80 0 bf16 2 1 sel true true true false /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp2-pp1/
-#sh run_evaluate_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 13B 1 80 80 0 bf16 2 1 sel true true true false /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-13b-hf-to-mg-tp2-pp1/
-#sh run_evaluate_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 80 80 0 bf16 2 1 sel true false true true /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-te-tp2-pp1/
+#sh run_evaluate_megatron_mistral.sh dsw /workspace/Pai-Megatron-Patch 7B 1 80 80 0 bf16 2 1 sel true false true false /mnt/llama2-datasets/alpaca_data.json /mnt/mistral-ckpts/mistral-7B-v0.1-to-mg-tp2-pp1/
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -47,25 +45,7 @@ if [ $MODEL_SIZE = 7B ]; then
 NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
-INTERMEDIATE_SIZE=11008
-
-gqa_options=""
-
-elif [ $MODEL_SIZE = 13B ]; then
-
-NUM_LAYERS=40
-HIDDEN_SIZE=5120
-NUM_ATTN_HEADS=40
-INTERMEDIATE_SIZE=13824
-
-gqa_options=""
-
-elif [ $MODEL_SIZE = 70B ]; then
-
-NUM_LAYERS=80
-HIDDEN_SIZE=8192
-NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=28672
+INTERMEDIATE_SIZE=14336
 
 gqa_options=" \
 		    --group-query-attention \
@@ -160,19 +140,19 @@ megatron_options=" \
         --no-load-rng \
         --seed 1234 \
         --num-workers 0 \
-        --dataset LLama-SFT \
+        --dataset Mistral-SFT \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type LLamaTokenizer \
+        --patch-tokenizer-type MistralTokenizer \
         --swiglu \
         --normalization RMSNorm \
-        --use-llama2-rotary-position-embeddings \
+        --use-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_megatron_llama.py
+run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_megatron_mistral.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}

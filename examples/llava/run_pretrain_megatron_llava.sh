@@ -1,7 +1,5 @@
 #!/bin/bash
-#sh run_evaluate_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 80 80 0 bf16 2 1 sel true true true false /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp2-pp1/
-#sh run_evaluate_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 13B 1 80 80 0 bf16 2 1 sel true true true false /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-13b-hf-to-mg-tp2-pp1/
-#sh run_evaluate_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 80 80 0 bf16 2 1 sel true false true true /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-te-tp2-pp1/
+#sh run_pretrain_megatron_llava.sh dsw /workspace/Pai-Megatron-Patch 7B 1 8 1e-5 1e-6 2048 2048 0 bf16 1 1 sel true false true false 100000 /mnt/llava-datasets/blip_laion_cc_sbu_558k.json /mnt/vicuna-ckpts/vicuna-13b-v1.5 10000000000 100000000 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -9,7 +7,7 @@ MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=7
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
@@ -28,23 +26,31 @@ DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $
 
 MODEL_SIZE=$3
 BATCH_SIZE=$4
-SEQ_LEN=$5
-PAD_LEN=$6
-EXTRA_VOCAB_SIZE=$7
-PR=$8
-TP=$9
-PP=${10}
-AC=${11}
-DO=${12}
-FL=${13}
-SP=${14}
-TE=${15}
-DATASET_PATH=${16}
-PRETRAIN_CHECKPOINT_PATH=${17}
+GLOBAL_BATCH_SIZE=$5
+LR=$6
+MIN_LR=$7
+SEQ_LEN=$8
+PAD_LEN=$9
+EXTRA_VOCAB_SIZE=${10}
+PR=${11}
+TP=${12}
+PP=${13}
+AC=${14}
+DO=${15}
+FL=${16}
+SP=${17}
+TE=${18}
+SAVE_INTERVAL=${19}
+DATASET_PATH=${20}
+PRETRAIN_CHECKPOINT_PATH=${21}
+TRAIN_TOKENS=${22}
+WARMUP_TOKENS=${23}
+OUTPUT_BASEPATH=${24}
+
 
 if [ $MODEL_SIZE = 7B ]; then
 
-NUM_LAYERS=32
+NUM_LAYERS=2
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
@@ -141,29 +147,68 @@ if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
             --load $PRETRAIN_CHECKPOINT_PATH"
 fi
 
+TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 
-megatron_options=" \
+NAME="${ENV}-pretrain-megatron-gpt3-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
+mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
+mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
+mkdir -p "${OUTPUT_BASEPATH}/log/"
+current_time=$(date "+%Y.%m.%d-%H.%M.%S")
+TENSORBOARD_DIR="${OUTPUT_BASEPATH}/tensorboard/${NAME}_${current_time}"
+mkdir -p ${TENSORBOARD_DIR}
+
+SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
+
+megatron_options="  \
+        --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
+        --image-folder /mnt/llava-datasets/images \
+        --vision-tower /mnt/openai-ckpts/clip-vit-large-patch14-336 \
+        --image-size 336 \
+        --patch-size 14 \
+        --version plain \
+        --mm-projector-type mlp2x_gelu \
+        --tune-mm-mlp-adapter \
+        --split 98,2,0 \
         --data-path ${DATASET_PATH}
+        --lr ${LR} \
+        --min-lr ${MIN_LR} \
+        --lr-decay-style linear \
+        --adam-beta1 0.9 \
+        --adam-beta2 0.95 \
+        --weight-decay 0.1 \
+        --clip-grad 1.0 \
+        --init-method-std 0.006 \
+        --lr-decay-iters ${LR_DECAY_ITERS} \
+        --lr-warmup-iters ${LR_WARMUP_ITERS} \
+        --train-iters ${TRAIN_ITERS} \
         --micro-batch-size ${BATCH_SIZE} \
+        --global-batch-size ${GLOBAL_BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
         --num-attention-heads ${NUM_ATTN_HEADS} \
+        --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${SEQ_LEN} \
-        --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --log-interval 1 \
-        --eval-interval 100 \
+        --eval-interval 10000 \
         --eval-iters 10 \
+        --save-interval ${SAVE_INTERVAL} \
+        --tensorboard-queue-size 1 \
+        --tensorboard-dir ${TENSORBOARD_DIR} \
+        --log-timers-to-tensorboard \
+        --log-batch-size-to-tensorboard \
+        --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
         --no-load-optim \
         --no-load-rng \
-        --seed 1234 \
         --num-workers 0 \
-        --dataset LLama-SFT \
+        --seed 1234 \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type LLamaTokenizer \
+        --patch-tokenizer-type VicunaTokenizerFromHF \
         --swiglu \
         --normalization RMSNorm \
         --use-llama2-rotary-position-embeddings \
@@ -172,7 +217,7 @@ megatron_options=" \
         --disable-bias-linear
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_megatron_llama.py
+run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megatron_llava.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}

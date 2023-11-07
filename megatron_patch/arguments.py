@@ -217,4 +217,47 @@ def get_tasks_args(parser):
                        help='Use llama2 rotary positional embeddings or not. '
                        'Deprecated: use --position-embedding-type')
 
+    group.add_argument('--mm-use-im-start-end',
+                       action='store_true')
+
+    group.add_argument('--mm-use-im-patch-token',
+                       action='store_true')
+
+    group.add_argument('--tune-mm-mlp-adapter',
+                       action='store_true')
+
+    group.add_argument('--image-folder',
+                       type=str,
+                       default='')
+
+    group.add_argument('--mm-vision-select-layer',
+                       type=int,
+                       default=None)
+
+    group.add_argument('--vision-tower',
+                       type=str,
+                       default='')
+
+    group.add_argument('--image-aspect-ratio',
+                       type=str,
+                       default='square')
+
+    group.add_argument('--version',
+                       type=str,
+                       default='plain')
+
+    group.add_argument('--mm-projector-type',
+                       type=str,
+                       default=None)
+
+    group.add_argument('--image-size',
+                       type=int,
+                       default=None,
+                       help='image-size')
+
+    group.add_argument('--patch-size',
+                       type=int,
+                       default=None,
+                       help='patch-size')
+
     return parser
