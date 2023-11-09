@@ -151,15 +151,6 @@ def add_transformers_checkpoint_args(parser):
 
     return parser
 
-megatron_to_transformers = {
-    "self_attention.dense": ".self_attn.o_proj.",
-    "mlp.dense_h_to_4h": [".mlp.gate_proj.",".mlp.up_proj."],
-    "mlp.dense_4h_to_h": ".mlp.down_proj.",
-    "input_norm":".input_layernorm.",
-    "post_attention_norm":".post_attention_layernorm.",
-    "self_attention.rotary_emb":".self_attn.rotary_emb.inv_freq"
-}
-
 transformers_to_megatron = {
     "self_attn.dense": "self_attention.dense",
     "mlp.dense_h_to_4h_1": "mlp.dense_h_to_4h_1",
@@ -168,25 +159,6 @@ transformers_to_megatron = {
 }
 
 tensor_parallel_params = [
-    # megatron-lm layers to merge across tp ranks
-    "self_attn.query_key_value.weight",
-    "self_attn.dense.weight",
-    "mlp.dense_h_to_4h_1.weight",
-    "mlp.dense_h_to_4h_2.weight",
-    "mlp.dense_4h_to_h.weight"
-]
-
-tensor_parallel_params_mg = [
-    # megatron-lm layers to merge across tp ranks
-    "self_attention.query_key_value.weight",
-    "self_attention.query.weight",
-    "self_attention.key_value.weight",
-    "self_attention.dense.weight",
-    "mlp.dense_h_to_4h.weight",
-    "mlp.dense_4h_to_h.weight"
-]
-
-tensor_parallel_params_70b = [
     # megatron-lm layers to merge across tp ranks
     "self_attn.query.weight",
     "self_attn.key_value.weight",
@@ -391,7 +363,6 @@ def convert_checkpoint_from_transformers_to_megatron(args):
     config = GPT2Config.from_pretrained(args.load_path)
 
     internal_state_dict = {}
-
     for layer_id in range(config.num_hidden_layers):
         q_weight = state_dict['model.layers.'+str(layer_id)+'.self_attn.q_proj.weight']
         k_weight = state_dict['model.layers.' + str(layer_id) + '.self_attn.k_proj.weight']
@@ -415,7 +386,6 @@ def convert_checkpoint_from_transformers_to_megatron(args):
         internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_h_to_4h_2.weight'] =\
             dense_h_to_4h_2_weight
 
-
         internal_state_dict['transformer.layers.' + str(layer_id) + '.mlp.dense_4h_to_h.weight'] = state_dict[
             'model.layers.' + str(layer_id) + '.mlp.down_proj.weight']
 
@@ -424,7 +394,6 @@ def convert_checkpoint_from_transformers_to_megatron(args):
 
         internal_state_dict['transformer.layers.' + str(layer_id) + '.post_attention_layernorm.weight'] = state_dict[
             'model.layers.' + str(layer_id) + '.post_attention_layernorm.weight']
-
 
     internal_state_dict["transformer.word_embeddings.weight"] = state_dict['model.embed_tokens.weight']
     internal_state_dict["transformer.final_layernorm.weight"] = state_dict['model.norm.weight']
@@ -477,6 +446,11 @@ def convert_checkpoint_from_transformers_to_megatron(args):
     for i in range(args.target_tensor_model_parallel_size):
         output_state_dict.append({})
 
+    num_query_group = 8
+    output_group_state_dict = []
+    for i in range(num_query_group):
+        output_group_state_dict.append({})
+
     # Embedding layer
     print("converting embedding layer")
     word_embedding = state_dict["transformer.word_embeddings.weight"].to(dtype)
@@ -524,6 +498,10 @@ def convert_checkpoint_from_transformers_to_megatron(args):
     # The number of heads.
     heads = config.num_attention_heads
     # The hidden_size per head.
+    hidden_size = 4096
+    num_groups = 8
+    head_dim = 128
+    num_heads = 32
     hidden_size_per_head = config.hidden_size // config.num_attention_heads
     for pp_rank in range(args.target_pipeline_model_parallel_size):
         layer_offset = pp_rank * num_layers
@@ -531,6 +509,10 @@ def convert_checkpoint_from_transformers_to_megatron(args):
             output_state_dict = []
             for i in range(args.target_tensor_model_parallel_size):
                 output_state_dict.append({})
+
+            output_group_state_dict = []
+            for i in range(num_query_group):
+                output_group_state_dict.append({})
 
         for layer in range(num_layers):
             pp_layer_id = layer + layer_offset
@@ -597,15 +579,16 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 else:
                     continue
 
-                if op_name + "." + weight in tensor_parallel_params_70b:
+                if op_name + "." + weight in tensor_parallel_params:
                     dim = 1 if op_name in ["self_attn.dense", "mlp.dense_4h_to_h"] else 0
                     params = torch.chunk(params, args.target_tensor_model_parallel_size, dim=dim)
 
                 for i in range(args.target_tensor_model_parallel_size):
                     params_dict = get_element_from_dict_by_path(output_state_dict[i], "model.language_model.encoder")
                     params_dict[layer_name] = (
-                        params[i].clone() if (op_name + "." + weight in tensor_parallel_params_70b) else params.clone()
+                        params[i].clone() if (op_name + "." + weight in tensor_parallel_params) else params.clone()
                     )
+
 
             for i in range(args.target_tensor_model_parallel_size):
 
@@ -640,8 +623,13 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 qkv_name = 'self_attention.query_key_value.weight'
                 qkv_layer_name = f"layers.{layer}.{qkv_name}"
 
-                params_dict[qkv_layer_name] = torch.cat(
-                [query_weight, kv_weight], dim=0)
+                # torch.Size([32 128, 4096])
+                group_query_weight = query_weight.view(num_groups // args.target_tensor_model_parallel_size, num_heads // num_groups * head_dim, hidden_size)
+                # torch.Size(8, 256, 4096])
+                group_kv_weight = kv_weight.view(num_groups // args.target_tensor_model_parallel_size, 2 * head_dim, hidden_size)
+
+                group_qkv_weight = torch.cat([group_query_weight, group_kv_weight], dim=1)
+                params_dict[qkv_layer_name] = group_qkv_weight.view(-1, hidden_size)
 
                 del params_dict[query_layer_name]
                 del params_dict[kv_layer_name]

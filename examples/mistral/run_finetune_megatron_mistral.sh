@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_finetune_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 1e-5 1e-6 80 81 0 bf16 1 1 sel true true true false  /mnt/llama2-datasets/wudao_train.json /mnt/llama2-datasets/wudao_valid.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 2 /mnt/output_patch_test
+#sh run_finetune_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 1e-5 1e-6 80 81 0 bf16 1 1 sel true true true false  /mnt/llama2-datasets/wudao_train.json /mnt/llama2-datasets/wudao_valid.json /mnt/mistral-ckpts/Mistral-7B-v0.1-to-mg-tp1-pp1/ 2 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -24,7 +24,7 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$3  #7B, 13B, 70B
+MODEL_SIZE=$3  #7B
 BATCH_SIZE=$4
 LR=$5
 MIN_LR=$6
@@ -45,31 +45,13 @@ PRETRAIN_CHECKPOINT_PATH=${20}
 EPOCH=${21}
 OUTPUT_BASEPATH=${22}
 
-
 if [ $MODEL_SIZE = 7B ]; then
 
 NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
-INTERMEDIATE_SIZE=11008
-
-gqa_options=""
-
-elif [ $MODEL_SIZE = 13B ]; then
-
-NUM_LAYERS=40
-HIDDEN_SIZE=5120
-NUM_ATTN_HEADS=40
-INTERMEDIATE_SIZE=13824
-
-gqa_options=""
-
-elif [ $MODEL_SIZE = 70B ]; then
-
-NUM_LAYERS=80
-HIDDEN_SIZE=8192
-NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=28672
+INTERMEDIATE_SIZE=14336
+MPE=32768
 
 gqa_options=" \
 		    --group-query-attention \
@@ -195,10 +177,10 @@ megatron_options="  \
         --seed 1234 \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type LLamaTokenizer \
+        --patch-tokenizer-type MistralTokenizer \
         --swiglu \
         --normalization RMSNorm \
-        --use-llama2-rotary-position-embeddings \
+        --use-mistral-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear

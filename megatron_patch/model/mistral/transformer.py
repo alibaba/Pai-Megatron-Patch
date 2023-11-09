@@ -33,7 +33,7 @@ from megatron.core.parallel_state import get_tensor_model_parallel_group, get_te
 
 
 from .rotary_pos_embedding import RotaryEmbedding
-from .rotary_pos_embedding import apply_rotary_pos_emb as apply_llama2_rotary_pos_emb
+from .rotary_pos_embedding import apply_rotary_pos_emb as apply_mistral_rotary_pos_emb
 
 
 try:
@@ -395,6 +395,7 @@ class CoreAttention(MegatronModule):
         # ===========================
 
         # attention scores and attention mask [b, np, sq, sk]
+        attention_mask = attention_mask.to(torch.bool)
         attention_probs = self.scale_mask_softmax(attention_scores,
                                                   attention_mask)
 
@@ -614,8 +615,8 @@ class ParallelAttention(MegatronModule):
             input_is_parallel=True,
             skip_bias_add=True)
 
-        if args.use_llama2_rotary_position_embeddings:
-            self.use_llama2_rotary_position_embeddings = True
+        if args.use_mistral_rotary_position_embeddings:
+            self.use_mistral_rotary_position_embeddings = True
             self.seq_length = args.seq_length
             rotary_dim = args.hidden_size // args.num_attention_heads \
                 if args.kv_channels is None else args.kv_channels
@@ -631,7 +632,7 @@ class ParallelAttention(MegatronModule):
                 args.max_position_embeddings
             )
         else:
-            self.use_llama2_rotary_position_embeddings = False
+            self.use_mistral_rotary_position_embeddings = False
 
     def _checkpointed_attention_forward(self, query_layer, key_layer,
                                         value_layer, attention_mask,
@@ -724,9 +725,8 @@ class ParallelAttention(MegatronModule):
                     self.hidden_size_per_attention_head
                 ],
                 dim=3)
-
             # [sq, b, ng, np/ng * hn] -> [sq, b, np, hn] -
-            query_layer = query_layer.view(query_layer.size(0), query_layer.size(1), -1, self.hidden_size_per_attention_head)
+            query_layer = query_layer.contiguous().view(query_layer.size(0), query_layer.size(1), -1, self.hidden_size_per_attention_head)
         else:
             # Attention heads [sk, b, h] --> [sk, b, (np * 2 * hn)]
             mixed_kv_layer, _ = self.key_value(encoder_output)
@@ -761,14 +761,14 @@ class ParallelAttention(MegatronModule):
                 rotary_pos_emb = ((rotary_pos_emb,) * 2)
 
         if inference_params:
-            if self.use_llama2_rotary_position_embeddings:
+            if self.use_mistral_rotary_position_embeddings:
                 kv_seq_len = key_layer.shape[0]
                 kv_seq_len += inference_params.sequence_len_offset
                 value_layer = value_layer.transpose(0, 1).transpose(1, 2)
                 query_layer = query_layer.transpose(0, 1).transpose(1, 2)
                 key_layer = key_layer.transpose(0, 1).transpose(1, 2)
                 cos, sin = self.rotary_emb(value_layer, kv_seq_len)
-                query_layer, key_layer = apply_llama2_rotary_pos_emb(
+                query_layer, key_layer = apply_mistral_rotary_pos_emb(
                     query_layer, key_layer, cos, sin, position_ids)
 
                 value_layer = value_layer.transpose(1, 2).transpose(0, 1)
@@ -815,7 +815,6 @@ class ParallelAttention(MegatronModule):
         # ==================================
         # core attention computation
         # ==================================
-
         # expand the key_layer and value_layer [sk, b, ng, hn] -> [sk, b, np, hn]
         key_layer = key_layer.repeat_interleave(
             self.num_attention_heads_per_partition // self.num_query_groups_per_partition,
@@ -827,13 +826,13 @@ class ParallelAttention(MegatronModule):
         )
 
         # apply relative positional encoding (rotary embedding)
-        if self.use_llama2_rotary_position_embeddings:
+        if self.use_mistral_rotary_position_embeddings:
             kv_seq_len = key_layer.shape[0]
             value_layer = value_layer.transpose(0, 1).transpose(1, 2)
             query_layer = query_layer.transpose(0, 1).transpose(1, 2)
             key_layer = key_layer.transpose(0, 1).transpose(1, 2)
             cos, sin = self.rotary_emb(value_layer, kv_seq_len)
-            query_layer, key_layer = apply_llama2_rotary_pos_emb(
+            query_layer, key_layer = apply_mistral_rotary_pos_emb(
                 query_layer, key_layer, cos, sin, position_ids)
 
             value_layer = value_layer.transpose(1, 2).transpose(0, 1)
@@ -1863,7 +1862,7 @@ class ParallelTransformer(MegatronModule):
             else:
                 state_dict_[key] = state_dict[key]
 
-        if args.use_llama2_rotary_position_embeddings:
+        if args.use_mistral_rotary_position_embeddings:
             super().load_state_dict(state_dict_, strict)
         else:
             super().load_state_dict(state_dict_, False)

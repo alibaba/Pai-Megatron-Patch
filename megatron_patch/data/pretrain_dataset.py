@@ -794,6 +794,23 @@ def build_pretrain_llama_datasets_from_original(data_prefix,
 
     return (train_dataset, valid_dataset, test_dataset)
 
+def build_pretrain_mistral_datasets_from_original(data_prefix,
+                                                max_padding_length):
+    """
+    Build train, valid, and test datasets for pretraining a LLAMA model on original format data.
+    """
+    def build_dataset():
+
+        dataset = LLamaDataset(data_prefix[0], max_padding_length)
+
+        return dataset
+
+    train_dataset = build_dataset()
+    valid_dataset = build_dataset()
+    test_dataset = build_dataset()
+
+    return (train_dataset, valid_dataset, test_dataset)
+
 
 def build_pretrain_falcon_datasets_from_idxmap(data_prefix,
                                                max_padding_length,

@@ -27,7 +27,7 @@ from megatron.core import tensor_parallel
 from megatron.utils import average_losses_across_data_parallel_group
 
 from megatron_patch.data.pretrain_dataset import \
-    build_pretrain_llama_datasets_from_original, build_pretrain_llama_datasets_from_idxmap
+    build_pretrain_mistral_datasets_from_original, build_pretrain_llama_datasets_from_idxmap
 from megatron_patch.model.mistral.gpt_model import GPTModel
 from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
@@ -55,7 +55,7 @@ def get_batch(data_iterator):
 
     datatype = torch.int64
 
-    if args.dataset != "LLama-SFT":
+    if args.dataset != "Mistral-SFT":
         keys = ['text']
         if data_iterator is not None:
             data = next(data_iterator)
@@ -79,10 +79,10 @@ def get_batch(data_iterator):
     # Get the masks and postition ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         tokens,
-        tokenizer.eod,
+        tokenizer.pad_token_id,
         args.reset_position_ids,
         args.reset_attention_mask,
-        args.eod_mask_loss)
+        True)
 
     return tokens, labels, loss_mask, attention_mask, position_ids
 
@@ -121,10 +121,10 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     print_rank_0('> building train, validation, and test datasets '
                  'for GPT ...')
 
-    if args.dataset == "LLama-SFT":
+    if args.dataset == "Mistral-SFT":
         if os.path.isfile(args.data_path[0]):
             train_ds, valid_ds, test_ds = \
-                build_pretrain_llama_datasets_from_original(
+                build_pretrain_mistral_datasets_from_original(
                     data_prefix=args.data_path,
                     max_padding_length=args.max_padding_length)
         else:

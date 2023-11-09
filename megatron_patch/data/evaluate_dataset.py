@@ -366,8 +366,8 @@ class MistralDataset(torch.utils.data.Dataset):
             tokenizer(object): The tokenizer object.
             max_padding_length(int): The maximum length of the padding to the sequences.
         """
-        self.IGNORE_INDEX = -100
         self.tokenizer = tokenizer
+        self.IGNORE_INDEX = tokenizer.pad_token_id
         self.max_padding_length = max_padding_length
         PROMPT_DICT = {
             'prompt_input':
@@ -395,6 +395,7 @@ class MistralDataset(torch.utils.data.Dataset):
             temp = 'output'
         elif 'content' in list_data_dict[0].keys():
             temp = 'content'
+
         targets = [
             f"{example[temp]}{tokenizer.eos_token}"
             for example in list_data_dict
@@ -501,13 +502,9 @@ class MistralDataset(torch.utils.data.Dataset):
         Convert a single sample containing input_id, label and loss_mask into a format suitable for GPT training.
         """
         input_ids, labels = sample
-        loss_mask = np.ones(labels.shape, dtype=np.int64)
-        loss_mask[labels == self.IGNORE_INDEX] = 0
-        loss_mask[labels == self.tokenizer.pad_token_id] = 0
         train_sample = {
             'input_ids': input_ids,
-            'labels': labels,
-            'loss_mask': loss_mask
+            'labels': labels
         }
 
         return train_sample

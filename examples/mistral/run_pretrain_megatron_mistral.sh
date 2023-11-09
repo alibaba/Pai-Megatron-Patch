@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_finetune_megatron_llama_wgbs.sh dsw /workspace/Pai-Megatron-Patch 7B 1 8 1e-5 1e-6 2048 2049 0 bf16 1 1 sel true true true false 100000 /mnt/llama2-datasets/alpaca_zh.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 10000000000 100000000 /mnt/output_patch_test
+#sh run_pretrain_megatron_mistral.sh dsw /workspace/Pai-Megatron-Patch 7B 1 8 1e-5 1e-6 2048 2049 0 bf16 1 1 sel true true true false 100000 /mnt/llama2-datasets/alpaca_zh.json /mnt/mistral-ckpts/Mistral-7B-v0.1-to-mg-tp1-pp1/ 10000000000 100000000 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -53,25 +53,8 @@ if [ $MODEL_SIZE = 7B ]; then
 NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
-INTERMEDIATE_SIZE=11008
-
-gqa_options=""
-
-elif [ $MODEL_SIZE = 13B ]; then
-
-NUM_LAYERS=40
-HIDDEN_SIZE=5120
-NUM_ATTN_HEADS=40
-INTERMEDIATE_SIZE=13824
-
-gqa_options=""
-
-elif [ $MODEL_SIZE = 70B ]; then
-
-NUM_LAYERS=80
-HIDDEN_SIZE=8192
-NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=28672
+INTERMEDIATE_SIZE=14336
+MPE=32768
 
 gqa_options=" \
 		    --group-query-attention \
@@ -195,17 +178,17 @@ megatron_options="  \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
-        --dataset LLama-SFT \
+        --dataset Mistral-SFT \
         --no-load-optim \
         --no-load-rng \
         --num-workers 8 \
         --seed 1234 \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type LLamaTokenizer \
+        --patch-tokenizer-type MistralTokenizer \
         --swiglu \
         --normalization RMSNorm \
-        --use-llama2-rotary-position-embeddings \
+        --use-mistral-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear
