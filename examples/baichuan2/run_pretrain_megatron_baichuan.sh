@@ -159,7 +159,7 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
         --split 98,2,0 \
-        --data-path ${DATASET_PATH}
+        --train-data-path ${DATASET_PATH}
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style linear \
@@ -194,10 +194,10 @@ megatron_options="  \
         --no-load-rng \
         --num-workers 8 \
         --seed 1234 \
-        --dataset LLama-SFT \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type BaichuanTokenizer \
+        --dataset LLama-Pretrain \
         --swiglu \
         --normalization RMSNorm \
         --no-query-key-layer-scaling \

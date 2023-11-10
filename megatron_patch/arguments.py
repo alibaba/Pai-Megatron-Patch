@@ -217,6 +217,10 @@ def get_tasks_args(parser):
                        help='Use llama2 rotary positional embeddings or not. '
                        'Deprecated: use --position-embedding-type')
 
+    group.add_argument('--use-mistral-rotary-position-embeddings', action='store_true',
+                       help='Use llama2 rotary positional embeddings or not. '
+                       'Deprecated: use --position-embedding-type')
+
     group.add_argument('--mm-use-im-start-end',
                        action='store_true')
 
@@ -259,5 +263,7 @@ def get_tasks_args(parser):
                        type=int,
                        default=None,
                        help='patch-size')
+
+    group.add_argument('--sliding-window', type=int, default=None)
 
     return parser

@@ -15,6 +15,7 @@
 import torch
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 
+from megatron.core.enums import ModelType
 from megatron import get_args
 from megatron import print_rank_0
 from megatron.core import parallel_state, tensor_parallel
@@ -24,54 +25,77 @@ from megatron.initialize import initialize_megatron
 from megatron.model import DistributedDataParallel as LocalDDP
 from megatron.model import Float16Module
 from megatron.utils import unwrap_model
+from megatron.utils import get_ltor_masks_and_position_ids
+from megatron import get_timers
 from megatron.arguments import core_transformer_config_from_args
-from megatron.core.enums import ModelType
 
 from megatron_patch.checkpointing import load_checkpoint
-from megatron_patch.data.evaluate_dataset import build_evaluation_dataset
+from megatron_patch.data import build_evaluation_dataset
 from megatron_patch.finetune_utils import build_data_loader
 from megatron_patch.model.baichuan2.gpt_model import GPTModel
-from megatron_patch.tokenizer import build_tokenizer
+from megatron_patch.arguments import get_tasks_args
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import get_model
-from megatron_patch.arguments import get_tasks_args
 
 def get_model_provider():
     def model_provider(pre_process=True, post_process=True):
         """Build the model."""
         args = get_args()
-        build_tokenizer(args)
-        print_rank_0('building GPT model ...')
-        config = core_transformer_config_from_args(get_args())
-        model = GPTModel(config,
-                         num_tokentypes=0,
-                         parallel_output=True,
-                         pre_process=pre_process,
-                         post_process=post_process)
+        config = core_transformer_config_from_args(args)
+        model = GPTModel(
+            config,
+            num_tokentypes=0,
+            parallel_output=True,
+            pre_process=pre_process,
+            post_process=post_process
+        )
 
         return model
 
     return model_provider
 
+def get_batch(batch):
+    """Generate a batch"""
+    args = get_args()
+    tokenizer = get_tokenizer()
+
+    # Items and their type.
+    keys = ['input_ids', 'labels']
+    datatype = torch.int64
+
+    data_b = tensor_parallel.broadcast_data(keys, batch, datatype)
+
+    # Unpack.
+    tokens_ = data_b['input_ids'].long()
+    labels = data_b['labels'].long().cuda()
+    tokens = tokens_.contiguous().cuda()
+    # Get the masks and postition ids.
+    attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+        labels,
+        tokenizer.pad_token_id,
+        args.reset_position_ids,
+        args.reset_attention_mask,
+        True)
+    return tokens, labels, loss_mask, attention_mask, position_ids
 
 def forward_step(batch, model):
     """Forward step."""
-    tokenizer = get_tokenizer()
-    # Get the batch.
-    input_ids = batch['input_ids'].long().cuda()
-    labels = batch['labels'].long().cuda()
-    loss_mask = batch['loss_mask'].long().cuda()
-    attention_mask = input_ids.ne(tokenizer.pad_token_id)
-    # Tell the model what our actual batch size will be
     args = get_args()
+    timers = get_timers()
+    # Get the batch.
+    timers('batch-generator', log_level=2).start()
+    tokens, labels, loss_mask, attention_mask, position_ids = get_batch(
+        batch)
+    timers('batch-generator').stop()
+    # Tell the model what our actual batch size will be
     args.micro_batch_size = len(labels)
-    input_tensor = recv_forward(input_ids.shape, input_ids.dtype)
+    input_tensor = recv_forward(tokens.shape, tokens.dtype)
 
     # Forward pass through the model.
     unwrapped_model = unwrap_model(model, (torchDDP, LocalDDP, Float16Module))
     unwrapped_model.set_input_tensor(input_tensor)
-    logits = unwrapped_model(input_ids=input_ids,
-                             position_ids=None,
+    logits = unwrapped_model(input_ids=tokens,
+                             position_ids=position_ids,
                              attention_mask=attention_mask)
     shift_logits = logits[..., :-1, :].contiguous()
     shift_labels = labels[..., 1:].contiguous()
@@ -124,6 +148,14 @@ def main():
               'is not yet supported for text generation.')
         exit()
 
+    # Data stuff.
+    dataset = build_evaluation_dataset(args.dataset)
+    dataloader = build_data_loader(dataset,
+                                   args.micro_batch_size,
+                                   args.num_workers,
+                                   drop_last=False)
+
+
     # Set up model and load checkpoint.
     model = get_model(get_model_provider(),
                       model_type=ModelType.encoder_or_decoder,
@@ -135,12 +167,7 @@ def main():
     assert len(model) == 1, 'Above condition should have caught this'
     model = model[0]
 
-    # Data stuff.
-    dataset = build_evaluation_dataset(args.dataset)
-    dataloader = build_data_loader(dataset,
-                                   args.micro_batch_size,
-                                   args.num_workers,
-                                   drop_last=False)
+
 
     # Run evaluation.
     evaluate(dataloader, model)

@@ -36,21 +36,19 @@ def post_language_model_processing(lm_output, labels, logit_weights,
     else:
         # [b s] => [s b]
         labels = labels.transpose(0, 1).contiguous()
-        shift_logits = output[:-1, ..., :].contiguous()
-        shift_labels = labels[1:, ...].contiguous()
         if fp16_lm_cross_entropy:
             assert output.dtype == torch.half
             loss = tensor_parallel.vocab_parallel_cross_entropy(
-                shift_logits, shift_labels)
+                output, labels)
         else:
             loss = tensor_parallel.vocab_parallel_cross_entropy(
-                shift_logits.float(), shift_labels)
+                output.float(), labels)
         
         # add z_loss
         args = get_args()
         z_loss_weight = args.z_loss_weight if 'z_loss_weight' in args else 0.0
         if z_loss_weight:
-            logits_max = torch.max(shift_logits, dim=-1)[0]
+            logits_max = torch.max(output, dim=-1)[0]
             torch.distributed.all_reduce(
                 logits_max, op=torch.distributed.ReduceOp.MAX, group=get_tensor_model_parallel_group()
             )

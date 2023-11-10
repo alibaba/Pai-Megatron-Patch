@@ -12,104 +12,66 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import torch
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 
 from megatron.core.enums import ModelType
 from megatron import get_args
 from megatron import print_rank_0
-from megatron.core import parallel_state, tensor_parallel
-from megatron.core.pipeline_parallel.p2p_communication import recv_forward
+from megatron import is_last_rank
+from megatron.core import parallel_state
 from megatron.core.pipeline_parallel.p2p_communication import send_forward
 from megatron.initialize import initialize_megatron
 from megatron.model import DistributedDataParallel as LocalDDP
 from megatron.model import Float16Module
 from megatron.utils import unwrap_model
-from megatron.utils import get_ltor_masks_and_position_ids
-from megatron import get_timers
 from megatron.arguments import core_transformer_config_from_args
 
-from megatron_patch.checkpointing import load_checkpoint
-from megatron_patch.data import build_evaluation_dataset
+from megatron_patch.data.evaluate_dataset import build_evaluation_dataset
 from megatron_patch.finetune_utils import build_data_loader
-from megatron_patch.model.qwen.gpt_model import GPTModel
-from megatron_patch.arguments import get_tasks_args
+from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import get_model
+from megatron_patch.arguments import get_tasks_args
+from megatron_patch.model.mistral.modeling_mistral import MistralForCausalLM
+
 
 def get_model_provider():
+    """Based on evaluation metric set the parallel-output flag and
+    return the model provider."""
     def model_provider(pre_process=True, post_process=True):
-        """Build the model."""
         args = get_args()
-        config = core_transformer_config_from_args(args)
-        model = GPTModel(
-            config,
-            num_tokentypes=0,
-            parallel_output=True,
-            pre_process=pre_process,
-            post_process=post_process
-        )
-
+        tokenizer = build_tokenizer(args)
+        model = MistralForCausalLM.from_pretrained(args.load,
+                                                   trust_remote_code=False)
         return model
 
     return model_provider
 
-def get_batch(batch):
-    """Generate a batch"""
-    args = get_args()
-    tokenizer = get_tokenizer()
-
-    # Items and their type.
-    keys = ['input_ids', 'labels']
-    datatype = torch.int64
-
-    data_b = tensor_parallel.broadcast_data(keys, batch, datatype)
-
-    # Unpack.
-    tokens_ = data_b['input_ids'].long()
-    labels = data_b['labels'].long().cuda()
-    tokens = tokens_.contiguous().cuda()
-    # Get the masks and postition ids.
-    attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-        labels,
-        tokenizer.pad_token_id,
-        args.reset_position_ids,
-        args.reset_attention_mask,
-        True)
-    return tokens, labels, loss_mask, attention_mask, position_ids
 
 def forward_step(batch, model):
     """Forward step."""
-    args = get_args()
-    timers = get_timers()
+    tokenizer = get_tokenizer()
     # Get the batch.
-    timers('batch-generator', log_level=2).start()
-    tokens, labels, loss_mask, attention_mask, position_ids = get_batch(
-        batch)
-    timers('batch-generator').stop()
+    input_ids = batch['input_ids'].long().cuda()
+    labels = batch['labels'].long().cuda()
+    labels[labels == -1] = -100
+    attention_mask = input_ids.ne(tokenizer.pad_token_id)
+
     # Tell the model what our actual batch size will be
-    args.micro_batch_size = len(labels)
-    input_tensor = recv_forward(tokens.shape, tokens.dtype)
+    args = get_args()
 
     # Forward pass through the model.
     unwrapped_model = unwrap_model(model, (torchDDP, LocalDDP, Float16Module))
-    unwrapped_model.set_input_tensor(input_tensor)
-    logits = unwrapped_model(input_ids=tokens,
-                             position_ids=position_ids,
+    output = unwrapped_model(input_ids=input_ids,
+                             labels=labels,
                              attention_mask=attention_mask)
-    shift_logits = logits[..., :-1, :].contiguous()
-    shift_labels = labels[..., 1:].contiguous()
-    loss_mask = loss_mask[..., 1:].contiguous()
     config = core_transformer_config_from_args(args)
-    send_forward(shift_logits, config)
+    send_forward(output, config)
     if parallel_state.is_pipeline_last_stage():
-        losses = tensor_parallel.vocab_parallel_cross_entropy(
-            shift_logits.contiguous().float(), shift_labels.contiguous())
-        loss = torch.sum(
-            losses.view(-1) *
-            loss_mask.contiguous().view(-1).float()) / loss_mask.sum()
-        print_rank_0(loss)
-        return loss
+        print_rank_0(output.loss)
+        return output.loss
 
     return None
 
@@ -140,6 +102,44 @@ def evaluate(data_loader, model):
     return total_output
 
 
+def evaluate_and_print_results(task, data_loader, model, eval_metric):
+    """Evaluate and print results on screen."""
+
+    # Evaluate and get results.
+    output = evaluate(data_loader, model, eval_metric)
+
+    string = ' validation results on {} | '.format(task)
+    if is_last_rank():
+        if eval_metric == 'loss':
+            num_tokenized_tokens = data_loader.dataset.num_tokenized_tokens
+            num_original_tokens = data_loader.dataset.num_original_tokens
+            val_loss = output / (num_tokenized_tokens - 1)
+            ppl = math.exp(min(20, val_loss))
+            token_ratio = (num_tokenized_tokens - 1) / (num_original_tokens -
+                                                        1)
+            adjusted_ppl = math.exp(min(20, val_loss * token_ratio))
+            string += 'avg loss: {:.4E} | '.format(val_loss)
+            string += 'ppl: {:.4E} | '.format(ppl)
+            string += 'adjusted ppl: {:.4E} | '.format(adjusted_ppl)
+            string += 'token ratio: {} |'.format(token_ratio)
+
+        elif eval_metric == 'accuracy':
+            num_examples = len(data_loader.dataset)
+            acc = output / num_examples
+            string += 'number correct: {:.4E} | '.format(output)
+            string += 'total examples: {:.4E} | '.format(num_examples)
+            string += 'avg accuracy: {:.4E}'.format(acc)
+
+        else:
+            raise NotImplementedError('evaluation method for {} metric is not '
+                                      'implemented yet.'.format(eval_metric))
+
+        length = len(string) + 1
+        print('-' * length)
+        print(string)
+        print('-' * length)
+
+
 def main():
     """Main program."""
     args = get_args()
@@ -148,26 +148,20 @@ def main():
               'is not yet supported for text generation.')
         exit()
 
+    # Set up model and load checkpoint.
+    model = get_model(get_model_provider(),
+                      model_type=ModelType.encoder_or_decoder,
+                      wrap_with_ddp=False)
+
+    assert len(model) == 1, 'Above condition should have caught this'
+    model = model[0]
+
     # Data stuff.
     dataset = build_evaluation_dataset(args.dataset)
     dataloader = build_data_loader(dataset,
                                    args.micro_batch_size,
                                    args.num_workers,
                                    drop_last=False)
-
-
-    # Set up model and load checkpoint.
-    model = get_model(get_model_provider(),
-                      model_type=ModelType.encoder_or_decoder,
-                      wrap_with_ddp=False)
-
-    if args.load is not None:
-        load_checkpoint(model, None, None)
-
-    assert len(model) == 1, 'Above condition should have caught this'
-    model = model[0]
-
-
 
     # Run evaluation.
     evaluate(dataloader, model)

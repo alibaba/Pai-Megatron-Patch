@@ -17,20 +17,17 @@ import torch
 import os
 
 from megatron.core.enums import ModelType
-from megatron.data.gpt_dataset import build_train_valid_test_datasets
 from megatron.utils import get_ltor_masks_and_position_ids
-from megatron import print_rank_0
 from megatron.arguments import core_transformer_config_from_args
 from megatron import get_args
 from megatron import get_timers
 from megatron.core import tensor_parallel
 from megatron.utils import average_losses_across_data_parallel_group
 
-from megatron_patch.data.pretrain_dataset import \
-    build_pretrain_llama_datasets_from_original, build_pretrain_llama_datasets_from_idxmap
+from megatron_patch.data import \
+    build_pretrain_dataset_from_original, build_pretrain_dataset_from_idxmap
 from megatron_patch.model.llama2.gpt_model import GPTModel
-from megatron_patch.tokenizer import build_tokenizer
-from megatron_patch.tokenizer import get_tokenizer
+from megatron_patch.tokenizer import get_tokenizer, build_tokenizer
 from megatron_patch.training import pretrain
 from megatron_patch.arguments import get_tasks_args
 
@@ -47,15 +44,13 @@ def model_provider(pre_process=True, post_process=True):
     )
     return model
 
-
 def get_batch(data_iterator):
     """Generate a batch"""
     args = get_args()
     tokenizer = get_tokenizer()
-
     datatype = torch.int64
 
-    if args.dataset != "LLama-SFT":
+    if args.dataset != "LLama-Pretrain":
         keys = ['text']
         if data_iterator is not None:
             data = next(data_iterator)
@@ -79,10 +74,10 @@ def get_batch(data_iterator):
     # Get the masks and postition ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         tokens,
-        tokenizer.eod,
+        tokenizer.pad_token_id,
         args.reset_position_ids,
         args.reset_attention_mask,
-        args.eod_mask_loss)
+        True)
 
     return tokens, labels, loss_mask, attention_mask, position_ids
 
@@ -99,7 +94,6 @@ def loss_func(loss_mask, output_tensor):
 
 def forward_step(data_iterator, model):
     """Forward step."""
-    args = get_args()
     timers = get_timers()
 
     # Get the batch.
@@ -118,41 +112,20 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     """Build train, valid, and test datasets."""
     args = get_args()
 
-    print_rank_0('> building train, validation, and test datasets '
-                 'for GPT ...')
-
-    if args.dataset == "LLama-SFT":
-        if os.path.isfile(args.data_path[0]):
-            train_ds, valid_ds, test_ds = \
-                build_pretrain_llama_datasets_from_original(
-                    data_prefix=args.data_path,
-                    max_padding_length=args.max_padding_length)
-        else:
-            train_ds, valid_ds, test_ds = \
-                build_pretrain_llama_datasets_from_idxmap(
-                    data_prefix=args.data_path,
-                    max_padding_length=args.max_padding_length,
-                    data_impl=args.data_impl,
-                    splits_string=args.split,
-                    train_valid_test_num_samples=train_val_test_num_samples,
-                    seed=args.seed,
-                    skip_warmup=(not args.mmap_warmup)
-                )
-
+    if os.path.isfile(args.train_data_path[0]):
+        train_ds, valid_ds, test_ds = \
+            build_pretrain_dataset_from_original(args.dataset)
     else:
-        train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
-            data_prefix=args.data_path,
-            data_impl=args.data_impl,
-            splits_string=args.split,
-            train_valid_test_num_samples=train_val_test_num_samples,
-            seq_length=args.seq_length,
-            seed=args.seed,
-            skip_warmup=(not args.mmap_warmup),
-            train_data_prefix=args.train_data_path,
-            valid_data_prefix=args.valid_data_path,
-            test_data_prefix=args.test_data_path)
-
-    print_rank_0("> finished creating datasets ...")
+        train_ds, valid_ds, test_ds = \
+            build_pretrain_dataset_from_idxmap(
+                data_prefix=args.train_data_path,
+                max_padding_length=args.max_padding_length,
+                dataset_type=args.dataset,
+                splits_string=args.split,
+                train_valid_test_num_samples=train_val_test_num_samples,
+                seed=args.seed,
+                skip_warmup=(not args.mmap_warmup)
+            )
 
     return train_ds, valid_ds, test_ds
 
