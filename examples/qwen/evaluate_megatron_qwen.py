@@ -30,11 +30,10 @@ from megatron import get_timers
 from megatron.arguments import core_transformer_config_from_args
 
 from megatron_patch.checkpointing import load_checkpoint
-from megatron_patch.data.evaluate_dataset import build_evaluation_dataset
+from megatron_patch.data import build_evaluation_dataset
 from megatron_patch.finetune_utils import build_data_loader
 from megatron_patch.model.qwen.gpt_model import GPTModel
 from megatron_patch.arguments import get_tasks_args
-from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import get_model
 
@@ -42,7 +41,6 @@ def get_model_provider():
     def model_provider(pre_process=True, post_process=True):
         """Build the model."""
         args = get_args()
-        build_tokenizer(args)
         config = core_transformer_config_from_args(args)
         model = GPTModel(
             config,
@@ -71,32 +69,24 @@ def get_batch(batch):
     tokens_ = data_b['input_ids'].long()
     labels = data_b['labels'].long().cuda()
     tokens = tokens_.contiguous().cuda()
-
+    # Get the masks and postition ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         labels,
         tokenizer.pad_token_id,
         args.reset_position_ids,
         args.reset_attention_mask,
         True)
-
     return tokens, labels, loss_mask, attention_mask, position_ids
 
 def forward_step(batch, model):
     """Forward step."""
     args = get_args()
-    # Get the batch.
-    # input_ids = batch['input_ids'].long().cuda()
-    # labels = batch['labels'].long().cuda()
-    # loss_mask = batch['loss_mask'].long().cuda()
-    # attention_mask = input_ids.ne(tokenizer.pad_token_id)
-
     timers = get_timers()
     # Get the batch.
     timers('batch-generator', log_level=2).start()
     tokens, labels, loss_mask, attention_mask, position_ids = get_batch(
         batch)
     timers('batch-generator').stop()
-
     # Tell the model what our actual batch size will be
     args.micro_batch_size = len(labels)
     input_tensor = recv_forward(tokens.shape, tokens.dtype)
@@ -158,6 +148,14 @@ def main():
               'is not yet supported for text generation.')
         exit()
 
+    # Data stuff.
+    dataset = build_evaluation_dataset(args.dataset)
+    dataloader = build_data_loader(dataset,
+                                   args.micro_batch_size,
+                                   args.num_workers,
+                                   drop_last=False)
+
+
     # Set up model and load checkpoint.
     model = get_model(get_model_provider(),
                       model_type=ModelType.encoder_or_decoder,
@@ -169,12 +167,7 @@ def main():
     assert len(model) == 1, 'Above condition should have caught this'
     model = model[0]
 
-    # Data stuff.
-    dataset = build_evaluation_dataset(args.dataset)
-    dataloader = build_data_loader(dataset,
-                                   args.micro_batch_size,
-                                   args.num_workers,
-                                   drop_last=False)
+
 
     # Run evaluation.
     evaluate(dataloader, model)
