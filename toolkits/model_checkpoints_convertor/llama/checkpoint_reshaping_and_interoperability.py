@@ -670,6 +670,11 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 del params_dict[dense_h_to_4h_2_layer_name]
 
                 if args.model_name == "llama2-70b":
+                    hidden_size = 8192
+                    num_groups = 8
+                    head_dim = 128
+                    num_heads = 64
+
                     query_name = 'self_attention.query.weight'
                     query_layer_name = f"layers.{layer}.{query_name}"
                     query_weight = params_dict[query_layer_name]
@@ -681,8 +686,11 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                     qkv_name = 'self_attention.query_key_value.weight'
                     qkv_layer_name = f"layers.{layer}.{qkv_name}"
 
-                    params_dict[qkv_layer_name] = torch.cat(
-                    [query_weight, kv_weight], dim=0)
+                    group_query_weight = query_weight.view(num_groups // args.target_tensor_model_parallel_size, num_heads // num_groups * head_dim, hidden_size)
+                    group_kv_weight = kv_weight.view(num_groups // args.target_tensor_model_parallel_size, 2 * head_dim, hidden_size)
+
+                    group_qkv_weight = torch.cat([group_query_weight, group_kv_weight], dim=1)
+                    params_dict[qkv_layer_name] = group_qkv_weight.view(-1, hidden_size)
 
                     del params_dict[query_layer_name]
                     del params_dict[kv_layer_name]
