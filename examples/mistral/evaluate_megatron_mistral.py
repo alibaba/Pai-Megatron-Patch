@@ -30,11 +30,10 @@ from megatron import get_timers
 from megatron.arguments import core_transformer_config_from_args
 
 from megatron_patch.checkpointing import load_checkpoint
-from megatron_patch.data.evaluate_dataset import build_evaluation_dataset
+from megatron_patch.data import build_evaluation_dataset
 from megatron_patch.finetune_utils import build_data_loader
 from megatron_patch.model.mistral.gpt_model import GPTModel
 from megatron_patch.arguments import get_tasks_args
-from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import get_model
 
@@ -42,7 +41,6 @@ def get_model_provider():
     def model_provider(pre_process=True, post_process=True):
         """Build the model."""
         args = get_args()
-        build_tokenizer(args)
         config = core_transformer_config_from_args(args)
         model = GPTModel(
             config,
@@ -151,6 +149,14 @@ def main():
               'is not yet supported for text generation.')
         exit()
 
+    # Data stuff.
+    dataset = build_evaluation_dataset(args.dataset)
+    dataloader = build_data_loader(dataset,
+                                   args.micro_batch_size,
+                                   args.num_workers,
+                                   drop_last=False)
+
+
     # Set up model and load checkpoint.
     model = get_model(get_model_provider(),
                       model_type=ModelType.encoder_or_decoder,
@@ -162,12 +168,7 @@ def main():
     assert len(model) == 1, 'Above condition should have caught this'
     model = model[0]
 
-    # Data stuff.
-    dataset = build_evaluation_dataset(args.dataset)
-    dataloader = build_data_loader(dataset,
-                                   args.micro_batch_size,
-                                   args.num_workers,
-                                   drop_last=False)
+
 
     # Run evaluation.
     evaluate(dataloader, model)

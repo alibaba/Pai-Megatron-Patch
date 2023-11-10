@@ -264,4 +264,6 @@ def get_tasks_args(parser):
                        default=None,
                        help='patch-size')
 
+    group.add_argument('--sliding-window', type=int, default=None)
+
     return parser

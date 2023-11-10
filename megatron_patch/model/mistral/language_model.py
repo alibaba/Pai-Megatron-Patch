@@ -358,6 +358,7 @@ class TransformerLanguageModel(MegatronModule):
         self.encoder_hidden_state = None
         self.add_retriever = args.retro_add_retriever
         self.untie_embeddings_and_output_weights = args.untie_embeddings_and_output_weights
+        self.sliding_window = args.sliding_window
 
         # Embeddings.
         if self.pre_process:
@@ -515,7 +516,7 @@ class TransformerLanguageModel(MegatronModule):
             (batch_size, seq_length),
             encoder_input,
             0,
-            sliding_window=4096,
+            sliding_window=self.sliding_window,
         )
 
         # Run encoder.

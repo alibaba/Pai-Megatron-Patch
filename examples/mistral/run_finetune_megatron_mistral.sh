@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_finetune_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 1e-5 1e-6 80 81 0 bf16 1 1 sel true true true false  /mnt/llama2-datasets/wudao_train.json /mnt/llama2-datasets/wudao_valid.json /mnt/mistral-ckpts/Mistral-7B-v0.1-to-mg-tp1-pp1/ 2 /mnt/output_patch_test
+#sh run_finetune_megatron_mistral.sh dsw /workspace/Pai-Megatron-Patch 7B 2 1e-5 1e-6 80 80 0 bf16 8 1 sel true false true false  /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-datasets/alpaca_data.json /mnt/mistral-ckpts/Mistral-7B-v0.1-to-mg-tp8-pp1/ 2 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -52,6 +52,7 @@ HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=14336
 MPE=32768
+SLW=4096
 
 gqa_options=" \
 		    --group-query-attention \
@@ -140,13 +141,13 @@ FINETUNE_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${FT_NAME}"
 megatron_options="  \
         --load ${PRETRAIN_CHECKPOINT_PATH} \
         --save ${FINETUNE_CHECKPOINT_PATH} \
-        --train-data ${TRAIN_DATASET_PATH} \
-        --valid-data ${VALID_DATASET_PATH} \
+        --train-data-path ${TRAIN_DATASET_PATH} \
+        --valid-data-path ${VALID_DATASET_PATH} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --seq-length ${SEQ_LEN} \
-        --max-position-embeddings ${SEQ_LEN}  \
+        --max-position-embeddings ${MPE} \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --keep-last \
         --micro-batch-size ${BATCH_SIZE} \
@@ -178,6 +179,8 @@ megatron_options="  \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type MistralTokenizer \
+        --dataset Mistral-SFT \
+        --sliding-window ${SLW} \
         --swiglu \
         --normalization RMSNorm \
         --use-mistral-rotary-position-embeddings \

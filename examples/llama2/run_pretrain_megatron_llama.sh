@@ -163,8 +163,7 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
-        --split 98,2,0 \
-        --data-path ${DATASET_PATH}
+        --train-data-path ${DATASET_PATH}
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style linear \
@@ -195,7 +194,6 @@ megatron_options="  \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
-        --dataset LLama-SFT \
         --no-load-optim \
         --no-load-rng \
         --num-workers 8 \
@@ -203,6 +201,7 @@ megatron_options="  \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type LLamaTokenizer \
+        --dataset LLama-Pretrain \
         --swiglu \
         --normalization RMSNorm \
         --use-llama2-rotary-position-embeddings \

@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_pretrain_megatron_mistral.sh dsw /workspace/Pai-Megatron-Patch 7B 1 8 1e-5 1e-6 2048 2049 0 bf16 1 1 sel true true true false 100000 /mnt/llama2-datasets/alpaca_zh.json /mnt/mistral-ckpts/Mistral-7B-v0.1-to-mg-tp1-pp1/ 10000000000 100000000 /mnt/output_patch_test
+#sh run_pretrain_megatron_mistral.sh dsw /workspace/Pai-Megatron-Patch 7B 2 16 1e-5 1e-6 2048 2048 0 bf16 8 1 sel true false true false 100000  /mnt/llama2-datasets/alpaca_data.json /mnt/mistral-ckpts/Mistral-7B-v0.1-to-mg-tp8-pp1 10000000000 100000000 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -55,6 +55,7 @@ HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=14336
 MPE=32768
+SLW=4096
 
 gqa_options=" \
 		    --group-query-attention \
@@ -146,8 +147,7 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
-        --split 98,2,0 \
-        --data-path ${DATASET_PATH}
+        --train-data-path ${DATASET_PATH}
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style linear \
@@ -166,7 +166,7 @@ megatron_options="  \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
-        --max-position-embeddings ${SEQ_LEN} \
+        --max-position-embeddings ${MPE} \
         --log-interval 1 \
         --eval-interval 10000 \
         --eval-iters 10 \
@@ -178,7 +178,6 @@ megatron_options="  \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
-        --dataset Mistral-SFT \
         --no-load-optim \
         --no-load-rng \
         --num-workers 8 \
@@ -186,6 +185,8 @@ megatron_options="  \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type MistralTokenizer \
+        --dataset Mistral-Pretrain \
+        --sliding-window ${SLW} \
         --swiglu \
         --normalization RMSNorm \
         --use-mistral-rotary-position-embeddings \

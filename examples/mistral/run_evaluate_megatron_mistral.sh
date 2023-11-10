@@ -47,6 +47,7 @@ HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=14336
 MPE=32768
+SLW=4096
 
 gqa_options=" \
 		    --group-query-attention \
@@ -124,7 +125,7 @@ fi
 
 
 megatron_options=" \
-        --data-path ${DATASET_PATH}
+        --valid-data-path ${DATASET_PATH}
         --micro-batch-size ${BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
@@ -141,10 +142,11 @@ megatron_options=" \
         --no-load-rng \
         --seed 1234 \
         --num-workers 0 \
-        --dataset Mistral-SFT \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type MistralTokenizer \
+        --dataset Mistral-SFT \
+        --sliding-window ${SLW} \
         --swiglu \
         --normalization RMSNorm \
         --use-mistral-rotary-position-embeddings \
