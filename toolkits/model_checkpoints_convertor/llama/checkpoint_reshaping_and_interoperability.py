@@ -956,11 +956,19 @@ def convert_checkpoint_from_megatron_to_transformers(args):
             elif (
                 op_name == "attention.query_key_value" or op_name == "self_attention.query_key_value"
             ) and weight_or_bias == "weight" and args.model_name == "llama2-70b":
+                hidden_size = 8192
+                num_groups = 8
+                head_dim = 128
+                num_heads = 64
 
                 tp_states = torch.chunk(params, args.target_tensor_model_parallel_size, dim=0)
-                tp_dim = 8192 // args.target_tensor_model_parallel_size
-                query = torch.cat([i[:tp_dim] for i in tp_states])
-                key_value = torch.cat([i[tp_dim:] for i in tp_states])
+                query_dim = num_heads // num_groups * head_dim
+                kv_dim = 2 * head_dim
+                tp_states = [i.view(num_groups//args.target_tensor_model_parallel_size, query_dim + kv_dim, hidden_size) for i in tp_states]
+                # tp_dim = hidden_size // args.target_tensor_model_parallel_size
+                query = torch.cat([i[:, :query_dim].reshape(-1, hidden_size) for i in tp_states])
+                key_value = torch.cat([i[:, query_dim:].reshape(-1, hidden_size) for i in tp_states])
+
                 out_val = megatron_to_transformers_fix_query_key_value_ordering(
                     query,
                     checkpoint_version,

@@ -163,7 +163,7 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
         --split 98,2,0 \
-        --data-path ${DATASET_PATH}
+        --train-data-path ${DATASET_PATH}
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style linear \
@@ -195,7 +195,7 @@ megatron_options="  \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
-        --dataset LLama-SFT \
+        --dataset LLama-Pretrain \
         --no-save-optim \
         --no-load-optim \
         --no-load-rng \

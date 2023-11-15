@@ -9,12 +9,12 @@ MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=6,7
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=2
+GPUS_PER_NODE=4
 
 elif [ $ENV = dlc ]; then
 
@@ -143,7 +143,7 @@ fi
 
 
 megatron_options=" \
-        --data-path ${DATASET_PATH}
+        --valid-data-path ${DATASET_PATH}
         --micro-batch-size ${BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
@@ -158,6 +158,7 @@ megatron_options=" \
         --pipeline-model-parallel-size ${PP} \
         --no-load-optim \
         --no-load-rng \
+        --dataset LLama-SFT \
         --seed 1234 \
         --num-workers 0 \
         --dataset LLama-SFT \
