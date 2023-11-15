@@ -24,7 +24,7 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$3  #7B, 13B, 70B
+MODEL_SIZE=$3  #7B, 13B, 34B
 BATCH_SIZE=$4
 LR=$5
 MIN_LR=$6
@@ -183,6 +183,7 @@ megatron_options="  \
         --eval-iters 10 \
         --save-interval 1000000 \
         --tensorboard-queue-size 1 \
+        --dataset LLama-SFT \
         --tensorboard-dir ${TENSORBOARD_DIR} \
         --log-timers-to-tensorboard \
         --log-batch-size-to-tensorboard \

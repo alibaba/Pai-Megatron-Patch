@@ -61,10 +61,9 @@ def build_pretrain_dataset_from_original(dataset):
     build_tokenizer(args)
     if dataset == 'LLama-Pretrain':
         train_dataset = LLamaRawDataset(args.train_data_path, args.max_padding_length)
-        valid_dataset = LLamaRawDataset(args.train_data_path, args.max_padding_length)
-        test_dataset = LLamaRawDataset(args.train_data_path, args.max_padding_length)
+        # customize your validation and test dataset here
 
-        return train_dataset, valid_dataset, test_dataset
+        return train_dataset, train_dataset, train_dataset
 
     elif dataset == 'Mistral-Pretrain':
         train_dataset = MistralRawDataset(args.train_data_path, args.max_padding_length)
