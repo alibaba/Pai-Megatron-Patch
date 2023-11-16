@@ -50,7 +50,7 @@ OUTPUT_BASEPATH=${24}
 
 if [ $MODEL_SIZE = 7B ]; then
 
-NUM_LAYERS=32
+NUM_LAYERS=2
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
@@ -196,12 +196,12 @@ megatron_options="  \
         --pipeline-model-parallel-size ${PP} \
         --no-load-optim \
         --no-load-rng \
-        --num-workers 8 \
+        --num-workers 0 \
         --seed 1234 \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type LLamaTokenizer \
-        --dataset LLama-Pretrain \
+        --dataset LLama-Pretrain-Raw \
         --swiglu \
         --normalization RMSNorm \
         --use-llama2-rotary-position-embeddings \

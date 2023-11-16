@@ -50,23 +50,14 @@ def get_batch(data_iterator):
     tokenizer = get_tokenizer()
     datatype = torch.int64
 
-    if args.dataset != "LLama-Pretrain":
-        keys = ['text']
-        if data_iterator is not None:
-            data = next(data_iterator)
-        else:
-            data = None
-        data_b = tensor_parallel.broadcast_data(keys, data, datatype)
-        # Unpack.
-        tokens_ = data_b['text'].long()
+    keys = ['input_ids', 'labels']
+
+    if data_iterator is not None:
+        data = next(data_iterator)
     else:
-        keys = ['input_ids', 'labels']
-        if data_iterator is not None:
-            data = next(data_iterator)
-        else:
-            data = None
-        data_b = tensor_parallel.broadcast_data(keys, data, datatype)
-        tokens_ = data_b['input_ids'].long()
+        data = None
+    data_b = tensor_parallel.broadcast_data(keys, data, datatype)
+    tokens_ = data_b['input_ids'].long()
 
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()

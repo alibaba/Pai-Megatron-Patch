@@ -59,13 +59,13 @@ def build_pretrain_dataset_from_original(dataset):
 
     args = get_args()
     build_tokenizer(args)
-    if dataset == 'LLama-Pretrain':
+    if dataset == 'LLama-Pretrain-Raw':
         train_dataset = LLamaRawDataset(args.train_data_path, args.max_padding_length)
         # customize your validation and test dataset here
 
         return train_dataset, train_dataset, train_dataset
 
-    elif dataset == 'Mistral-Pretrain':
+    elif dataset == 'Mistral-Pretrain-Raw':
         train_dataset = MistralRawDataset(args.train_data_path, args.max_padding_length)
         valid_dataset = MistralRawDataset(args.train_data_path, args.max_padding_length)
         test_dataset = MistralRawDataset(args.train_data_path, args.max_padding_length)
@@ -77,7 +77,7 @@ def build_pretrain_dataset_from_original(dataset):
 
 def build_pretrain_dataset_from_idxmap(data_prefix,
                                               max_padding_length,
-                                              data_impl,
+                                              dataset_type,
                                               splits_string,
                                               train_valid_test_num_samples,
                                               seed,
@@ -99,7 +99,7 @@ def build_pretrain_dataset_from_idxmap(data_prefix,
     """
     if len(data_prefix) == 1:
         return _build_train_valid_test_datasets(data_prefix[0],max_padding_length,
-                                                data_impl, splits_string,
+                                                dataset_type, splits_string,
                                                 train_valid_test_num_samples,
                                                 seed, skip_warmup, return_doc_ids)
 
@@ -119,7 +119,7 @@ def build_pretrain_dataset_from_idxmap(data_prefix,
     test_datasets = []
     for i in range(len(prefixes)):
         train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
-            prefixes[i], max_padding_length, data_impl, splits_string,
+            prefixes[i], max_padding_length, dataset_type, splits_string,
             datasets_train_valid_test_num_samples[i],
             seed, skip_warmup,
             return_doc_ids)
@@ -172,12 +172,12 @@ def _build_train_valid_test_datasets(data_prefix, max_padding_length, dataset_ty
                                   stop=splits[index + 1],
                                   step=1,
                                   dtype=np.int32)
-            if dataset_type == 'LLama-IdxMap':
+            if dataset_type == 'LLama-Pretrain-IdxMap':
                 dataset = LLamaIdxMapDataset(
                     name, data_prefix, documents, indexed_dataset,
                     train_valid_test_num_samples[index],
                     seed, max_padding_length, return_doc_ids)
-            elif dataset_type == 'Mistral-IdxMap':
+            elif dataset_type == 'Mistral-Pretrain-IdxMap':
                 dataset = MistralIdxMapDataset(
                     name, data_prefix, documents, indexed_dataset,
                     train_valid_test_num_samples[index],
