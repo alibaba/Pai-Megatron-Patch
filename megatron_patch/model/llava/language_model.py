@@ -25,7 +25,7 @@ from megatron.model.utils import init_method_normal
 from megatron.model.utils import scaled_init_method_normal
 from megatron.core.models.common.rotary_pos_embedding import RotaryEmbedding
 
-from megatron_patch.data.constants import IMAGE_TOKEN_INDEX
+from megatron_patch.data.llava.constants import IMAGE_TOKEN_INDEX
 from .clip_encoder import CLIPVisionTower
 from .mm_projector_builder import build_vision_projector
 from .transformer import ParallelTransformer

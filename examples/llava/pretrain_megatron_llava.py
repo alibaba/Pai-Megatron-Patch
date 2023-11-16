@@ -23,13 +23,13 @@ from megatron import get_timers
 from megatron.core import tensor_parallel
 from megatron.utils import average_losses_across_data_parallel_group
 
-from megatron_patch.data.mm_pretrain_dataset import build_pretrain_llava_datasets_from_original
+from megatron_patch.data.llava.mm_pretrain_dataset import build_pretrain_llava_datasets_from_original
 from megatron_patch.model.llava.gpt_model import GPTModel
 from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import pretrain
 from megatron_patch.arguments import get_tasks_args
-from megatron_patch.data.constants import IGNORE_INDEX
+from megatron_patch.data.llava.constants import IGNORE_INDEX
 
 def model_provider(pre_process=True, post_process=True):
     args = get_args()
