@@ -4,7 +4,7 @@ import base64
 from megatron import get_args
 import torch
 from transformers import StoppingCriteria
-from megatron_patch.data.constants import IMAGE_TOKEN_INDEX
+from megatron_patch.data.llava.constants import IMAGE_TOKEN_INDEX
 
 
 def load_image_from_base64(image):

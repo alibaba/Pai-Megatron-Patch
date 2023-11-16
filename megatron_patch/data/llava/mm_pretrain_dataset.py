@@ -24,9 +24,9 @@ import transformers
 from megatron import get_args
 
 from megatron_patch.tokenizer import get_tokenizer
-from megatron_patch.data import conversation as conversation_lib
-from megatron_patch.data.mm_utils import tokenizer_image_token
-from megatron_patch.data.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
+from megatron_patch.data.llava import conversation as conversation_lib
+from megatron_patch.data.llava.mm_utils import tokenizer_image_token
+from megatron_patch.data.llava.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
 from megatron_patch.model.llava.clip_encoder import CLIPVisionTower
 
 def _tokenize_fn(strings: Sequence[str],
