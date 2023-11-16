@@ -197,7 +197,7 @@ megatron_options="  \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type BaichuanTokenizer \
-        --dataset LLama-Pretrain \
+        --dataset LLama-Pretrain-Raw \
         --swiglu \
         --normalization RMSNorm \
         --no-query-key-layer-scaling \
