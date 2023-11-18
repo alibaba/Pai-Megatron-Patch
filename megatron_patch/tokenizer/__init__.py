@@ -191,6 +191,26 @@ def build_tokenizer(args):
         tokenizer.eos_token_id = tokenizer.eod_id
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
+    elif args.patch_tokenizer_type == 'YiTokenizer':
+        from .tokenization_yi import YiTokenizer
+        if args.load is None:
+            tokenizer = YiTokenizer.from_pretrained(
+                '01-ai/Yi-6B',
+                model_max_length=args.seq_length,
+                padding_side='right',
+                use_fast=False,
+            )
+        else:
+            tokenizer = YiTokenizer.from_pretrained(
+                args.load,
+                model_max_length=args.seq_length,
+                padding_side='right',
+                use_fast=False,
+            )
+        tokenizer.pad_token_id = 0
+        tokenizer.eos_token_id = 2
+        args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
+
     elif args.patch_tokenizer_type == 'MistralTokenizer':
         from .tokenization_mistral import MistralTokenizer
         tokenizer = MistralTokenizer(os.path.join(args.load, "tokenizer.model"))
