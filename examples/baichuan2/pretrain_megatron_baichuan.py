@@ -18,12 +18,12 @@ import os
 
 from megatron.core.enums import ModelType
 from megatron.utils import get_ltor_masks_and_position_ids
-from megatron.arguments import core_transformer_config_from_args
 from megatron import get_args
 from megatron import get_timers
 from megatron.core import tensor_parallel
 from megatron.utils import average_losses_across_data_parallel_group
 
+from megatron_patch.arguments import core_transformer_config_from_args
 from megatron_patch.data import \
     build_pretrain_dataset_from_original, build_pretrain_dataset_from_idxmap
 from megatron_patch.model.baichuan2.gpt_model import GPTModel

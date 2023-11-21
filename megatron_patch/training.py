@@ -36,7 +36,7 @@ from megatron.utils import (calc_params_l2_norm,
                             unwrap_model)
 from megatron.core.pipeline_parallel.schedules import get_forward_backward_func
 from megatron.core.enums import ModelType
-from megatron.core.utils import get_model_config
+
 from megatron.model.vision.knn_monitor import compute_feature_bank
 
 from .checkpointing import load_checkpoint
@@ -44,6 +44,35 @@ from .checkpointing import load_checkpoint
 # The earliest we can measure the start time.
 _TRAIN_START_TIME = time.time()
 
+def get_attr_wrapped_model(model, attr, allow_none=True, return_model_obj=False):
+    """Get an attribute from a wrapped model.
+    If return_model_obj is true, return the object that has the 'attr' attribute;
+    otherwise, return the attribute directly."""
+    if isinstance(model, list):
+        raise RuntimeError("_get_attr_wrapped_model given a list of models")
+
+    if allow_none:
+
+        def condition(model, attr):
+            return not hasattr(model, attr)
+
+    else:
+
+        def condition(model, attr):
+            return getattr(model, attr, None) is None
+
+    while condition(model, attr):
+        if not hasattr(model, "module"):
+            raise RuntimeError(f"_get_attr_wrapped_model couldn't find attribute {attr}")
+
+        model = model.module
+
+    if return_model_obj:
+        return model
+    return getattr(model, attr)
+
+def get_model_config(model):
+    return get_attr_wrapped_model(model, 'config', allow_none=False)
 
 def pretrain(train_valid_test_dataset_provider,
              model_provider,
@@ -294,6 +323,7 @@ def get_model(model_provider_func, model_type=ModelType.encoder_or_decoder, wrap
     if args.fp16 or args.bf16:
         model = [Float16Module(model_module, args) for model_module in model]
 
+    """
     if wrap_with_ddp:
         model = [DDP(model_module,
                      data_parallel_group=mpu.get_data_parallel_group(),
@@ -303,6 +333,16 @@ def get_model(model_provider_func, model_type=ModelType.encoder_or_decoder, wrap
                  for model_module in model]
 
         # Broadcast params from data parallel src rank to other data parallel ranks.
+        if args.data_parallel_random_init:
+            for model_module in model:
+                model_module.broadcast_params()
+    """
+    if wrap_with_ddp:
+        model = [DDP(model_module,
+                          args.accumulate_allreduce_grads_in_fp32,
+                          args.use_contiguous_buffers_in_local_ddp)
+                 for model_module in model]
+        # broad cast params from data parallel src rank to other data parallel ranks
         if args.data_parallel_random_init:
             for model_module in model:
                 model_module.broadcast_params()
@@ -361,15 +401,18 @@ def train_step(forward_step_func, data_iterator,
 
     # Forward pass.
     forward_backward_func = get_forward_backward_func()
+    fwd_bwd_timers = timers if args.timing_log_level > 1 else None
     losses_reduced = forward_backward_func(
         forward_step_func=forward_step_func,
         data_iterator=data_iterator,
         model=model,
         num_microbatches=get_num_microbatches(),
-        seq_length=args.seq_length,
-        micro_batch_size=args.micro_batch_size,
-        decoder_seq_length=args.decoder_seq_length,
-        forward_only=False)
+        dtype=args.params_dtype,
+        tensor_shape=(args.seq_length, args.micro_batch_size, args.hidden_size),
+        grad_scaler=optimizer.scale_loss,
+        sequence_parallel=args.sequence_parallel,
+        forward_only=False,
+        timers=fwd_bwd_timers)
 
     # Empty unused memory.
     if args.empty_unused_memory_level >= 1:

@@ -1,12 +1,12 @@
 #!/bin/bash
-# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 7B 1 2048 2048 0 bf16 2 1 sel true true true false /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base-to-mg-tp2-pp1
+# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 7B 1 2048 2048 0 bf16 2 1 sel true false true false /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base-to-mg-tp2-pp1
 # sh run_evaluate_megatron_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 13B 1 2048 2048 0 bf16 2 1 sel true false true false /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-13B-Base-to-mg-tp2-pp1
 # sh run_evaluate_megatron_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 7B 1 2048 2048 0 bf16 2 1 sel true false true true /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base-to-te-tp2-pp1
 
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
-MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-23.04
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
