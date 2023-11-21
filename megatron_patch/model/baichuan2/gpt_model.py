@@ -13,12 +13,12 @@
 # limitations under the License.
 
 import torch
-
 from megatron import get_args
 from megatron.core import tensor_parallel
-from megatron.model.module import MegatronModule
+
 from megatron.model.enums import AttnMaskType
 
+from .utils import MegatronModule
 from .language_model import parallel_lm_logits
 from .language_model import get_language_model
 from megatron.core.parallel_state import get_tensor_model_parallel_group

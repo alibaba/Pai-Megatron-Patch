@@ -22,19 +22,32 @@ from typing import Optional
 from megatron import get_timers, get_args, get_retro_args, core, get_num_microbatches
 from megatron.model.module import MegatronModule
 from megatron.core import mpu, tensor_parallel
-from megatron.core.enums import ModelType
-from megatron.model.enums import AttnMaskType, LayerType, AttnType
+from megatron.model.enums import AttnMaskType, AttnType
 from megatron.model.fused_softmax import FusedScaleMaskSoftmax
 from megatron.model.fused_bias_gelu import bias_gelu_impl
-from megatron.core.models.common.rotary_pos_embedding import apply_rotary_pos_emb
-from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu, get_norm
-from megatron.core.tensor_parallel import gather_from_sequence_parallel_region_to_moe, reduce_scatter_to_sequence_parallel_region_from_moe
-from megatron.core.parallel_state import get_tensor_model_parallel_group, get_tensor_and_data_parallel_group
+from megatron.model.rotary_pos_embedding import apply_rotary_pos_emb
+from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu
+from megatron.core.parallel_state import get_tensor_model_parallel_group
+
+from .utils import ModelType, LayerType, get_norm
 
 try:
     from einops import rearrange
 except ImportError:
     rearrange = None
+
+
+def _args_to_kwargs():
+    args = get_args()
+
+    common_kwargs = {
+        "params_dtype": args.params_dtype,
+        "use_cpu_initialization": args.use_cpu_initialization,
+        "perform_initialization": args.perform_initialization,
+        "gradient_accumulation_fusion": args.gradient_accumulation_fusion,
+        "sequence_parallel_enabled": args.sequence_parallel,
+    }
+    return common_kwargs
 
 try:
     from flash_attn.flash_attn_interface import flash_attn_unpadded_func
@@ -99,17 +112,19 @@ class ParallelMLP(MegatronModule):
         if config.gated_linear_unit:
             ffn_hidden_size *= 2
 
-        # Project to 4h. If using swiglu double the output width, see https://arxiv.org/pdf/2002.05202.pdf
+        if config.hidden_size == 4096:
+            ffn_hidden_size += 256
+        elif config.hidden_size == 5120:
+            ffn_hidden_size += 128
         self.dense_h_to_4h = tensor_parallel.ColumnParallelLinear(
             config.hidden_size,
             ffn_hidden_size,
-            config=config,
-            init_method=config.init_method,
-            bias=self.add_bias,
+            bias=args.add_bias_linear,
             gather_output=False,
             skip_bias_add=True,
-            is_expert=is_expert,
-        )
+            init_method=config.init_method,
+            async_tensor_model_parallel_allreduce=args.async_tensor_model_parallel_allreduce,
+            **_args_to_kwargs())
 
         self.bias_gelu_fusion = False
         self.activation_func = None
@@ -132,17 +147,19 @@ class ParallelMLP(MegatronModule):
             self.bias_gelu_fusion = args.bias_gelu_fusion
             self.activation_func = F.gelu
 
+        if args.hidden_size == 4096:
+            ffn_hidden_size = 11008
+        elif args.hidden_size == 5120:
+            ffn_hidden_size = 13696
         # Project back to h.
         self.dense_4h_to_h = tensor_parallel.RowParallelLinear(
-            config.ffn_hidden_size,
-            config.hidden_size,
-            config=config,
-            init_method=config.output_layer_init_method,
+            ffn_hidden_size,
+            args.hidden_size,
             bias=self.add_bias,
             input_is_parallel=True,
+            init_method=config.output_layer_init_method,
             skip_bias_add=True,
-            is_expert=is_expert,
-        )
+            **_args_to_kwargs())
 
     def forward(self, hidden_states):
 
@@ -578,12 +595,14 @@ class ParallelAttention(MegatronModule):
         # Strided linear layer.
         if attention_type == AttnType.self_attn:
             self.query_key_value = tensor_parallel.ColumnParallelLinear(
-                config.hidden_size,
-                query_projection_size + 2 * kv_projection_size,
-                config=config,
-                init_method=config.init_method,
+                args.hidden_size,
+                3 * query_projection_size,
                 bias=args.add_bias_linear,
-                gather_output=False)
+                gather_output=False,
+                init_method=config.init_method,
+                async_tensor_model_parallel_allreduce=args.async_tensor_model_parallel_allreduce,
+                **_args_to_kwargs())
+
         else:
             assert attention_type == AttnType.cross_attn
 
@@ -616,15 +635,14 @@ class ParallelAttention(MegatronModule):
                 causal=True, attention_dropout=config.attention_dropout
             )
 
-        # Output.
         self.dense = tensor_parallel.RowParallelLinear(
             query_projection_size,
-            config.hidden_size,
-            config=config,
-            init_method=config.output_layer_init_method,
+            args.hidden_size,
             bias=args.add_bias_linear,
             input_is_parallel=True,
-            skip_bias_add=True)
+            init_method=config.output_layer_init_method,
+            skip_bias_add=True,
+            **_args_to_kwargs())
 
     def _checkpointed_attention_forward(self, query_layer, key_layer,
                                         value_layer, attention_mask,

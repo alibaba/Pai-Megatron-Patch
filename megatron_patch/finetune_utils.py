@@ -25,13 +25,14 @@ from megatron.core import mpu
 from megatron.utils import average_losses_across_data_parallel_group
 from megatron.utils import calc_params_l2_norm
 from megatron.utils import check_adlr_autoresume_termination
-from megatron.core.utils import get_model_config
+
 
 from .checkpointing import load_checkpoint, save_checkpoint
 from .training import evaluate_and_print_results
 from .training import setup_model_and_optimizer
 from .training import train_step
 from .training import training_log
+from .training import get_model_config
 
 
 def process_batch(batch):

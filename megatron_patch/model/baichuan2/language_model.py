@@ -13,18 +13,18 @@
 # limitations under the License.
 
 import torch
-
 from megatron import get_args
 from megatron.core import mpu, tensor_parallel
 from megatron.core.enums import ModelType
-from megatron.core.models.common.rotary_pos_embedding import RotaryEmbedding
 from megatron.model.enums import AttnMaskType
 from megatron.model.enums import LayerType
-from megatron.model.module import MegatronModule
+
 from megatron.model.utils import get_linear_layer
 from megatron.model.utils import init_method_normal
 from megatron.model.utils import scaled_init_method_normal
 
+from .utils import MegatronModule
+from .rotary_pos_embedding import RotaryEmbedding
 from .transformer import ParallelTransformer
 from .layers import linear_with_grad_accumulation_and_async_allreduce
 
@@ -59,7 +59,7 @@ def parallel_lm_logits(input_, word_embeddings_weight, parallel_output,
             bias=bias,
             gradient_accumulation_fusion=args.gradient_accumulation_fusion,
             async_grad_allreduce=async_grad_allreduce,
-            sequence_parallel=args.sequence_parallel)
+            sequence_parallel_enabled=args.sequence_parallel)
     # Gather if needed.
 
     if parallel_output:
@@ -159,9 +159,10 @@ class Embedding(MegatronModule):
                  config,
                  num_tokentypes=0):
         super(Embedding, self).__init__()
-
+        args = get_args()
         self.hidden_size = hidden_size
         self.init_method = config.init_method
+
         self.num_tokentypes = num_tokentypes
 
         args = get_args()
@@ -169,7 +170,12 @@ class Embedding(MegatronModule):
         # Word embeddings (parallel).
         self.params_dtype = args.params_dtype
         self.word_embeddings = tensor_parallel.VocabParallelEmbedding(
-            vocab_size, self.hidden_size, config=config, init_method=config.init_method)
+            vocab_size, self.hidden_size,
+            init_method=self.init_method,
+            params_dtype=args.params_dtype,
+            use_cpu_initialization=args.use_cpu_initialization,
+            perform_initialization=args.perform_initialization
+        )
         self._word_embeddings_key = 'word_embeddings'
 
         # Position embedding (serial).
@@ -354,9 +360,10 @@ class TransformerLanguageModel(MegatronModule):
         if args.untie_embeddings_and_output_weights: assert not add_decoder
         super(TransformerLanguageModel, self).__init__(share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights)
 
+
         self.pre_process = pre_process
         self.post_process = post_process
-        self.hidden_size = config.hidden_size
+        self.hidden_size = args.hidden_size
         self.num_tokentypes = num_tokentypes
         self.init_method = config.init_method
         self.add_encoder = add_encoder
@@ -435,9 +442,9 @@ class TransformerLanguageModel(MegatronModule):
                 self.output_layer = tensor_parallel.ColumnParallelLinear(
                     args.hidden_size,
                     args.padded_vocab_size,
-                    config=config,
-                    init_method=self.init_method,
-                    bias=False) # Setting bias to False always to keep it consistent with embedding tying that also does not have a bias.
+                    bias=args.add_bias_linear,
+                    gather_output=False,
+                    init_method=config.init_method)
                 self._output_layer_key = 'output_layer'
 
     def set_input_tensor(self, input_tensor):
