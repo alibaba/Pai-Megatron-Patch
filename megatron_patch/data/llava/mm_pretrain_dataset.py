@@ -56,7 +56,6 @@ def _tokenize_fn(strings: Sequence[str],
     )
 
 def _mask_targets(target, tokenized_lens, speakers):
-    # cur_idx = 0
     cur_idx = tokenized_lens[0]
     tokenized_lens = tokenized_lens[1:]
     target[:cur_idx] = IGNORE_INDEX
