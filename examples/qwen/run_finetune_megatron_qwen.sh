@@ -45,13 +45,13 @@ PRETRAIN_CHECKPOINT_PATH=${20}
 EPOCH=${21}
 OUTPUT_BASEPATH=${22}
 
-
 if [ $MODEL_SIZE = 7B ]; then
 
 NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
+rope_options=""
 
 elif [ $MODEL_SIZE = 14B ]; then
 
@@ -59,6 +59,16 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13696
+rope_options=""
+
+elif [ $MODEL_SIZE = 72B ]; then
+NUM_LAYERS=80
+HIDDEN_SIZE=8192
+NUM_ATTN_HEADS=64
+INTERMEDIATE_SIZE=24576
+
+rope_options=" \
+                    --rotary-seq-len-interpolation-factor 4"
 
 fi
 
@@ -193,7 +203,7 @@ megatron_options="  \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS finetune_megatron_qwen.py
- ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options}"
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${rope_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
