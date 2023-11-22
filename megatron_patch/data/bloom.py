@@ -39,7 +39,6 @@ class BloomDataset(torch.utils.data.Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        idx = 0
         raw_sample = self.samples[idx]
         return self.gpt_convert_example_to_feature(raw_sample, self.tokenizer,
                                                    self.max_seq_length)
