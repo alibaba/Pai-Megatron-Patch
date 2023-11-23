@@ -6,7 +6,7 @@ Pai-Megatron-Patch (https://github.com/alibaba/Pai-Megatron-Patch) is a deep lea
 ## Highlights
 Pai-Megatron-Patch is developed by the Alibaba Cloud Machine Learning Platform (PAI) algorithm team.  The tool aims to assist developers in quickly getting started with Lingjun products and completing the entire development pipeline for LLM, including efficient distributed training, supervised fine-tuning, and offline model inference or verification. It has several merits as follows:
 
-- Support for multiple commonly used LLM such as llama, llama-2, codellama, baichuan, qwen, Falcon, GLM, Starcoder, Bloom, chatglm, etc.
+- Support for multiple commonly used LLM such as llama, llama-2, codellama, baichuan, Qwen, Falcon, GLM, Starcoder, Bloom, chatglm, etc.
 - Support for model weight conversion: Mapping operator namespaces between Huggingface, Megatron, and Transformer Engine.
 - Support for FP8 training acceleration in Flash Attention 2.0 and Transformer Engine modes, ensuring training convergence.
 - Rich and user-friendly usage examples, offering best practices for the entire workflow of LLM pre-training, fine-tuning, evaluation, and inference, as well as reinforcement learning.
