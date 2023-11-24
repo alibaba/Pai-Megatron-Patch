@@ -1,5 +1,5 @@
 #!/bin/bash
-# sh run_finetune_megatron_qwen_withGA.sh dsw ../../ 7B 1 96 1e-5 1e-5 2048 2048 85 bf16 1 1 sel true false true false 1000 ../../../alpaca_zh-filter.json ../../../alpaca_zh-filter.json ../../../qianwen/qwen-7b-hf 2000 0 /mnt/output_megatron_qwen/
+# sh run_finetune_megatron_qwen_withGA.sh dsw ../../ 7B 1 96 1e-5 1e-5 2048 2048 85 bf16 1 1 sel true true true false 1000 ../../../alpaca_zh-filter.json ../../../alpaca_zh-filter.json ../../../qianwen/qwen-7b-hf 2000 0 /mnt/output_megatron_qwen/
 
 set -e
 ENV=$1
