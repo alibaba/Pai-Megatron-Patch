@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_pretrain_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 8 1e-5 1e-6 2048 2048 0 bf16 1 1 sel true true true false 100000 /mnt/llama2-datasets/wudao_llamabpe_text_document /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 10000000000 100000000 /mnt/output_patch_test
+#sh run_finetune_megatron_deepseek_withGA.sh dsw /workspace/Pai-Megatron-Patch 6.7B 1 8 1e-5 1e-6 2048 2048 0 bf16 1 1 sel true true true false 100000 alpaca.json alpaca.json 1000 10 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -42,10 +42,11 @@ SP=${17}
 TE=${18}
 SAVE_INTERVAL=${19}
 DATASET_PATH=${20}
-PRETRAIN_CHECKPOINT_PATH=${21}
-TRAIN_ITERS=${22}
-LR_WARMUP_ITERS=${23}
-OUTPUT_BASEPATH=${24}
+VALID_DATASET_PATH=${21}
+PRETRAIN_CHECKPOINT_PATH=${22}
+TRAIN_ITERS=${23}
+LR_WARMUP_ITERS=${24}
+OUTPUT_BASEPATH=${25}
 
 
 if [ $MODEL_SIZE = 7B ]; then
@@ -164,6 +165,7 @@ megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
         --split 98,2,0 \
         --train-data-path ${DATASET_PATH}
+        --valid-data-path ${VALID_DATASET_PATH}
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style linear \
@@ -209,10 +211,12 @@ megatron_options="  \
         --use-llama2-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
+        --rotary-base 100000 \
+        --rotary-scale-factor 4 \
         --disable-bias-linear
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megatron_llama.py
+run_cmd="torchrun $DISTRIBUTED_ARGS ../llama2/finetune_megatron_llama_withGA.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}

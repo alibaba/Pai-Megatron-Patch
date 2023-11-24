@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_finetune_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 1e-5 1e-6 80 81 0 bf16 1 1 sel true true true false  /mnt/llama2-datasets/wudao_train.json /mnt/llama2-datasets/wudao_valid.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 2 /mnt/output_patch_test
+#sh run_finetune_megatron_deepseek.sh dsw /workspace/Pai-Megatron-Patch 7B 1 1e-5 1e-6 80 81 0 bf16 1 1 sel true true true false  /mnt/deepseek-datasets/wudao_train.json /mnt/deepseek-datasets/wudao_valid.json /mnt/deepseek-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 2 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -202,11 +202,12 @@ megatron_options="  \
         --use-llama2-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
-        --rotary-base 1000000 \
+        --rotary-base 100000 \
+        --rotary-scale-factor 4 \
         --disable-bias-linear
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS finetune_megatron_llama.py
+run_cmd="torchrun $DISTRIBUTED_ARGS ../llama2/finetune_megatron_llama.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}

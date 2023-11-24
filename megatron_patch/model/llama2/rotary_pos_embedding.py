@@ -23,6 +23,7 @@ class RotaryEmbedding(torch.nn.Module):
                  dim,
                  max_position_embeddings=2048,
                  base=10000,
+                 scale_factor=1
                  device=None):
         super().__init__()
         inv_freq =\
@@ -35,6 +36,7 @@ class RotaryEmbedding(torch.nn.Module):
         t = torch.arange(self.max_seq_len_cached,
                          device=self.inv_freq.device,
                          dtype=self.inv_freq.dtype)
+        t = t / scale_factor
         freqs = torch.einsum('i,j->ij', t, self.inv_freq)
         # Different from paper, but it uses
         # a different permutation in order to obtain the same calculation

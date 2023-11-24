@@ -1,12 +1,11 @@
 #!/bin/bash
-# bash run_text_generation_megatron_qwen.sh dsw ../../ ../../../qianwen/qwen-7b-hf-to-mg-tp1-pp1/ 7B 1 1 1024 80 85 fp16 0 512 512 /mnt/workspace/gen.jsonl /mnt/workspace/cn_output.txt 0.85 1 1
-# bash run_text_generation_megatron_qwen.sh dsw ../../ ../../../qianwen/qwen-14b-hf-to-mg-tp1-pp1/ 14B 1 1 1024 80 213 fp16 0 512 512 /mnt/workspace/gen.jsonl /mnt/workspace/cn_output.txt 0.85 1 1
+# bash run_text_generation_megatron_deepseek.sh dsw /workspace/PAI-Megatron-Patch /mnt/llama-ckpts/Ziya-LLaMA-13B-to-megatron-tp1-pp1 13B 1 1 1024 80 0 fp16 0 512 512 /mnt/llama-datasets/gen.jsonl /mnt/llama-datasets/cn_output.txt 0.85 1 1
 set -e
 ENV=$1
-export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
-GPUS_PER_NODE=2
+GPUS_PER_NODE=1
 NNODES=1
 NODE_RANK=0
 export CUDA_DEVICE_MAX_CONNECTIONS=1
@@ -17,7 +16,7 @@ export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
 CHECKPOINT_PATH=$3
-MODEL_SIZE=$4 #7B, 14B
+MODEL_SIZE=$4  #7B, 13B, 70B
 TP=$5
 BS=$6
 SEQ_LEN=$7
@@ -41,12 +40,27 @@ HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
 
-elif [ $MODEL_SIZE = 14B ]; then
+gqa_options=""
+
+elif [ $MODEL_SIZE = 13B ]; then
 
 NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
-INTERMEDIATE_SIZE=13696
+INTERMEDIATE_SIZE=13824
+
+gqa_options=""
+
+elif [ $MODEL_SIZE = 34B ]; then
+
+NUM_LAYERS=48
+HIDDEN_SIZE=8192
+NUM_ATTN_HEADS=64
+INTERMEDIATE_SIZE=22016
+
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups 8"
 
 fi
 
@@ -93,18 +107,20 @@ rapidformer_options="  \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --max-padding-length ${PAD_LEN} \
         --use-distributed-optimizer \
-        --patch-tokenizer-type QwenTokenizer \
         --swiglu \
-        --normalization RMSNorm \
-        --use-rotary-position-embeddings \
+        --use-llama2-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
-        --disable-bias-linear \
-        --norm-epsilon 1e-6
+        --patch-tokenizer-type LLamaTokenizer \
+        --normalization RMSNorm \
+        --repetition-penalty ${REPETITION_PENALTY} \
+        --rotary-base 100000 \
+        --rotary-scale-factor 4 \
+        --disable-bias-linear
     "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS generate_text_megatron_qwen.py
- ${rapidformer_options} ${load_options} ${input_options} ${pr_options} ${model_options}"
+run_cmd="torchrun $DISTRIBUTED_ARGS ../llama2/generate_text_megatron_llama.py
+ ${rapidformer_options} ${load_options} ${input_options} ${pr_options} ${gqa_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
