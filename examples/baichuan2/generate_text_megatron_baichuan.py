@@ -25,10 +25,14 @@ class MegatronGPTPredictor(GPTPredictor):
     def model_provider(self, pre_process=True, post_process=True):
         args = get_args()
         build_tokenizer(args)
+        if args.tensor_model_parallel_size > 1 or args.pipeline_model_parallel_size > 1:
+            parallel_output = False
+        else:
+            parallel_output = True
         config = core_transformer_config_from_args(get_args())
         model = GPTModel(config,
                          num_tokentypes=0,
-                         parallel_output=True,
+                         parallel_output=parallel_output,
                          pre_process=pre_process,
                          post_process=post_process)
         return model

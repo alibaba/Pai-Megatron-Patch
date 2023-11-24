@@ -628,7 +628,8 @@ class ParallelAttention(MegatronModule):
             # https://github.com/kingoflolz/mesh-transformer-jax/
             self.rotary_emb = RotaryEmbedding(
                 rotary_dim,
-                args.max_position_embeddings
+                args.max_position_embeddings,
+                args.rotary_base
             )
         else:
             self.use_llama2_rotary_position_embeddings = False

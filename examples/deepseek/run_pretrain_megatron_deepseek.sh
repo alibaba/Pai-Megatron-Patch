@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_pretrain_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 8 1e-5 1e-6 2048 2048 0 bf16 1 1 sel true true true false 100000 /mnt/llama2-datasets/wudao_llamabpe_text_document /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 10000000000 100000000 /mnt/output_patch_test
+#sh run_pretrain_megatron_deepseek.sh dsw /workspace/Pai-Megatron-Patch 7B 1 8 1e-5 1e-6 2048 2048 0 bf16 1 1 sel true true true false 100000 /mnt/deepseek-datasets/wudao_llamabpe_text_document /mnt/deepseek-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 10000000000 100000000 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -7,12 +7,12 @@ MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=2,3
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=2
+GPUS_PER_NODE=8
 
 elif [ $ENV = dlc ]; then
 
@@ -43,8 +43,8 @@ TE=${18}
 SAVE_INTERVAL=${19}
 DATASET_PATH=${20}
 PRETRAIN_CHECKPOINT_PATH=${21}
-TRAIN_ITERS=${22}
-LR_WARMUP_ITERS=${23}
+TRAIN_TOKENS=${22}
+WARMUP_TOKENS=${23}
 OUTPUT_BASEPATH=${24}
 
 
@@ -82,8 +82,7 @@ fi
 if [ $AC = full ]; then
     activation_checkpoint_options=" \
 		    --recompute-method uniform \
-		    --recompute-granularity full \
-            --recompute-num-layers ${NUM_LAYERS}"
+		    --recompute-granularity full"
 elif [ $AC = sel ]; then
     activation_checkpoint_options=" \
         --recompute-activations"
@@ -148,7 +147,9 @@ if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
             --load $PRETRAIN_CHECKPOINT_PATH"
 fi
 
-LR_DECAY_ITERS=$( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS})
+TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 
 NAME="${ENV}-pretrain-megatron-gpt3-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
@@ -172,7 +173,6 @@ megatron_options="  \
         --weight-decay 0.1 \
         --clip-grad 1.0 \
         --init-method-std 0.006 \
-        --dataloader-type cyclic \
         --lr-decay-iters ${LR_DECAY_ITERS} \
         --lr-warmup-iters ${LR_WARMUP_ITERS} \
         --train-iters ${TRAIN_ITERS} \
@@ -196,7 +196,6 @@ megatron_options="  \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
         --dataset LLama-Pretrain-Idxmap \
-        --no-save-optim \
         --no-load-optim \
         --no-load-rng \
         --num-workers 8 \
@@ -209,10 +208,12 @@ megatron_options="  \
         --use-llama2-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
+        --rotary-base 100000 \
+        --rotary-scale-factor 4 \
         --disable-bias-linear
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megatron_llama.py
+run_cmd="torchrun $DISTRIBUTED_ARGS ../llama2/pretrain_megatron_llama.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}

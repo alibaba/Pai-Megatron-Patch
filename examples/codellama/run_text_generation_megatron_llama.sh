@@ -114,6 +114,7 @@ rapidformer_options="  \
         --patch-tokenizer-type LLamaTokenizer \
         --normalization RMSNorm \
         --repetition-penalty ${REPETITION_PENALTY} \
+        --rotary-base 1000000 \
         --disable-bias-linear
     "
 

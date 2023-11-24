@@ -1,5 +1,6 @@
 #!/bin/bash
-#sh run_finetune_megatron_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 1e-5 1e-6 80 81 0 bf16 1 1 sel true true true false  /mnt/llama2-datasets/wudao_train.json /mnt/llama2-datasets/wudao_valid.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 2 /mnt/output_patch_test
+# sh run_finetune_megatron_qwen_withGA.sh dsw ../../ 7B 1 96 1e-5 1e-5 2048 2048 85 bf16 1 1 sel true true true false 1000 ../../../alpaca_zh-filter.json ../../../alpaca_zh-filter.json ../../../qianwen/qwen-7b-hf 2000 0 /mnt/output_megatron_qwen/
+
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -24,58 +25,58 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$3  #7B, 13B, 34B
+MODEL_SIZE=$3
 BATCH_SIZE=$4
-LR=$5
-MIN_LR=$6
-SEQ_LEN=$7
-PAD_LEN=$8
-EXTRA_VOCAB_SIZE=$9
-PR=${10}
-TP=${11}
-PP=${12}
-AC=${13}
-DO=${14}
-FL=${15}
-SP=${16}
-TE=${17}
-TRAIN_DATASET_PATH=${18}
-VALID_DATASET_PATH=${19}
-PRETRAIN_CHECKPOINT_PATH=${20}
-EPOCH=${21}
-OUTPUT_BASEPATH=${22}
+GLOBAL_BATCH_SIZE=$5
+LR=$6
+MIN_LR=$7
+SEQ_LEN=$8
+PAD_LEN=$9
+EXTRA_VOCAB_SIZE=${10}
+PR=${11}
+TP=${12}
+PP=${13}
+AC=${14}
+DO=${15}
+FL=${16}
+SP=${17}
+TE=${18}
+SAVE_INTERVAL=${19}
+DATASET_PATH=${20}
+VALID_DATASET_PATH=${21}
+PRETRAIN_CHECKPOINT_PATH=${22}
+TRAIN_ITERS=${23}
+LR_WARMUP_ITERS=${24}
+OUTPUT_BASEPATH=${25}
 
 
 if [ $MODEL_SIZE = 7B ]; then
 
-NUM_LAYERS=32
+NUM_LAYERS=1
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
+rope_options=""
 
-gqa_options=""
-
-elif [ $MODEL_SIZE = 13B ]; then
+elif [ $MODEL_SIZE = 14B ]; then
 
 NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
-INTERMEDIATE_SIZE=13824
+INTERMEDIATE_SIZE=13696
+rope_options=""
 
-gqa_options=""
-
-elif [ $MODEL_SIZE = 34B ]; then
-
-NUM_LAYERS=48
+elif [ $MODEL_SIZE = 72B ]; then
+NUM_LAYERS=80
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=22016
+INTERMEDIATE_SIZE=24576
 
-gqa_options=" \
-		    --group-query-attention \
-		    --num-query-groups 8"
+rope_options=" \
+                    --rotary-seq-len-interpolation-factor 4"
 
 fi
+
 
 if [ $AC = full ]; then
     activation_checkpoint_options=" \
@@ -145,69 +146,75 @@ if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
             --load $PRETRAIN_CHECKPOINT_PATH"
 fi
 
-FT_NAME="${ENV}-finetune-megatron-llama-${MODEL_SIZE}-lr-${LR}-ep-${EPOCH}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}--do-${DO}-tp-${TP}-ac-${AC}-sp-${SP}"
+
+LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS} ))
+
+NAME="${ENV}-pretrain-megatron-qwen-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
 mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
 mkdir -p "${OUTPUT_BASEPATH}/log/"
 current_time=$(date "+%Y.%m.%d-%H.%M.%S")
-TENSORBOARD_DIR="${OUTPUT_BASEPATH}/tensorboard/${FT_NAME}_${current_time}"
+TENSORBOARD_DIR="${OUTPUT_BASEPATH}/tensorboard/${NAME}_${current_time}"
 mkdir -p ${TENSORBOARD_DIR}
 
-FINETUNE_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${FT_NAME}"
+SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 megatron_options="  \
-        --load ${PRETRAIN_CHECKPOINT_PATH} \
-        --save ${FINETUNE_CHECKPOINT_PATH} \
-        --train-data ${TRAIN_DATASET_PATH} \
-        --valid-data ${VALID_DATASET_PATH} \
+        --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
+        --split 98,2,0 \
+        --train-data-path ${DATASET_PATH}
+        --valid-data-path ${VALID_DATASET_PATH}
+        --lr ${LR} \
+        --min-lr ${MIN_LR} \
+        --lr-decay-style linear \
+        --adam-beta1 0.9 \
+        --adam-beta2 0.95 \
+        --weight-decay 0.1 \
+        --clip-grad 1.0 \
+        --init-method-std 0.006 \
+        --dataloader-type cyclic \
+        --lr-decay-iters ${LR_DECAY_ITERS} \
+        --lr-warmup-iters ${LR_WARMUP_ITERS} \
+        --train-iters ${TRAIN_ITERS} \
+        --micro-batch-size ${BATCH_SIZE} \
+        --global-batch-size ${GLOBAL_BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
         --num-attention-heads ${NUM_ATTN_HEADS} \
-        --seq-length ${SEQ_LEN} \
-        --max-position-embeddings ${SEQ_LEN}  \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
-        --keep-last \
-        --micro-batch-size ${BATCH_SIZE} \
-        --epochs ${EPOCH} \
-        --lr ${LR} \
-        --min-lr ${MIN_LR} \
-        --lr-decay-style cosine \
-        --weight-decay 0.1 \
-        --clip-grad 1.0 \
-        --adam-beta1 0.9 \
-        --adam-beta2 0.95 \
-        --init-method-std 0.01 \
-        --num-workers 0\
+        --seq-length ${SEQ_LEN} \
+        --max-position-embeddings ${SEQ_LEN} \
         --log-interval 1 \
-        --eval-interval 1000 \
+        --eval-interval 100 \
         --eval-iters 10 \
-        --save-interval 1000000 \
+        --save-interval ${SAVE_INTERVAL} \
         --tensorboard-queue-size 1 \
-        --dataset LLama-SFT \
         --tensorboard-dir ${TENSORBOARD_DIR} \
         --log-timers-to-tensorboard \
         --log-batch-size-to-tensorboard \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
-        --finetune \
+        --no-save-optim \
         --no-load-optim \
         --no-load-rng \
+        --num-workers 8 \
         --seed 1234 \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type LLamaTokenizer \
+        --patch-tokenizer-type QwenTokenizer \
+        --dataset LLama-SFT \
         --swiglu \
         --normalization RMSNorm \
-        --use-llama2-rotary-position-embeddings \
+        --use-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
-        --rotary-base 1000000 \
-        --disable-bias-linear
+        --disable-bias-linear \
+        --norm-epsilon 1e-6
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS finetune_megatron_llama.py
- ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
+run_cmd="torchrun $DISTRIBUTED_ARGS finetune_megatron_qwen_withGA.py
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${rope_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

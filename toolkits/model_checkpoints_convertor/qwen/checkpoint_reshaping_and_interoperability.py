@@ -379,11 +379,11 @@ def convert_checkpoint_from_transformers_to_megatron(args):
         if args.model_name == "qwen-7b":
             num_checkpoints = len(sub_dirs) - 1
             hf_state_dict = merge_transformers_sharded_states_7b(args.load_path, num_checkpoints)
-        elif args.model_name == "qwen-14b":
+        elif args.model_name == "qwen-14b" or args.model_name == "qwen-72b":
             from transformers import AutoModelForCausalLM
             hf_state_dict = AutoModelForCausalLM.from_pretrained(args.load_path, trust_remote_code=True).state_dict()
         else:
-            print("Unrecognized model name, choose from qwen-7b, qwen-14b!")
+            print("Unrecognized model name, choose from qwen-7b, qwen-14b, qwen-72b!")
             exit(1)
 
     config = GPT2Config.from_pretrained(args.load_path)
@@ -727,31 +727,47 @@ def convert_checkpoint_from_megatron_to_transformers(args):
         dtype = torch.bfloat16
     else:
         dtype = torch.float32
-    config = QWenConfig(
-        auto_map={
-        "AutoConfig": "configuration_qwen.QWenConfig",
-        "AutoModelForCausalLM": "modeling_qwen.QWenLMHeadModel"},
-        architectures="QWenLMHeadModel",
-        padded_vocab_size=151936,
-        n_positions=6144,
-        pos_emb="rotary",
-        params_dtype="torch.bfloat16",
-        seq_length=2048,
-        tokenizer_type="QWenTokenizer",
-        layer_norm_epsilon=1e-06,
-        resid_pdrop=0.1,
-    ) if megatron_args.hidden_size == 4096 else QWenConfig_14b(
-        auto_map={
-        "AutoConfig": "configuration_qwen.QWenConfig",
-        "AutoModelForCausalLM": "modeling_qwen.QWenLMHeadModel"},
-        architectures="QWenLMHeadModel",
-        vocab_size=152064,
-        hidden_size=5120,
-        num_hidden_layers=40,
-        num_attention_heads=40,
-        intermediate_size=27392,
-        seq_length=2048,
-    )
+    if megatron_args.hidden_size == 4096:
+        config = QWenConfig(
+            auto_map={
+            "AutoConfig": "configuration_qwen.QWenConfig",
+            "AutoModelForCausalLM": "modeling_qwen.QWenLMHeadModel"},
+            architectures="QWenLMHeadModel",
+            padded_vocab_size=151936,
+            n_positions=6144,
+            pos_emb="rotary",
+            params_dtype="torch.bfloat16",
+            seq_length=2048,
+            tokenizer_type="QWenTokenizer",
+            layer_norm_epsilon=1e-06,
+            resid_pdrop=0.1,
+        )  
+    elif megatron_args.hidden_size == 5120:
+        config = QWenConfig_14b(
+            auto_map={
+            "AutoConfig": "configuration_qwen.QWenConfig",
+            "AutoModelForCausalLM": "modeling_qwen.QWenLMHeadModel"},
+            architectures="QWenLMHeadModel",
+            vocab_size=152064,
+            hidden_size=5120,
+            num_hidden_layers=40,
+            num_attention_heads=40,
+            intermediate_size=27392,
+            seq_length=2048,
+        )
+    elif megatron_args.hidden_size == 8192:
+        config = QWenConfig_14b(
+            auto_map={
+            "AutoConfig": "configuration_qwen.QWenConfig",
+            "AutoModelForCausalLM": "modeling_qwen.QWenLMHeadModel"},
+            architectures="QWenLMHeadModel",
+            vocab_size=152064,
+            hidden_size=8192,
+            num_hidden_layers=80,
+            num_attention_heads=64,
+            intermediate_size=24576,
+            seq_length=2048,
+        )
     output_state_dict = {}
 
     checkpoint_version = state_dict.get("checkpoint_version", 3.0)

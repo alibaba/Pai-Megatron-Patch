@@ -266,4 +266,8 @@ def get_tasks_args(parser):
 
     group.add_argument('--sliding-window', type=int, default=None)
 
+    group.add_argument('--rotary-base', type=int, default=10000)
+
+    group.add_argument('--rotary-scale-factor', type=int, default=1)
+
     return parser

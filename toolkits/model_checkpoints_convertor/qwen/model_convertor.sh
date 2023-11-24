@@ -1,4 +1,5 @@
 #!/bin/bash
+# bash model_convertor.sh ../../../../Megatron-LM/ ../../../../qwen-14b-hf-to-mg-tp2-pp1/release/ ../../../../qwen-14b-mg2hf21 2 1 qwen-14b 0 true
 set -e
 START_TIME=$SECONDS
 
@@ -7,7 +8,7 @@ SOURCE_CKPT_PATH=$2
 TARGET_CKPT_PATH=$3
 TP=$4
 PP=$5
-MN=$6 #qwen-7b,qwen-14b
+MN=$6 #qwen-7b,qwen-14b,qwen-70b
 EXTRA_VOCAB_SIZE=$7
 mg2hf=$8
 

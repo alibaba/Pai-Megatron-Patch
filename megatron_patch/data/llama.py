@@ -68,7 +68,8 @@ class LLamaRawDataset(torch.utils.data.Dataset):
         self.input_ids = data_dict['input_ids']
         self.labels = data_dict['labels']
         self.samples = []
-        for inputs, labels in zip(self.input_ids, self.labels):
+        for index, (inputs, labels) in enumerate(zip(self.input_ids, self.labels)):
+            if self.tokenizer.eos_token_id not in inputs or not list_data_dict[index][key]: continue
             self.samples.append([inputs, labels])
 
         print('  >> total number of samples: {}'.format(len(self.samples)))

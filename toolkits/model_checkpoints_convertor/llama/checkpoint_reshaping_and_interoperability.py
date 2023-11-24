@@ -670,10 +670,10 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 del params_dict[dense_h_to_4h_2_layer_name]
 
                 if args.model_name == "llama2-70b":
-                    hidden_size = 8192
+                    hidden_size = config.hidden_size 
                     num_groups = 8
-                    head_dim = 128
-                    num_heads = 64
+                    head_dim = config.hidden_size // config.num_attention_heads
+                    num_heads = config.num_attention_heads
 
                     query_name = 'self_attention.query.weight'
                     query_layer_name = f"layers.{layer}.{query_name}"
@@ -789,7 +789,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     else:
         dtype = torch.float32
 
-    intermediate_size_map = {4096:11008,5120:13824,6656:17920,8192:22016 if args.model_name != "llama2-70b" else 28672}
+    intermediate_size_map = {4096:11008,5120:13824,6656:17920,7168:19200,8192:22016 if args.model_name != "llama2-70b" else 28672}
     config = LlamaConfig(
         vocab_size=vocab_size,
         hidden_size=megatron_args.hidden_size,
@@ -956,10 +956,10 @@ def convert_checkpoint_from_megatron_to_transformers(args):
             elif (
                 op_name == "attention.query_key_value" or op_name == "self_attention.query_key_value"
             ) and weight_or_bias == "weight" and args.model_name == "llama2-70b":
-                hidden_size = 8192
+                hidden_size = config.hidden_size 
                 num_groups = 8
-                head_dim = 128
-                num_heads = 64
+                head_dim = config.hidden_size // config.num_attention_heads
+                num_heads = config.num_attention_heads
 
                 tp_states = torch.chunk(params, args.target_tensor_model_parallel_size, dim=0)
                 query_dim = num_heads // num_groups * head_dim
@@ -1095,7 +1095,13 @@ def main():
     parser = add_megatron_checkpoint_args(parser)
     parser = add_transformers_checkpoint_args(parser)
     args = parser.parse_args()
-    model_map = {'codellama-7b':'llama-7b','codellama-13b':'llama-7b','codellama-34b':'llama2-70b','llama2-7b':'llama-7b','llama2-13b':'llama-7b'}
+    model_map = {'deepseek-6.7b':'llama-7b',
+                'deepseek-33b':'llama2-70b',
+                'codellama-7b':'llama-7b',
+                'codellama-13b':'llama-7b',
+                'codellama-34b':'llama2-70b',
+                'llama2-7b':'llama-7b',
+                'llama2-13b':'llama-7b'}
     args.model_name = model_map.get(args.model_name, args.model_name)
     if args.convert_checkpoint_from_megatron_to_transformers:
         convert_checkpoint_from_megatron_to_transformers(args)
