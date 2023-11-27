@@ -197,7 +197,7 @@ megatron_options="  \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
-        --dataset LLama-Pretrain-Idxmap \
+        --dataset LLama-SFT \
         --no-save-optim \
         --no-load-optim \
         --no-load-rng \
