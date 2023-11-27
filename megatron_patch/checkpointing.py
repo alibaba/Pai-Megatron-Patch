@@ -60,10 +60,13 @@ def get_checkpoint_names(checkpoints_path, iteration, use_distributed_optimizer,
                                    f'mp_rank_{tensor_rank:02d}_{pipeline_rank:03d}')
 
     if use_distributed_optimizer:
-        model_name = os.path.join(common_path, "model_rng.pt")
+        if release:
+            model_name = os.path.join(common_path, "model_rng.pt")
+        else:
+            model_name = os.path.join(common_path, "model_optim_rng.pt")
         optim_name = os.path.join(
-            common_path + "_%03d" % mpu.get_data_parallel_rank(),
-            "optim.pt")
+            common_path,
+            "distrib_optim.pt")
     else:
         model_name = optim_name = os.path.join(common_path, "model_optim_rng.pt")
     return model_name, optim_name
@@ -192,14 +195,7 @@ def _load_base_checkpoint(load_dir, use_distributed_optimizer, rank0=False):
     try:
         model_state_dict = torch.load(model_checkpoint_name,
                                       map_location='cpu')
-        if not args.no_load_optim:
-            if use_distributed_optimizer:
-                optim_state_dict = torch.load(optim_checkpoint_name,
-                                              map_location='cpu')
-            else:
-                optim_state_dict = model_state_dict
-        else:
-            optim_state_dict = None
+        optim_state_dict = None
     except ModuleNotFoundError:
         # For backward compatibility.
         if not rank0:
@@ -219,7 +215,7 @@ def _load_base_checkpoint(load_dir, use_distributed_optimizer, rank0=False):
         print_rank_0(e)
         sys.exit()
 
-    return model_state_dict, optim_state_dict, release
+    return model_state_dict, optim_state_dict, release, optim_checkpoint_name
 
 
 def load_checkpoint(model,
@@ -236,7 +232,7 @@ def load_checkpoint(model,
     load_dir = getattr(args, load_arg)
 
     model = unwrap_model(model)
-    model_state_dict, optim_state_dict, release = \
+    model_state_dict, optim_state_dict, release, optim_checkpoint_name = \
         _load_base_checkpoint(
             load_dir,
             use_distributed_optimizer=args.use_distributed_optimizer,
@@ -290,14 +286,16 @@ def load_checkpoint(model,
     if not release and not args.finetune and not args.no_load_optim:
         try:
             if optimizer is not None:
-                optimizer.load_state_dict(optim_state_dict['optimizer'])
+                optimizer.load_state_dict(model_state_dict['optimizer'])
+            if optimizer is not None and args.use_distributed_optimizer:
+                optimizer.load_parameter_state(optim_checkpoint_name)
             if opt_param_scheduler is not None:
-                if 'lr_scheduler' in optim_state_dict:  # backward compatbility
+                if 'lr_scheduler' in model_state_dict:  # backward compatbility
                     opt_param_scheduler.load_state_dict(
-                        optim_state_dict['lr_scheduler'])
+                        model_state_dict['lr_scheduler'])
                 else:
                     opt_param_scheduler.load_state_dict(
-                        optim_state_dict['opt_param_scheduler'])
+                        model_state_dict['opt_param_scheduler'])
         except KeyError:
             print_rank_0('Unable to load optimizer from checkpoint. '
                          'Specify --no-load-optim or --finetune to prevent '
