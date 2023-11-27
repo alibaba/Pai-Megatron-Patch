@@ -23,7 +23,7 @@ class RotaryEmbedding(torch.nn.Module):
                  dim,
                  max_position_embeddings=2048,
                  base=10000,
-                 scale_factor=1
+                 scale_factor=1,
                  device=None):
         super().__init__()
         inv_freq =\

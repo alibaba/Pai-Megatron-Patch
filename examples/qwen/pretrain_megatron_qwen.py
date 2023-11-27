@@ -26,7 +26,7 @@ from megatron.utils import average_losses_across_data_parallel_group
 
 from megatron_patch.data import \
     build_pretrain_dataset_from_original, build_pretrain_dataset_from_idxmap
-from megatron_patch.model.llama2.gpt_model import GPTModel
+from megatron_patch.model.qwen.gpt_model import GPTModel
 from megatron_patch.tokenizer import get_tokenizer, build_tokenizer
 from megatron_patch.training import pretrain
 from megatron_patch.arguments import get_tasks_args
