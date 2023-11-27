@@ -167,7 +167,7 @@ def _load_base_checkpoint(load_dir, use_distributed_optimizer, rank0=False):
             print_rank_0(
                 '    will not load any checkpoints and will start from '
                 'random')
-        return None, None, False
+        return None, None, False, None
 
     # Otherwise, read the tracker file and either set the iteration or
     # mark it as a release checkpoint.
