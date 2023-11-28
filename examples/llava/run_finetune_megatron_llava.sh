@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_finetune_megatron_llava.sh dsw /workspace/Pai-Megatron-Patch 7B 1 1e-5 1e-6 120 120 0 bf16 1 1 sel true false true false  /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp1-pp1/ 2 /mnt/output_patch_test
+#sh run_finetune_megatron_llava.sh dsw /workspace/Pai-Megatron-Patch 7B 1 1e-3 1e-4 2048 100 0 bf16 1 1 sel true false true false  /mnt/llava-datasets/LLaVA-Pretrain/blip_laion_cc_sbu_558k.json /mnt/llava-datasets/LLaVA-Pretrain/blip_laion_cc_sbu_558k.json /mnt/vicuna-ckpts/vicuna-7b-v1.5-to-mg-tp1-pp1/ 1 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -7,12 +7,12 @@ MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=0
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=8
+GPUS_PER_NODE=1
 
 elif [ $ENV = dlc ]; then
 
@@ -203,6 +203,7 @@ megatron_options="  \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type VicunaTokenizerFromHF \
+        --dataset LLava-SFT \
         --swiglu \
         --normalization RMSNorm \
         --use-llama2-rotary-position-embeddings \

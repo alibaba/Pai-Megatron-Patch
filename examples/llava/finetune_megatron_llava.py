@@ -16,12 +16,10 @@ from functools import partial
 import torch
 
 from megatron import get_args
-from megatron import get_timers
 from megatron.core import parallel_state, tensor_parallel
 from megatron.initialize import initialize_megatron
 from megatron.utils import average_losses_across_data_parallel_group
 from megatron.utils import get_ltor_masks_and_position_ids
-from megatron_patch.data import build_finetune_dataset
 from megatron_patch.finetune_utils import finetune
 from megatron_patch.model.llava.gpt_model import GPTModel
 from megatron_patch.tokenizer import get_tokenizer
@@ -29,7 +27,7 @@ from megatron_patch.arguments import get_tasks_args
 from megatron_patch.tokenizer import build_tokenizer
 from megatron.arguments import core_transformer_config_from_args
 from megatron_patch.data.llava.constants import IGNORE_INDEX
-from megatron_patch.data.llava.mm_pretrain_dataset import build_pretrain_llava_datasets_from_original
+from megatron_patch.data import build_finetune_dataset
 
 
 def model_provider(pre_process=True, post_process=True):
@@ -47,9 +45,7 @@ def model_provider(pre_process=True, post_process=True):
 def train_valid_test_datasets_provider():
     """Build train, valid, and test datasets."""
     args = get_args()
-    train_ds, valid_ds, test_ds = \
-        build_pretrain_llava_datasets_from_original(
-            data_prefix=args.train_data_path)
+    train_ds, valid_ds = build_finetune_dataset(args.dataset)
 
     return train_ds, valid_ds
 
