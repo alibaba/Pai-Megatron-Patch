@@ -395,6 +395,7 @@ class CoreAttention(MegatronModule):
         # ===========================
 
         # attention scores and attention mask [b, np, sq, sk]
+        attention_mask = attention_mask.to(torch.bool)
         attention_probs = self.scale_mask_softmax(attention_scores,
                                                   attention_mask)
 

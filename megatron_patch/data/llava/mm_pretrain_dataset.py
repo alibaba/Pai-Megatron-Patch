@@ -276,7 +276,4 @@ def build_pretrain_llava_datasets_from_original(data_prefix):
         return dataset
 
     train_dataset = build_dataset()
-    valid_dataset = build_dataset()
-    test_dataset = build_dataset()
-
-    return (train_dataset, valid_dataset, test_dataset)
+    return (train_dataset, train_dataset, train_dataset)
