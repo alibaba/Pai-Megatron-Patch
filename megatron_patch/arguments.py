@@ -230,6 +230,12 @@ def get_tasks_args(parser):
     group.add_argument('--tune-mm-mlp-adapter',
                        action='store_true')
 
+    group.add_argument('--freeze-clip-vision-tower',
+                       action='store_true')
+
+    group.add_argument('--freeze-llm',
+                       action='store_true')
+
     group.add_argument('--image-folder',
                        type=str,
                        default='')

@@ -18,13 +18,13 @@ from megatron import get_args
 from megatron.core import mpu, tensor_parallel
 from megatron.core.enums import ModelType
 from megatron.model.enums import AttnMaskType
-from megatron.model.enums import LayerType
 from megatron.model.module import MegatronModule
 from megatron.model.utils import get_linear_layer
 from megatron.model.utils import init_method_normal
 from megatron.model.utils import scaled_init_method_normal
 from megatron.core.models.common.rotary_pos_embedding import RotaryEmbedding
 
+from megatron_patch.model.mistral.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from megatron_patch.data.llava.constants import IMAGE_TOKEN_INDEX
 from .clip_encoder import CLIPVisionTower
 from .mm_projector_builder import build_vision_projector
@@ -363,6 +363,11 @@ class TransformerLanguageModel(MegatronModule):
 
         self.vision_tower = CLIPVisionTower(self.args.vision_tower)
         self.vision_tower.to(torch.half if self.args.fp16 else torch.bfloat16)
+
+        if self.args.freeze_clip_vision_tower:
+            for param in self.vision_tower.parameters():
+                param.requires_grad = False
+
         self.args.mm_hidden_size = self.vision_tower.hidden_size
         self.args.mm_projector_type = 'linear'
         self.mm_projector = build_vision_projector(self.args)
@@ -377,6 +382,10 @@ class TransformerLanguageModel(MegatronModule):
                                        config,
                                        self.num_tokentypes)
             self._embedding_key = 'embedding'
+
+            if self.args.freeze_llm:
+                for param in self.embedding.parameters():
+                    param.requires_grad = False
 
         # Rotary positional embeddings
         if self.args.use_rotary_position_embeddings:
@@ -399,8 +408,6 @@ class TransformerLanguageModel(MegatronModule):
             self.use_rotary_position_embeddings = False
 
 
-        # Encoder (usually set to True, False if part of an encoder-decoder
-        # architecture and in encoder-only stage).
         if self.add_encoder:
             self.encoder = ParallelTransformer(
                 config,
@@ -411,29 +418,12 @@ class TransformerLanguageModel(MegatronModule):
                 post_process=self.post_process,
             )
             self._encoder_key = 'encoder'
-        else:
-            self.encoder = None
 
-        # Decoder (usually set to False, True if part of an encoder-decoder
-        # architecture and in decoder-only stage).
-        if self.add_decoder:
-            self.decoder = ParallelTransformer(
-                config,
-                model_type=self.args.model_type,
-                layer_type=LayerType.decoder,
-                self_attn_mask_type=self.decoder_attn_mask_type,
-                pre_process=self.pre_process,
-                post_process=self.post_process)
-            self._decoder_key = 'decoder'
-        else:
-            self.decoder = None
+            if self.args.freeze_llm:
+                for param in self.encoder.parameters():
+                    param.requires_grad = False
 
         if self.post_process:
-            # Pooler.
-            if self.add_pooler:
-                self.pooler = Pooler(self.hidden_size, self.init_method)
-                self._pooler_key = 'pooler'
-
             if self.untie_embeddings_and_output_weights:
                 self.output_layer = tensor_parallel.ColumnParallelLinear(
                     self.args.hidden_size,
@@ -442,6 +432,10 @@ class TransformerLanguageModel(MegatronModule):
                     init_method=self.init_method,
                     bias=False) # Setting bias to False always to keep it consistent with embedding tying that also does not have a bias.
                 self._output_layer_key = 'output_layer'
+
+                if self.args.freeze_llm:
+                    for param in self.output_layer.parameters():
+                        param.requires_grad = False
 
     def encode_images(self, images):
         image_features = self.vision_tower(images)
@@ -536,15 +530,12 @@ class TransformerLanguageModel(MegatronModule):
         encoder_input = torch.cat(new_input_embeds, dim=1)
         if enc_attn_mask is not None:
             batch_size = enc_input_ids.shape[0]
-            new_attn_mask_pad_left = torch.full((enc_attn_mask.shape[0], 1,
-                                                 encoder_input.shape[0] - enc_input_ids.shape[1],
-                                                 encoder_input.shape[0] - enc_input_ids.shape[1]), True, dtype=enc_attn_mask.dtype, device=enc_attn_mask.device)
-            img_seq_len = encoder_input.shape[0] - enc_input_ids.shape[1]
-            text_seq_len = enc_attn_mask.shape[-1]
-            total_seq_len = img_seq_len + text_seq_len
-            new_enc_attn_mask = torch.empty((batch_size, 1, total_seq_len, total_seq_len), dtype=enc_attn_mask.dtype, device=enc_attn_mask.device)
-            new_enc_attn_mask[:, :, img_seq_len:, img_seq_len:] = enc_attn_mask
-            new_enc_attn_mask[:, :, :img_seq_len, :img_seq_len] = new_attn_mask_pad_left
+            new_enc_attn_mask = _prepare_4d_causal_attention_mask(
+                enc_attn_mask,
+                (batch_size, encoder_input.shape[0]),
+                encoder_input,
+                0
+            )
 
         enc_attn_mask = new_enc_attn_mask
         # Retriever embedding.

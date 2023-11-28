@@ -173,7 +173,7 @@ class LazySupervisedDataset(torch.utils.data.Dataset):
     def __init__(self, data_path: str):
         super(LazySupervisedDataset, self).__init__()
         self.args = get_args()
-        self.list_data_dict = json.load(open(data_path, "r"))
+        self.list_data_dict = json.load(open(data_path[0], "r"))
         self.tokenizer = get_tokenizer()
         if self.args.version in conversation_lib.conv_templates:
             conversation_lib.default_conversation = conversation_lib.conv_templates[self.args.version]
@@ -264,19 +264,3 @@ class LazySupervisedDataset(torch.utils.data.Dataset):
             crop_size = self.image_processor.crop_size
             data_dict['image'] = torch.zeros(3, crop_size['height'], crop_size['width'])
         return data_dict
-
-def build_pretrain_llava_datasets_from_original(data_prefix):
-    """
-    Build train, valid, and test datasets for pretraining a LLAMA model on original format data.
-    """
-    def build_dataset():
-
-        dataset = LazySupervisedDataset(data_prefix[0])
-
-        return dataset
-
-    train_dataset = build_dataset()
-    valid_dataset = build_dataset()
-    test_dataset = build_dataset()
-
-    return (train_dataset, valid_dataset, test_dataset)

@@ -286,6 +286,13 @@ def get_model(model_provider_func, model_type=ModelType.encoder_or_decoder, wrap
             sum([sum([p.nelement() for p in model_module.parameters()])
                  for model_module in model])), flush=True)
 
+        print(' > number of trainable parameters on (tensor, pipeline) '
+              'model parallel rank ({}, {}): {}'.format(
+            mpu.get_tensor_model_parallel_rank(),
+            mpu.get_pipeline_model_parallel_rank(),
+            sum([sum([p.nelement() for p in model_module.parameters() if p.requires_grad == True])
+                 for model_module in model])), flush=True)
+
     # GPU allocation.
     for model_module in model:
         model_module.cuda(torch.cuda.current_device())

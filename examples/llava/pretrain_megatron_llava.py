@@ -23,7 +23,7 @@ from megatron import get_timers
 from megatron.core import tensor_parallel
 from megatron.utils import average_losses_across_data_parallel_group
 
-from megatron_patch.data.llava.mm_pretrain_dataset import build_pretrain_llava_datasets_from_original
+from megatron_patch.data import build_pretrain_dataset_from_original
 from megatron_patch.model.llava.gpt_model import GPTModel
 from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
@@ -110,8 +110,7 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     """Build train, valid, and test datasets."""
     args = get_args()
     train_ds, valid_ds, test_ds = \
-        build_pretrain_llava_datasets_from_original(
-            data_prefix=args.data_path)
+        build_pretrain_dataset_from_original(args.dataset)
 
     return train_ds, valid_ds, test_ds
 

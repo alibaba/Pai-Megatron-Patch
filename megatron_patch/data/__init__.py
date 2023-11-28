@@ -24,6 +24,7 @@ from megatron import get_args
 from megatron_patch.tokenizer import build_tokenizer
 from .mistral import MistralRawDataset,  MistralIdxMapDataset
 from .llama import LLamaRawDataset, LLamaIdxMapDataset
+from .llava.mm_pretrain_dataset import LazySupervisedDataset
 
 def build_evaluation_dataset(dataset):
 
@@ -52,6 +53,11 @@ def build_finetune_dataset(dataset):
         valid_dataset = MistralRawDataset(args.valid_data_path, args.max_padding_length)
 
         return train_dataset, valid_dataset
+    elif dataset == 'LLava-SFT':
+        train_dataset = LazySupervisedDataset(args.train_data_path)
+        valid_dataset = LazySupervisedDataset(args.valid_data_path)
+
+        return train_dataset, valid_dataset
     else:
         raise NotImplementedError('dataset {} is not implemented.'.format(dataset))
 
@@ -61,16 +67,26 @@ def build_pretrain_dataset_from_original(dataset):
     build_tokenizer(args)
     if dataset == 'LLama-Pretrain-Raw':
         train_dataset = LLamaRawDataset(args.train_data_path, args.max_padding_length)
+        valid_dataset = LLamaRawDataset(args.valid_data_path, args.max_padding_length)
+        test_dataset = LLamaRawDataset(args.test_data_path, args.max_padding_length)
         # customize your validation and test dataset here
 
-        return train_dataset, train_dataset, train_dataset
+        return train_dataset, valid_dataset, test_dataset
 
     elif dataset == 'Mistral-Pretrain-Raw':
         train_dataset = MistralRawDataset(args.train_data_path, args.max_padding_length)
-        valid_dataset = MistralRawDataset(args.train_data_path, args.max_padding_length)
-        test_dataset = MistralRawDataset(args.train_data_path, args.max_padding_length)
+        valid_dataset = MistralRawDataset(args.valid_data_path, args.max_padding_length)
+        test_dataset = MistralRawDataset(args.test_data_path, args.max_padding_length)
 
         return train_dataset, valid_dataset, test_dataset
+
+    elif dataset == 'LLava-Pretrain-Raw':
+        train_dataset = LazySupervisedDataset(args.train_data_path)
+        valid_dataset = LazySupervisedDataset(args.valid_data_path)
+        test_dataset = LazySupervisedDataset(args.test_data_path)
+
+        return train_dataset, valid_dataset, test_dataset
+
     else:
         raise NotImplementedError('dataset {} is not implemented.'.format(dataset))
 
@@ -172,12 +188,12 @@ def _build_train_valid_test_datasets(data_prefix, max_padding_length, dataset_ty
                                   stop=splits[index + 1],
                                   step=1,
                                   dtype=np.int32)
-            if dataset_type == 'LLama-Pretrain-IdxMap':
+            if dataset_type == 'LLama-Pretrain-Idxmap':
                 dataset = LLamaIdxMapDataset(
                     name, data_prefix, documents, indexed_dataset,
                     train_valid_test_num_samples[index],
                     seed, max_padding_length, return_doc_ids)
-            elif dataset_type == 'Mistral-Pretrain-IdxMap':
+            elif dataset_type == 'Mistral-Pretrain-Idxmap':
                 dataset = MistralIdxMapDataset(
                     name, data_prefix, documents, indexed_dataset,
                     train_valid_test_num_samples[index],
