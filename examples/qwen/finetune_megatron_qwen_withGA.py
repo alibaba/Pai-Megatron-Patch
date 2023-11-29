@@ -46,14 +46,15 @@ def model_provider(pre_process=True, post_process=True):
 def forward_step(data_iterator, model):
     args = get_args()
     tokenizer = get_tokenizer()
-
+    keys = ['input_ids', 'labels']
     try:
         data_iterator = next(data_iterator)
     except BaseException:
         data_iterator = data_iterator
-
-    tokens = data_iterator['input_ids'].long().cuda().contiguous()
-    labels = data_iterator['labels'].long().cuda().contiguous()
+    datatype = torch.int64
+    data_b = tensor_parallel.broadcast_data(keys, data_iterator, datatype)
+    tokens = data_b['input_ids'].long().cuda().contiguous()
+    labels = data_b['labels'].long().cuda().contiguous()
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         labels,
         tokenizer.pad_token_id,

@@ -214,8 +214,9 @@ megatron_options="  \
         --norm-epsilon 1e-6
         "
 
+
 run_cmd="torchrun $DISTRIBUTED_ARGS finetune_megatron_qwen_withGA.py
-${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${rope_options}"
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${rope_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
