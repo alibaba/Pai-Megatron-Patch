@@ -83,6 +83,7 @@ class QWenTokenizer(PreTrainedTokenizer):
         self.tokenizer = enc  # type: tiktoken.Encoding
 
         self.eod_id = self.tokenizer.eot_token
+        self.pad_id = self.special_tokens['<|extra_0|>']
         self.im_start_id = self.special_tokens[IMSTART]
         self.im_end_id = self.special_tokens[IMEND]
 

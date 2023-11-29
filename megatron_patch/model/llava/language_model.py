@@ -369,7 +369,6 @@ class TransformerLanguageModel(MegatronModule):
                 param.requires_grad = False
 
         self.args.mm_hidden_size = self.vision_tower.hidden_size
-        self.args.mm_projector_type = 'linear'
         self.mm_projector = build_vision_projector(self.args)
         self.mm_projector.to(torch.half if self.args.fp16 else torch.bfloat16)
 
