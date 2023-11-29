@@ -52,7 +52,7 @@ OUTPUT_BASEPATH=${25}
 
 if [ $MODEL_SIZE = 7B ]; then
 
-NUM_LAYERS=1
+NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
@@ -162,8 +162,9 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
         --split 98,2,0 \
-        --train-data-path ${DATASET_PATH}
-        --valid-data-path ${VALID_DATASET_PATH}
+        --train-data-path ${DATASET_PATH} \
+        --valid-data-path ${VALID_DATASET_PATH} \
+        --test-data-path ${VALID_DATASET_PATH} \
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style linear \
@@ -203,7 +204,7 @@ megatron_options="  \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type QwenTokenizer \
-        --dataset LLama-SFT \
+        --dataset LLama-Pretrain-Raw \
         --swiglu \
         --normalization RMSNorm \
         --use-rotary-position-embeddings \
@@ -213,7 +214,7 @@ megatron_options="  \
         --norm-epsilon 1e-6
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS finetune_megatron_qwen_withGA.py
+run_cmd="torchrun $DISTRIBUTED_ARGS finetune_megatron_llama_withGA.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${rope_options}"
 
 echo ${run_cmd}

@@ -8,7 +8,7 @@ SOURCE_CKPT_PATH=$2
 TARGET_CKPT_PATH=$3
 TP=$4
 PP=$5
-MN=$6 #qwen-7b,qwen-14b,qwen-70b
+MN=$6 #qwen-7b,qwen-14b,qwen-72b
 EXTRA_VOCAB_SIZE=$7
 mg2hf=$8
 
