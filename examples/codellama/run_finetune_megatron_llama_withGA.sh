@@ -164,8 +164,9 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
         --split 98,2,0 \
-        --train-data-path ${DATASET_PATH}
-        --valid-data-path ${VALID_DATASET_PATH}
+        --train-data-path ${DATASET_PATH} \
+        --valid-data-path ${VALID_DATASET_PATH} \
+        --test-data-path ${VALID_DATASET_PATH} \
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style linear \
@@ -197,7 +198,7 @@ megatron_options="  \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
-        --dataset LLama-SFT \
+        --dataset LLama-Pretrain-Raw \
         --no-save-optim \
         --no-load-optim \
         --no-load-rng \
@@ -215,7 +216,7 @@ megatron_options="  \
         --disable-bias-linear
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS finetune_megatron_llama_withGA.py
+run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megatron_llama.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}

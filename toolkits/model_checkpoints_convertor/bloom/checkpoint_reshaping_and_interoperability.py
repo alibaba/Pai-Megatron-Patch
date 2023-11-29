@@ -314,7 +314,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     possible_sub_dirs = ["mp_rank_00", "mp_rank_00_000"]
     for sub_dir in possible_sub_dirs:
         if sub_dir in sub_dirs:
-            rank0_checkpoint_name = os.listdir(os.path.join(args.load_path, sub_dir))[0]
+            rank0_checkpoint_name = [i for i in os.listdir(os.path.join(args.load_path, sub_dir)) if 'rng' in i][0]
             rank0_checkpoint_path = os.path.join(args.load_path, sub_dir, rank0_checkpoint_name)
             break
     print(f"Loading Megatron-LM checkpoint arguments from: {rank0_checkpoint_path}")
