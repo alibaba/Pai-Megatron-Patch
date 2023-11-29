@@ -20,13 +20,12 @@ from megatron.core.enums import ModelType
 from megatron.utils import get_ltor_masks_and_position_ids
 from megatron.arguments import core_transformer_config_from_args
 from megatron import get_args
-from megatron import get_timers
 from megatron.core import tensor_parallel
 from megatron.utils import average_losses_across_data_parallel_group
 
 from megatron_patch.data import \
     build_pretrain_dataset_from_original, build_pretrain_dataset_from_idxmap
-from megatron_patch.model.llama2.gpt_model import GPTModel
+from megatron_patch.model.qwen.gpt_model import GPTModel
 from megatron_patch.tokenizer import get_tokenizer, build_tokenizer
 from megatron_patch.training import pretrain
 from megatron_patch.arguments import get_tasks_args
@@ -43,34 +42,6 @@ def model_provider(pre_process=True, post_process=True):
         post_process=post_process
     )
     return model
-
-def get_batch(data_iterator):
-    """Generate a batch"""
-    args = get_args()
-    tokenizer = get_tokenizer()
-    datatype = torch.int64
-
-    keys = ['input_ids', 'labels']
-    if data_iterator is not None:
-        data = next(data_iterator)
-    else:
-        data = None
-    data_b = tensor_parallel.broadcast_data(keys, data, datatype)
-    tokens_ = data_b['input_ids'].long()
-    labels_for_mask = data_b['labels'].long()[:, :-1].contiguous()
-
-    labels = tokens_[:, 1:].contiguous()
-    tokens = tokens_[:, :-1].contiguous()
-
-    # Get the masks and postition ids.
-    attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-        labels_for_mask,
-        tokenizer.pad_token_id,
-        args.reset_position_ids,
-        args.reset_attention_mask,
-        True)
-
-    return tokens, labels, loss_mask, attention_mask, position_ids
 
 def forward_step(data_iterator, model):
     args = get_args()
