@@ -1865,6 +1865,9 @@ class ParallelTransformer(MegatronModule):
                 state_dict_[key] = state_dict[key]
 
         if args.use_llama2_rotary_position_embeddings:
-            super().load_state_dict(state_dict_, strict)
+            try:
+                super().load_state_dict(state_dict_, strict)
+            except:
+                super().load_state_dict(state_dict_, False)
         else:
             super().load_state_dict(state_dict_, False)
