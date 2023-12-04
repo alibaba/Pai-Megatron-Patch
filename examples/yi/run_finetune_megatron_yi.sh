@@ -181,7 +181,8 @@ megatron_options="  \
         --dataset LLama-SFT \
         --swiglu \
         --normalization RMSNorm \
-        --use-rotary-position-embeddings \
+        --rotary-base 5000000 \
+        --use-llama2-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear

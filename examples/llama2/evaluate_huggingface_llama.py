@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 import torch
 from transformers import AutoModelForCausalLM
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
@@ -20,7 +19,6 @@ from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 from megatron.core.enums import ModelType
 from megatron import get_args
 from megatron import print_rank_0
-from megatron import is_last_rank
 from megatron.core import parallel_state
 from megatron.core.pipeline_parallel.p2p_communication import send_forward
 from megatron.initialize import initialize_megatron
@@ -29,7 +27,7 @@ from megatron.model import Float16Module
 from megatron.utils import unwrap_model
 from megatron.arguments import core_transformer_config_from_args
 
-from megatron_patch.data.evaluate_dataset import build_evaluation_dataset
+from megatron_patch.data import build_evaluation_dataset
 from megatron_patch.finetune_utils import build_data_loader
 from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
@@ -57,6 +55,7 @@ def forward_step(batch, model):
     # Get the batch.
     input_ids = batch['input_ids'].long().cuda()
     labels = batch['labels'].long().cuda()
+    labels[labels == 0] = -100
     attention_mask = input_ids.ne(tokenizer.pad_token_id)
 
     # Tell the model what our actual batch size will be
@@ -101,45 +100,6 @@ def evaluate(data_loader, model):
                 total_output += output
 
     return total_output
-
-
-def evaluate_and_print_results(task, data_loader, model, eval_metric):
-    """Evaluate and print results on screen."""
-
-    # Evaluate and get results.
-    output = evaluate(data_loader, model, eval_metric)
-
-    string = ' validation results on {} | '.format(task)
-    if is_last_rank():
-        if eval_metric == 'loss':
-            num_tokenized_tokens = data_loader.dataset.num_tokenized_tokens
-            num_original_tokens = data_loader.dataset.num_original_tokens
-            val_loss = output / (num_tokenized_tokens - 1)
-            ppl = math.exp(min(20, val_loss))
-            token_ratio = (num_tokenized_tokens - 1) / (num_original_tokens -
-                                                        1)
-            adjusted_ppl = math.exp(min(20, val_loss * token_ratio))
-            string += 'avg loss: {:.4E} | '.format(val_loss)
-            string += 'ppl: {:.4E} | '.format(ppl)
-            string += 'adjusted ppl: {:.4E} | '.format(adjusted_ppl)
-            string += 'token ratio: {} |'.format(token_ratio)
-
-        elif eval_metric == 'accuracy':
-            num_examples = len(data_loader.dataset)
-            acc = output / num_examples
-            string += 'number correct: {:.4E} | '.format(output)
-            string += 'total examples: {:.4E} | '.format(num_examples)
-            string += 'avg accuracy: {:.4E}'.format(acc)
-
-        else:
-            raise NotImplementedError('evaluation method for {} metric is not '
-                                      'implemented yet.'.format(eval_metric))
-
-        length = len(string) + 1
-        print('-' * length)
-        print(string)
-        print('-' * length)
-
 
 def main():
     """Main program."""

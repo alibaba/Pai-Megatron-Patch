@@ -74,7 +74,7 @@ fi
 
 megatron_options=" \
         --transformer-type huggingface \
-        --data-path ${DATASET_PATH}
+        --valid-data-path ${DATASET_PATH}
         --micro-batch-size ${BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
