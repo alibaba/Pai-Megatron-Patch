@@ -161,7 +161,7 @@ megatron_options=" \
         --dataset LLama-SFT \
         --seed 1234 \
         --num-workers 0 \
-        --dataset LLama-SFT \
+        --dataset LLama-Pretrain-Raw \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type LLamaTokenizer \
