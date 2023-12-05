@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import torch
-from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
+from megatron_patch.data import \
+    build_pretrain_dataset_from_original, build_pretrain_dataset_from_idxmap
 
 from megatron.core.enums import ModelType
 from megatron import get_args
@@ -22,15 +23,11 @@ from megatron.core import parallel_state, tensor_parallel
 from megatron.core.pipeline_parallel.p2p_communication import recv_forward
 from megatron.core.pipeline_parallel.p2p_communication import send_forward
 from megatron.initialize import initialize_megatron
-from megatron.model import DistributedDataParallel as LocalDDP
-from megatron.model import Float16Module
 from megatron.utils import unwrap_model
 from megatron.utils import get_ltor_masks_and_position_ids
-from megatron import get_timers
 from megatron.arguments import core_transformer_config_from_args
 
 from megatron_patch.checkpointing import load_checkpoint
-from megatron_patch.data import build_evaluation_dataset
 from megatron_patch.finetune_utils import build_data_loader
 from megatron_patch.model.mistral.gpt_model import GPTModel
 from megatron_patch.arguments import get_tasks_args
@@ -67,12 +64,11 @@ def get_batch(batch):
 
     # Unpack.
     tokens_ = data_b['input_ids'].long()
-    labels = data_b['labels'].long().cuda()
-    tokens = tokens_.contiguous().cuda()
-    attention_mask = tokens.ne(tokenizer.pad_token_id)
+    labels = tokens_[:, 1:].contiguous()
+    tokens = tokens_[:, :-1].contiguous()
     # Get the masks and postition ids.
-    _, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-        labels,
+    attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+        tokens,
         tokenizer.pad_token_id,
         args.reset_position_ids,
         args.reset_attention_mask,
@@ -81,34 +77,31 @@ def get_batch(batch):
 
 def forward_step(batch, model):
     """Forward step."""
-    args = get_args()
-    timers = get_timers()
-    # Get the batch.
-    timers('batch-generator', log_level=2).start()
+
     tokens, labels, loss_mask, attention_mask, position_ids = get_batch(
         batch)
-    timers('batch-generator').stop()
+
     # Tell the model what our actual batch size will be
+    args = get_args()
     args.micro_batch_size = len(labels)
-    input_tensor = recv_forward(tokens.shape, tokens.dtype)
+    config = core_transformer_config_from_args(args)
+    tensor_shape = (args.seq_length, args.micro_batch_size, args.hidden_size)
+    input_tensor = recv_forward(tensor_shape, config)
 
     # Forward pass through the model.
-    unwrapped_model = unwrap_model(model, (torchDDP, LocalDDP, Float16Module))
+    unwrapped_model = unwrap_model(model)
     unwrapped_model.set_input_tensor(input_tensor)
-    logits = unwrapped_model(input_ids=tokens,
-                             position_ids=position_ids,
-                             attention_mask=attention_mask)
-    shift_logits = logits[..., :-1, :].contiguous()
-    shift_labels = labels[..., 1:].contiguous()
-    loss_mask = loss_mask[..., 1:].contiguous()
-    config = core_transformer_config_from_args(args)
-    send_forward(shift_logits, config)
-    if parallel_state.is_pipeline_last_stage():
+    output = model(tokens, position_ids, attention_mask)
+    send_forward(output, config)
+    #if parallel_state.is_pipeline_last_stage():
+    if output.shape[-1] != args.hidden_size:
+        loss_mask = loss_mask.view(-1).float()
+        # For loss, return the unreduced loss.
         losses = tensor_parallel.vocab_parallel_cross_entropy(
-            shift_logits.contiguous().float(), shift_labels.contiguous())
+            output.contiguous().float(), labels.contiguous())
         loss = torch.sum(
-            losses.view(-1) *
-            loss_mask.contiguous().view(-1).float()) / loss_mask.sum()
+            losses.view(-1) * loss_mask.contiguous().view(-1).float()) / loss_mask.sum()
+        print(loss)
         print_rank_0(loss)
         return loss
 
@@ -150,7 +143,9 @@ def main():
         exit()
 
     # Data stuff.
-    dataset = build_evaluation_dataset(args.dataset)
+    #dataset = build_evaluation_dataset(args.dataset)
+    dataset, _, _ = \
+        build_pretrain_dataset_from_original(args.dataset)
     dataloader = build_data_loader(dataset,
                                    args.micro_batch_size,
                                    args.num_workers,

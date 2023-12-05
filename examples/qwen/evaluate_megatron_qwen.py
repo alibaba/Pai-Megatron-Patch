@@ -13,9 +13,6 @@
 # limitations under the License.
 
 import torch
-from megatron_patch.data import \
-    build_pretrain_dataset_from_original, build_pretrain_dataset_from_idxmap
-
 from megatron.core.enums import ModelType
 from megatron import get_args
 from megatron import print_rank_0
@@ -23,16 +20,14 @@ from megatron.core import parallel_state, tensor_parallel
 from megatron.core.pipeline_parallel.p2p_communication import recv_forward
 from megatron.core.pipeline_parallel.p2p_communication import send_forward
 from megatron.initialize import initialize_megatron
-from megatron.model import DistributedDataParallel as LocalDDP
-from megatron.model import Float16Module
 from megatron.utils import unwrap_model
 from megatron.utils import get_ltor_masks_and_position_ids
-from megatron import get_timers
 from megatron.arguments import core_transformer_config_from_args
 
+from megatron_patch.data import build_evaluation_dataset
 from megatron_patch.checkpointing import load_checkpoint
 from megatron_patch.finetune_utils import build_data_loader
-from megatron_patch.model.qwen.gpt_model import GPTModel
+from megatron_patch.model.llama2.gpt_model import GPTModel
 from megatron_patch.arguments import get_tasks_args
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import get_model
@@ -146,9 +141,7 @@ def main():
         exit()
 
     # Data stuff.
-    #dataset = build_evaluation_dataset(args.dataset)
-    dataset, _, _ = \
-        build_pretrain_dataset_from_original(args.dataset)
+    dataset = build_evaluation_dataset(args.dataset)
     dataloader = build_data_loader(dataset,
                                    args.micro_batch_size,
                                    args.num_workers,

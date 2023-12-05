@@ -30,10 +30,10 @@ def build_evaluation_dataset(dataset):
 
     args = get_args()
     build_tokenizer(args)
-    if dataset == 'LLama-SFT':
+    if dataset == 'LLama-SFT' or dataset == 'LLama-Pretrain-Raw':
         val_dataset = LLamaRawDataset(args.valid_data_path, args.max_padding_length)
         return val_dataset
-    elif dataset == 'Mistral-SFT':
+    elif dataset == 'Mistral-SFT' or dataset == 'Mistral-Pretrain-Raw':
         val_dataset = MistralRawDataset(args.valid_data_path, args.max_padding_length)
         return val_dataset
     else:
