@@ -149,10 +149,9 @@ megatron_options=" \
         --pipeline-model-parallel-size ${PP} \
         --no-load-optim \
         --no-load-rng \
-        --dataset LLama-SFT \
         --seed 1234 \
         --num-workers 0 \
-        --dataset LLama-SFT \
+        --dataset LLama-Pretrain-Raw \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type LLamaTokenizer \
