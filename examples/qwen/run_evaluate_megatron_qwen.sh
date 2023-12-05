@@ -1,5 +1,6 @@
 #!/bin/bash
-#sh run_evaluate_megatron_qwen_pretrain.sh dsw /workspace/Pai-Megatron-Patch 72B 1 2048 2048 213 bf16 4 2 sel true true false false /mnt/qwen-datasets/alpaca_zh.json /mnt/qwen-ckpts/Qwen-72B-Chat_v0_5_sharded-tp4-pp2
+#sh run_evaluate_megatron_qwen.sh dsw /workspace/Pai-Megatron-Patch 7B 1 2048 2048 85 bf16 2 1 sel true false false false /mnt/qwen-datasets/alpaca_zh.json /mnt/qwen-ckpts/qwen-7b-hf-to-mg-tp2-pp1
+#sh run_evaluate_megatron_qwen.sh dsw /workspace/Pai-Megatron-Patch 72B 1 2048 2048 213 bf16 4 2 sel true true false false /mnt/qwen-datasets/alpaca_zh.json /mnt/qwen-ckpts/Qwen-72B-Chat_v0_5_sharded-tp4-pp2
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -7,7 +8,7 @@ MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=6,7
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
@@ -139,7 +140,7 @@ fi
 
 
 megatron_options=" \
-        --train-data-path ${DATASET_PATH}
+        --valid-data-path ${DATASET_PATH}
         --micro-batch-size ${BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \

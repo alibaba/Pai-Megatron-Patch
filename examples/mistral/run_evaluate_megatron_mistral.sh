@@ -125,7 +125,7 @@ fi
 
 
 megatron_options=" \
-        --valid-data-path ${DATASET_PATH}
+        --train-data-path ${DATASET_PATH}
         --micro-batch-size ${BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
@@ -145,7 +145,7 @@ megatron_options=" \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type MistralTokenizer \
-        --dataset Mistral-SFT \
+        --dataset LLama-Pretrain-Raw \
         --sliding-window ${SLW} \
         --swiglu \
         --normalization RMSNorm \

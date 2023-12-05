@@ -1,7 +1,7 @@
 #!/bin/bash
-# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 7B 1 2048 2048 0 bf16 2 1 sel true true true false /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base-to-mg-tp2-pp1
-# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 13B 1 2048 2048 0 bf16 2 1 sel true false true false /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-13B-Base-to-mg-tp2-pp1
-# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 7B 1 2048 2048 0 bf16 2 1 sel true false true true /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base-to-te-tp2-pp1
+# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 7B 1 2048 2048 0 bf16 2 2 sel true false false false /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base-to-mg-tp2-pp2
+# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 13B 1 2048 2048 0 bf16 2 1 sel true false false false /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-13B-Base-to-mg-tp2-pp1
+# sh run_evaluate_megatron_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 7B 1 2048 2048 0 bf16 2 1 sel true false false true /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base-to-te-tp2-pp1
 
 set -e
 ENV=$1
@@ -10,12 +10,12 @@ MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=6,7
+export CUDA_VISIBLE_DEVICES=4,5,6,7
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=2
+GPUS_PER_NODE=4
 
 elif [ $ENV = dlc ]; then
 
@@ -154,7 +154,7 @@ megatron_options=" \
         --no-load-rng \
         --seed 1234 \
         --num-workers 0 \
-        --dataset LLama-SFT \
+        --dataset LLama-Pretrain-Raw \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type BaichuanTokenizer \

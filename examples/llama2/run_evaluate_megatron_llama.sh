@@ -163,7 +163,7 @@ megatron_options=" \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type LLamaTokenizer \
-        --dataset LLama-SFT \
+        --dataset LLama-Pretrain-Raw \
         --swiglu \
         --normalization RMSNorm \
         --use-llama2-rotary-position-embeddings \
