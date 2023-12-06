@@ -63,16 +63,15 @@ def get_batch(batch):
     tokens = data_b['input_ids'].long().cuda().contiguous()
     labels = data_b['labels'].long().cuda().contiguous()
 
+    tokens = tokens[:, :-1].contiguous()
+    labels = labels[:, 1:].contiguous()
+
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         labels,
         tokenizer.pad_token_id,
         args.reset_position_ids,
         args.reset_attention_mask,
         True)
-
-    tokens = tokens[:, :-1].contiguous()
-    labels = labels[:, 1:].contiguous()
-    loss_mask = loss_mask[..., 1:].contiguous()
 
     return tokens, labels, loss_mask, attention_mask, position_ids
 
