@@ -57,6 +57,8 @@ def forward_step(data_iterator, model):
     tokens = data_iterator['input_ids'].long().cuda().contiguous()
     labels = data_iterator['labels'].long().cuda().contiguous()
 
+    tokens = tokens[:, :-1].contiguous()
+    labels = labels[:, 1:].contiguous()
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         labels,
         tokenizer.pad_token_id,
@@ -64,13 +66,10 @@ def forward_step(data_iterator, model):
         args.reset_attention_mask,
         True)
 
-    tokens = tokens[:, :-1].contiguous()
-    labels = labels[:, 1:].contiguous()
     logits = model(input_ids=tokens,
                    position_ids=position_ids,
                    attention_mask=attention_mask)
 
-    loss_mask = loss_mask[..., 1:].contiguous()
     def loss_func(loss_mask, logits):
         losses = tensor_parallel.vocab_parallel_cross_entropy(
             logits.contiguous().float(), labels.contiguous())

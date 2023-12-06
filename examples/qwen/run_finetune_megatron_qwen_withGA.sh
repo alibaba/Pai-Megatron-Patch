@@ -1,6 +1,5 @@
 #!/bin/bash
-# sh run_finetune_megatron_qwen_withGA.sh dsw ../../ 7B 1 96 1e-5 1e-5 2048 2048 85 bf16 1 1 sel true true true false 1000 ../../../alpaca_zh-filter.json ../../../alpaca_zh-filter.json ../../../qianwen/qwen-7b-hf 2000 0 /mnt/output_megatron_qwen/
-
+# sh run_finetune_megatron_qwen_withGA.sh dsw ../../ 7B 1 8 1e-5 1e-5 512 512 85 bf16 1 1 sel true false true false 100 /mnt/qwen-datasets/alpaca_zh-qwen-train.json /mnt/qwen-datasets/alpaca_zh-qwen-valid.json /mnt/qwen-ckpts/Qwen-7B 2000 0 /mnt/output_megatron_qwen/
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
