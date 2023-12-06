@@ -1,5 +1,7 @@
 #!/bin/bash
-# sh run_evaluate_huggingface_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 13B 1 2048 80 0 fp16 /mnt/baichuan-datasets/alpaca_data.json /mnt/baichuan-ckpts/baichuan-13b-base
+# sh run_evaluate_huggingface_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 7B 1 4096 4096 0 fp16 /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-7B-Base
+# sh run_evaluate_huggingface_baichuan.sh dsw /workspace/Pai-Megatron-Patch/ 13B 1 4096 4096 0 fp16 /mnt/baichuan2-datasets/alpaca_zh.json /mnt/baichuan2-ckpts/Baichuan2-13B-Base
+
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -65,7 +67,7 @@ fi
 
 megatron_options=" \
         --transformer-type huggingface \
-        --data-path ${DATASET_PATH}
+        --valid-data-path ${DATASET_PATH}
         --micro-batch-size ${BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
@@ -77,7 +79,6 @@ megatron_options=" \
         --eval-iters 10 \
         --tensor-model-parallel-size 1 \
         --pipeline-model-parallel-size 1 \
-        --DDP-impl local \
         --no-load-optim \
         --num-workers 0 \
         --dataset LLama-SFT \

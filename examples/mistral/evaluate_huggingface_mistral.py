@@ -101,45 +101,6 @@ def evaluate(data_loader, model):
 
     return total_output
 
-
-def evaluate_and_print_results(task, data_loader, model, eval_metric):
-    """Evaluate and print results on screen."""
-
-    # Evaluate and get results.
-    output = evaluate(data_loader, model, eval_metric)
-
-    string = ' validation results on {} | '.format(task)
-    if is_last_rank():
-        if eval_metric == 'loss':
-            num_tokenized_tokens = data_loader.dataset.num_tokenized_tokens
-            num_original_tokens = data_loader.dataset.num_original_tokens
-            val_loss = output / (num_tokenized_tokens - 1)
-            ppl = math.exp(min(20, val_loss))
-            token_ratio = (num_tokenized_tokens - 1) / (num_original_tokens -
-                                                        1)
-            adjusted_ppl = math.exp(min(20, val_loss * token_ratio))
-            string += 'avg loss: {:.4E} | '.format(val_loss)
-            string += 'ppl: {:.4E} | '.format(ppl)
-            string += 'adjusted ppl: {:.4E} | '.format(adjusted_ppl)
-            string += 'token ratio: {} |'.format(token_ratio)
-
-        elif eval_metric == 'accuracy':
-            num_examples = len(data_loader.dataset)
-            acc = output / num_examples
-            string += 'number correct: {:.4E} | '.format(output)
-            string += 'total examples: {:.4E} | '.format(num_examples)
-            string += 'avg accuracy: {:.4E}'.format(acc)
-
-        else:
-            raise NotImplementedError('evaluation method for {} metric is not '
-                                      'implemented yet.'.format(eval_metric))
-
-        length = len(string) + 1
-        print('-' * length)
-        print(string)
-        print('-' * length)
-
-
 def main():
     """Main program."""
     args = get_args()
