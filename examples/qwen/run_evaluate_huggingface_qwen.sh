@@ -68,7 +68,7 @@ fi
 
 megatron_options=" \
         --transformer-type huggingface \
-        --data-path ${DATASET_PATH}
+        --valid-data-path ${DATASET_PATH}
         --micro-batch-size ${BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
@@ -80,7 +80,6 @@ megatron_options=" \
         --eval-iters 10 \
         --tensor-model-parallel-size 1 \
         --pipeline-model-parallel-size 1 \
-        --DDP-impl local \
         --no-load-optim \
         --num-workers 0 \
         --dataset LLama-SFT \

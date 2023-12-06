@@ -62,17 +62,20 @@ def get_batch(batch):
 
     data_b = tensor_parallel.broadcast_data(keys, batch, datatype)
 
-    # Unpack.
-    tokens_ = data_b['input_ids'].long()
-    labels = tokens_[:, 1:].contiguous()
-    tokens = tokens_[:, :-1].contiguous()
-    # Get the masks and postition ids.
+    tokens = data_b['input_ids'].long().cuda().contiguous()
+    labels = data_b['labels'].long().cuda().contiguous()
+
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-        tokens,
+        labels,
         tokenizer.pad_token_id,
         args.reset_position_ids,
         args.reset_attention_mask,
         True)
+
+    tokens = tokens[:, :-1].contiguous()
+    labels = labels[:, 1:].contiguous()
+    loss_mask = loss_mask[..., 1:].contiguous()
+
     return tokens, labels, loss_mask, attention_mask, position_ids
 
 def forward_step(batch, model):
