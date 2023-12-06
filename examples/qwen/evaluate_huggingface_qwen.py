@@ -57,6 +57,7 @@ def forward_step(batch, model):
     # Get the batch.
     input_ids = batch['input_ids'].long().cuda()
     labels = batch['labels'].long().cuda()
+    labels[labels == tokenizer.pad_token_id] = -100
     attention_mask = input_ids.ne(tokenizer.pad_token_id)
 
     # Tell the model what our actual batch size will be
