@@ -276,4 +276,7 @@ def get_tasks_args(parser):
 
     group.add_argument('--rotary-scale-factor', type=int, default=1)
 
+    group.add_argument('--cvcuda-image-processing',
+                    action='store_true')
+    
     return parser

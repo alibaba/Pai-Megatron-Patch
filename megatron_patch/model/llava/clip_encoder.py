@@ -3,9 +3,18 @@ import torch.nn as nn
 
 from transformers import CLIPVisionModel, CLIPImageProcessor, CLIPVisionConfig
 
+import warnings
+try:
+    import cvcuda
+    from megatron_patch.data.llava.cvcuda_image_processing_clip import CLIPCVCUDAImageProcessor
+    warnings.warn("The cvcuda environment exists, use the cvcuda operator for preprocessing")
+except:
+    warnings.warn("The cvcuda environment does not exist. Install cvcuda and use it")
+
 
 class CLIPVisionTower(nn.Module):
     def __init__(self, vision_tower,
+                 cvcuda_image_processing=False,
                  mm_vision_select_layer=-2,
                  mm_vision_select_feature='patch',
                  delay_load=False):
@@ -14,6 +23,7 @@ class CLIPVisionTower(nn.Module):
         self.is_loaded = False
 
         self.vision_tower_name = vision_tower
+        self.cvcuda_image_processing = cvcuda_image_processing
         self.select_layer = mm_vision_select_layer
         self.select_feature = mm_vision_select_feature
 
@@ -23,8 +33,12 @@ class CLIPVisionTower(nn.Module):
             self.cfg_only = CLIPVisionConfig.from_pretrained(self.vision_tower_name)
 
     def load_model(self):
-        self.image_processor = CLIPImageProcessor.from_pretrained(self.vision_tower_name)
+        if self.cvcuda_image_processing:
+            self.image_processor = CLIPCVCUDAImageProcessor.from_pretrained(self.vision_tower_name)
+        else:
+            self.image_processor = CLIPImageProcessor.from_pretrained(self.vision_tower_name)
         self.vision_tower = CLIPVisionModel.from_pretrained(self.vision_tower_name)
+
         self.is_loaded = True
 
     def feature_select(self, image_forward_outs):
