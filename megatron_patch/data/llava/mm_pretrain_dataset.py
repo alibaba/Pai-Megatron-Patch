@@ -182,7 +182,7 @@ class LazySupervisedDataset(torch.utils.data.Dataset):
 
         is_absolute_path_exists = os.path.exists(self.args.vision_tower)
         if is_absolute_path_exists or self.args.vision_tower.startswith("openai") or self.args.vision_tower.startswith("laion"):
-            vision_tower = CLIPVisionTower(self.args.vision_tower)
+            vision_tower = CLIPVisionTower(self.args.vision_tower, self.args.cvcuda_image_processing)
             vision_tower.to(torch.half if self.args.fp16 else torch.bfloat16)
             self.image_processor = vision_tower.image_processor
         else:
