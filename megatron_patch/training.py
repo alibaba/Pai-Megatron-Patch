@@ -25,9 +25,8 @@ from megatron.checkpointing import save_checkpoint
 from megatron.core import mpu, tensor_parallel
 from megatron.initialize import (initialize_megatron, set_jit_fusion_options,
                                  write_args_to_tensorboard)
-from megatron.model import DistributedDataParallel as DDP
+
 from megatron.model import Float16Module
-from megatron.optimizer import get_megatron_optimizer
 from megatron.training import (build_train_valid_test_data_iterators,
                                get_optimizer_param_scheduler,
                                print_datetime, save_checkpoint_and_time)
@@ -51,7 +50,8 @@ def pretrain(train_valid_test_dataset_provider,
              forward_step_func,
              process_non_loss_data_func=None,
              extra_args_provider=None,
-             args_defaults={'tokenizer_type': 'GPT2BPETokenizer'}):
+             args_defaults={'tokenizer_type': 'GPT2BPETokenizer'},
+             moe=False):
     """Main training program.
     Refer to https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/training.py
 
@@ -82,10 +82,13 @@ def pretrain(train_valid_test_dataset_provider,
         args_defaults: a dictionary from argument-name to argument-value. It
             to set already parse arguments.
     """
-
-    # Initalize and get arguments, timers, and Tensorboard writer.
-    initialize_megatron(extra_args_provider=extra_args_provider,
-                        args_defaults=args_defaults)
+    if not moe:
+        # Initalize and get arguments, timers, and Tensorboard writer.
+        initialize_megatron(extra_args_provider=extra_args_provider,
+                            args_defaults=args_defaults)
+    else:
+        from megatron_patch.initialize import initialize_megatron
+        initialize_megatron(extra_args_provider=extra_args_provider)
     # Set pytorch JIT layer fusion options and warmup JIT functions.
     set_jit_fusion_options()
 
@@ -293,15 +296,20 @@ def get_model(model_provider_func, model_type=ModelType.encoder_or_decoder, wrap
             sum([sum([p.nelement() for p in model_module.parameters() if p.requires_grad == True])
                  for model_module in model])), flush=True)
 
-    # GPU allocation.
-    for model_module in model:
-        model_module.cuda(torch.cuda.current_device())
+    if args.transformer_type == "megatron":
+        # GPU allocation.
+        for model_module in model:
+            model_module.cuda(torch.cuda.current_device())
 
     # Fp16 conversion.
     if args.fp16 or args.bf16:
         model = [Float16Module(model_module, args) for model_module in model]
 
     if wrap_with_ddp:
+        if not args.moe:
+            from megatron.model import DistributedDataParallel as DDP
+        else:
+            from megatron_patch.distributed import DistributedDataParallel as DDP
         model = [DDP(model_module,
                      data_parallel_group=mpu.get_data_parallel_group(),
                      accumulate_allreduce_grads_in_fp32=args.accumulate_allreduce_grads_in_fp32,
@@ -330,8 +338,15 @@ def setup_model_and_optimizer(model_provider_func,
     if args.load is not None and args.no_load_optim:
         load_checkpoint(model, None, None)
 
-    optimizer = get_megatron_optimizer(model, no_wd_decay_cond, scale_lr_cond,
-                                       lr_mult)
+    if not args.moe:
+        from megatron.optimizer import get_megatron_optimizer
+        optimizer = get_megatron_optimizer(model, no_wd_decay_cond, scale_lr_cond,
+                                           lr_mult)
+    else:
+        from megatron.optimizer import get_megatron_optimizer
+        #from megatron_patch.optimizer import get_megatron_optimizer
+        optimizer = get_megatron_optimizer(model, no_wd_decay_cond, scale_lr_cond,
+                                           lr_mult)
     opt_param_scheduler = get_optimizer_param_scheduler(optimizer)
 
     if args.load is not None:
@@ -634,6 +649,12 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
     config.grad_scale_func = optimizer.scale_loss
     config.timers = timers
     # TODO: Remove this once we move DDP to Core.
+
+    if not args.moe:
+        from megatron.model import DistributedDataParallel as DDP
+    else:
+        from megatron_patch.distributed import DistributedDataParallel as DDP
+
     if len(model) == 1 and isinstance(model[0], DDP) and \
         args.overlap_grad_reduce:
         assert config.no_sync_func is None, \

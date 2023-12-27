@@ -14,6 +14,18 @@
 
 import argparse
 
+def validate_moe_args(args, defaults={}):
+    if args.num_experts is not None:
+        args.moe = True
+        if args.moe_expert_parallel_size is None:
+            args.moe_expert_parallel_size = args.data_parallel_size
+            if args.tensor_model_parallel_size > 0 and not args.expert_tensor_parallelism:
+                # EP will use the span of DP*TP
+                args.moe_expert_parallel_size *= args.tensor_model_parallel_size
+        if args.rank == 0:
+            print('Experts set to %s, expert parallel size set to %d'
+                  % (str(args.num_experts), args.moe_expert_parallel_size))
+
 def get_tasks_args(parser):
     group = parser.add_argument_group(title='patch')
 
@@ -278,5 +290,42 @@ def get_tasks_args(parser):
 
     group.add_argument('--cvcuda-image-processing',
                     action='store_true')
-    
+
+    group.add_argument('--expert-tensor-parallelism', action='store_true',
+                       default=False,
+                       help="use tensor parallelism for expert layers in MoE")
+
+    group.add_argument('--expert-interval', type=int, default=2,
+                       help='Use experts in every "expert-interval" layers')
+
+    group.add_argument('--moe-topk', type=int, default=1,
+                       help='moe-topk')
+
+    group.add_argument('--moe-expert-parallel-size', type=int, default=None,
+                       help='Degree of the MoE expert parallelism. By default, '
+                       'the size of this value will be automatically determined.')
+
+    group.add_argument('--disable-moe-token-dropping', action='store_false',
+                       help='Disable MoE expert token dropping.',
+                       dest='moe_token_dropping')
+
+    group.add_argument('--moe-train-capacity-factor', type=float, default=1.0,
+                       help='The capacity of the MoE expert at training time')
+
+    group.add_argument('--moe-eval-capacity-factor', type=float, default=1.0,
+                       help='The capacity of the MoE expert at eval time.')
+
+    group.add_argument('--moe-min-capacity', type=int, default=4,
+                       help='The minimum capacity per MoE expert regardless of the capacity_factor.')
+
+    group.add_argument('--moe-loss-coeff', type=float, default=0.01,
+                       help='Scaling coefficient for adding MoE loss to model loss')
+
+    group.add_argument('--use-tutel', action='store_true',
+                       help='Use Tutel optimization for MoE')
+
+    group.add_argument('--router-type', type=str, default='topk',
+                       choices=['topk', 'expert_choice'],
+                       help='Options for router type, support top1 & top2 and expert_choice')
+
     return parser

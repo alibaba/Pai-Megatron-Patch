@@ -15,7 +15,7 @@
 import os
 import random
 import sys
-
+from collections import defaultdict
 import numpy as np
 import torch
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
@@ -149,7 +149,7 @@ def fix_query_key_value_ordering(model, checkpoint_version):
                      ' checkpoint version {}'.format(checkpoint_version))
 
 
-def _load_base_checkpoint(load_dir, use_distributed_optimizer, rank0=False):
+def _load_base_checkpoint(load_dir, use_distributed_optimizer, rank0=False, model=None):
     """ Load the base state_dict from the given directory
 
     If rank0 is true, just loads rank 0 checkpoint, ignoring arguments.
@@ -195,7 +195,13 @@ def _load_base_checkpoint(load_dir, use_distributed_optimizer, rank0=False):
     try:
         model_state_dict = torch.load(model_checkpoint_name,
                                       map_location='cpu')
-        optim_state_dict = None
+        if not args.no_load_optim:
+            if use_distributed_optimizer or args.moe:
+                optim_state_dict = torch.load(optim_checkpoint_name, map_location='cpu')
+            else:
+                optim_state_dict = model_state_dict
+        else:
+            optim_state_dict = None
     except ModuleNotFoundError:
         # For backward compatibility.
         if not rank0:
@@ -214,6 +220,19 @@ def _load_base_checkpoint(load_dir, use_distributed_optimizer, rank0=False):
         print_rank_0('could not load the checkpoint')
         print_rank_0(e)
         sys.exit()
+
+    # Load MoE
+    if args.moe:
+        if args.expert_tensor_parallelism and \
+                mpu.get_tensor_model_parallel_world_size() > 1:
+            # expert with tensor parallel, save to the mp_rank dir.
+            moe_checkpoint_dir = os.path.dirname(model_checkpoint_name)
+        else:
+            # save to the root dir.
+            moe_checkpoint_dir = os.path.dirname(os.path.dirname(model_checkpoint_name))
+        _load_moe_state_dict(moe_checkpoint_dir, model_state_dict['model'],
+                        model_list=model, mpu=mpu)
+
 
     return model_state_dict, optim_state_dict, release, optim_checkpoint_name
 
@@ -236,7 +255,8 @@ def load_checkpoint(model,
         _load_base_checkpoint(
             load_dir,
             use_distributed_optimizer=args.use_distributed_optimizer,
-            rank0=False)
+            rank0=False,
+            model=model)
 
     if model_state_dict is None:
         return 0
@@ -445,6 +465,18 @@ def save_checkpoint(iteration, model, optimizer, opt_param_scheduler):
                                        (torchDDP, LocalDDP, Float16Module))
         unwrapped_model.save_pretrained(checkpoint_dir)
 
+    if args.moe:
+        if args.expert_tensor_parallelism and \
+                mpu.get_tensor_model_parallel_world_size() > 1:
+            # expert with tensor parallel, save to the mp_rank dir.
+            moe_checkpoint_dir = os.path.dirname(model_checkpoint_name)
+        else:
+            # save to the root dir.
+            moe_checkpoint_dir = os.path.dirname(os.path.dirname(model_checkpoint_name))
+        print_rank_0('  save moe checkpoints to {}'.format(moe_checkpoint_dir))
+        ensure_directory_exists(moe_checkpoint_dir)
+        _save_moe_checkpoint(moe_checkpoint_dir, model)
+
     # Wait so everyone is done (necessary)
     if torch.distributed.is_initialized():
         torch.distributed.barrier()
@@ -463,3 +495,103 @@ def save_checkpoint(iteration, model, optimizer, opt_param_scheduler):
     # Wait so everyone is done (not necessary)
     if torch.distributed.is_initialized():
         torch.distributed.barrier()
+
+
+def _get_expert_ckpt_name(checkpoints_path, layer_id, expert_id, tag, mpu):
+    args = get_args()
+    mp_rank = 0
+    if args.expert_tensor_parallelism:
+        mp_rank = mpu.get_tensor_model_parallel_rank()
+    # Used to support expert saving and loading.
+    ckpt_name = os.path.join(
+        checkpoints_path,
+        '' if tag is None else str(tag),
+        f'layer_{layer_id}_expert_{expert_id}_mp_rank_{mp_rank:02d}_model_states.pt'
+    )
+    return ckpt_name
+
+def _load_moe_state_dict(checkpoint_path, state_dict, model_list, mpu):
+    from megatron_patch.model.mixtral.layer import MoE
+    from megatron_patch import expert_parallel_state
+    moe_state_dict = state_dict['language_model'].setdefault('moe_state_dict', {})
+
+    # Loop through all the models in the list
+    for model in model_list:
+        # Loop through all the modules in the model
+        for _, module in model.named_modules():
+            # Check if the module is an MoE layer
+            if isinstance(module, MoE):
+                moe_layer_index = module.get_moe_layer_index()
+                num_local_experts = module.num_local_experts
+
+                # Get the rank of the current process and calculate the global expert ID
+                ep_rank = torch.distributed.get_rank(group=expert_parallel_state.get_expert_parallel_group())
+
+                # Loop through all the local experts
+                for local_expert_id in range(num_local_experts):
+                    # Calculate the name of the checkpoint file and load the expert state dictionary
+                    global_expert_id = ep_rank * num_local_experts + local_expert_id
+                    expert_ckpt_name = _get_expert_ckpt_name(checkpoint_path, moe_layer_index,
+                                                             global_expert_id, None, mpu)
+                    expert_state_dict = torch.load(expert_ckpt_name,
+                                                   map_location=torch.device('cpu'))
+
+                    # Update the expert state dictionary with the local expert ID
+                    moe_str_prefix = '.megatron_moe.experts.megatron_experts.'
+                    for key in list(expert_state_dict.keys()):
+                        local_key = key.replace(f'{moe_str_prefix}{global_expert_id}',
+                                                f'{moe_str_prefix}{local_expert_id}')
+                        expert_state_dict[local_key] = expert_state_dict.pop(key)
+
+                    # Update the MoE state dictionary with the expert state dictionary
+                    moe_state_dict.update(expert_state_dict)
+
+def _save_moe_checkpoint(save_dir, model_list):
+    # Using layer_#_export_# to save the model's expert state_dict
+    from megatron_patch.model.mixtral.layer import MoE
+    import re
+    moe_layer_id = 0
+
+    # Loop through all the models in the list
+    for model in model_list:
+        # Loop through all the modules in the model
+        for name, module in model.named_modules():
+            # Check if the module is an MoE layer
+            if isinstance(module, MoE):
+                moe_layer_id = module.get_moe_layer_index()
+                num_local_experts = module.num_local_experts
+                ep_rank = torch.distributed.get_rank(group=mpu.get_expert_parallel_group())
+
+                # Extract the state dict of MoE experts
+                moe_state_dict = {
+                    f"{name}.{n}": p
+                    for n, p in module.state_dict().items()
+                    if "expert" in n and "moe.gate.wg.weight" not in n
+                }
+
+                # Loop through all the experts and update the state dict with global expert IDs
+                experts_state_dict = defaultdict(dict)
+                for key in list(moe_state_dict.keys()):
+                    match = re.match(f".*{name}.megatron_moe.experts.megatron_experts.([0-9]+).*",
+                                     key)
+
+                    if match is None:
+                        print(f"No expert found in key {key}.")
+                        continue
+
+                    local_expert_id = match.group(1)
+                    global_expert_id = ep_rank * num_local_experts + int(local_expert_id)
+
+                    expert_key = key.replace(
+                        f"{name}.megatron_moe.experts.megatron_experts.{local_expert_id}",
+                        f"{name}.megatron_moe.experts.megatron_experts.{global_expert_id}")
+
+                    experts_state_dict[str(global_expert_id)][expert_key] = moe_state_dict.pop(key)
+
+                # Save the expert state dictionaries
+                for global_expert_id, expert_state_dict in experts_state_dict.items():
+                    save_path = _get_expert_ckpt_name(save_dir, moe_layer_id, global_expert_id,
+                                                      None, mpu)
+                    torch.save(expert_state_dict, save_path)
+
+                moe_layer_id += 1

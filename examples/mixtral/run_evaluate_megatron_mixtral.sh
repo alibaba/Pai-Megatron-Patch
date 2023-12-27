@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_evaluate_megatron_mistral.sh dsw ../.. 7B 1 81 81 0 bf16 2 1 sel true false true false /mnt/llama2-datasets/alpaca_data.json /mnt/mistral-ckpts/Mistral-7B-v0.1-to-mg-tp2-pp1/
+#sh run_evaluate_megatron_mixtral.sh dsw ../.. 7B 1 80 80 0 bf16 1 1 sel true false false false /mnt/llama2-datasets/alpaca_data.json /mnt/mixtral-ckpts/Mixtral-8x7B-v0.1-to-mg-tp1-pp1/
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -7,12 +7,12 @@ MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=1
+GPUS_PER_NODE=4
 
 elif [ $ENV = dlc ]; then
 
@@ -152,10 +152,14 @@ megatron_options=" \
         --use-mistral-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
-        --disable-bias-linear
+        --disable-bias-linear \
+        --router-type topk \
+        --expert-interval 1 \
+        --num-experts 8 \
+        --moe-topk 2
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_megatron_mistral.py
+run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_megatron_mixtral.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}

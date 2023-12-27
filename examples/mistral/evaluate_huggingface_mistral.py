@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 import torch
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 
 from megatron.core.enums import ModelType
 from megatron import get_args
 from megatron import print_rank_0
-from megatron import is_last_rank
 from megatron.core import parallel_state
 from megatron.core.pipeline_parallel.p2p_communication import send_forward
 from megatron.initialize import initialize_megatron
@@ -28,23 +26,19 @@ from megatron.model import Float16Module
 from megatron.utils import unwrap_model
 from megatron.arguments import core_transformer_config_from_args
 
-from megatron_patch.data.evaluate_dataset import build_evaluation_dataset
+from megatron_patch.data import build_evaluation_dataset
 from megatron_patch.finetune_utils import build_data_loader
-from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import get_model
 from megatron_patch.arguments import get_tasks_args
-from megatron_patch.model.mistral.modeling_mistral import MistralForCausalLM
-
+from transformers import AutoModelForCausalLM
 
 def get_model_provider():
     """Based on evaluation metric set the parallel-output flag and
     return the model provider."""
     def model_provider(pre_process=True, post_process=True):
         args = get_args()
-        tokenizer = build_tokenizer(args)
-        model = MistralForCausalLM.from_pretrained(args.load,
-                                                   trust_remote_code=False)
+        model = AutoModelForCausalLM.from_pretrained(args.load, device_map="auto")
         return model
 
     return model_provider
@@ -56,7 +50,7 @@ def forward_step(batch, model):
     # Get the batch.
     input_ids = batch['input_ids'].long().cuda()
     labels = batch['labels'].long().cuda()
-    labels[labels == -1] = -100
+    labels[labels == 0] = -100
     attention_mask = input_ids.ne(tokenizer.pad_token_id)
 
     # Tell the model what our actual batch size will be

@@ -19,7 +19,6 @@ from megatron import print_rank_0
 from megatron.core import parallel_state, tensor_parallel
 from megatron.core.pipeline_parallel.p2p_communication import recv_forward
 from megatron.core.pipeline_parallel.p2p_communication import send_forward
-from megatron.initialize import initialize_megatron
 from megatron.utils import unwrap_model
 from megatron.utils import get_ltor_masks_and_position_ids
 from megatron.arguments import core_transformer_config_from_args
@@ -27,10 +26,11 @@ from megatron.arguments import core_transformer_config_from_args
 from megatron_patch.data import build_evaluation_dataset
 from megatron_patch.checkpointing import load_checkpoint
 from megatron_patch.finetune_utils import build_data_loader
-from megatron_patch.model.mistral.gpt_model import GPTModel
+from megatron_patch.model.mixtral.gpt_model import GPTModel
 from megatron_patch.arguments import get_tasks_args
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import get_model
+from megatron_patch.initialize import initialize_megatron
 
 def get_model_provider():
     def model_provider(pre_process=True, post_process=True):
