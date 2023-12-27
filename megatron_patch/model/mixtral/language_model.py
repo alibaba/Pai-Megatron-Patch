@@ -18,6 +18,7 @@ from megatron import get_args
 from megatron.core import mpu, tensor_parallel
 from megatron.core.enums import ModelType
 from megatron.model.enums import AttnMaskType
+from megatron.model.enums import LayerType
 from megatron.model.module import MegatronModule
 from megatron.model.utils import get_linear_layer
 from megatron.model.utils import init_method_normal
@@ -25,10 +26,8 @@ from megatron.model.utils import scaled_init_method_normal
 from megatron.core.models.common.rotary_pos_embedding import RotaryEmbedding
 
 from megatron_patch.model.mistral.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
-from megatron_patch.data.llava.constants import IMAGE_TOKEN_INDEX
-from .clip_encoder import CLIPVisionTower
-from .mm_projector_builder import build_vision_projector
 from .transformer import ParallelTransformer
+
 
 def parallel_lm_logits(input_, word_embeddings_weight, parallel_output,
                        bias=None):
@@ -342,10 +341,10 @@ class TransformerLanguageModel(MegatronModule):
                  add_pooler=False,
                  pre_process=True,
                  post_process=True):
-        self.args = get_args()
+        args = get_args()
         # TODO: passing share_embeddings_and_output_weights=False will not work correctly for T5 and embeddings will not be synced. Fix later for T5.
-        if self.args.untie_embeddings_and_output_weights: assert not add_decoder
-        super(TransformerLanguageModel, self).__init__(share_embeddings_and_output_weights=not self.args.untie_embeddings_and_output_weights)
+        if args.untie_embeddings_and_output_weights: assert not add_decoder
+        super(TransformerLanguageModel, self).__init__(share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights)
 
         self.pre_process = pre_process
         self.post_process = post_process
@@ -358,88 +357,84 @@ class TransformerLanguageModel(MegatronModule):
         self.decoder_attn_mask_type = decoder_attn_mask_type
         self.add_pooler = add_pooler
         self.encoder_hidden_state = None
-        self.add_retriever = self.args.retro_add_retriever
-        self.untie_embeddings_and_output_weights = self.args.untie_embeddings_and_output_weights
-
-        self.vision_tower = CLIPVisionTower(self.args.vision_tower)
-        self.vision_tower.to(torch.half if self.args.fp16 else torch.bfloat16)
-
-        if self.args.freeze_clip_vision_tower:
-            for param in self.vision_tower.parameters():
-                param.requires_grad = False
-
-        self.args.mm_hidden_size = self.vision_tower.hidden_size
-        self.mm_projector = build_vision_projector(self.args)
-        self.mm_projector.to(torch.half if self.args.fp16 else torch.bfloat16)
+        self.add_retriever = args.retro_add_retriever
+        self.untie_embeddings_and_output_weights = args.untie_embeddings_and_output_weights
+        self.sliding_window = args.sliding_window
 
         # Embeddings.
         if self.pre_process:
             self.embedding = Embedding(self.hidden_size,
-                                       self.args.padded_vocab_size,
-                                       self.args.max_position_embeddings,
-                                       self.args.hidden_dropout,
+                                       args.padded_vocab_size,
+                                       args.max_position_embeddings,
+                                       args.hidden_dropout,
                                        config,
                                        self.num_tokentypes)
             self._embedding_key = 'embedding'
 
-            if self.args.freeze_llm:
-                for param in self.embedding.parameters():
-                    param.requires_grad = False
-
         # Rotary positional embeddings
-        if self.args.use_rotary_position_embeddings:
-            self.seq_length = self.args.seq_length
-            rotary_dim = self.args.hidden_size // self.args.num_attention_heads \
-                if self.args.kv_channels is None else self.args.kv_channels
+        if args.use_rotary_position_embeddings:
+            self.seq_length = args.seq_length
+            rotary_dim = args.hidden_size // args.num_attention_heads \
+                if args.kv_channels is None else args.kv_channels
 
-            if self.args.rotary_percent < 1.0:
-                rotary_dim = int(rotary_dim * self.args.rotary_percent)
+            if args.rotary_percent < 1.0:
+                rotary_dim = int(rotary_dim * args.rotary_percent)
 
             # partial rotary embeddings, which is better than full rotary
             # Wang and Komatsuzaki et al
             # https://github.com/kingoflolz/mesh-transformer-jax/
             self.rotary_pos_emb = RotaryEmbedding(
                 rotary_dim,
-                seq_len_interpolation_factor=self.args.rotary_seq_len_interpolation_factor
+                seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
             )
             self.use_rotary_position_embeddings = True
-        elif self.args.use_llama2_rotary_position_embeddings:
+        elif args.use_mistral_rotary_position_embeddings:
             self.use_rotary_position_embeddings = False
 
 
+        # Encoder (usually set to True, False if part of an encoder-decoder
+        # architecture and in encoder-only stage).
         if self.add_encoder:
             self.encoder = ParallelTransformer(
                 config,
-                model_type=self.args.model_type if not self.args.retro_add_retriever \
+                model_type=args.model_type if not args.retro_add_retriever \
                     else ModelType.retro_decoder,
                 self_attn_mask_type=self.encoder_attn_mask_type,
                 pre_process=self.pre_process,
                 post_process=self.post_process,
             )
             self._encoder_key = 'encoder'
+        else:
+            self.encoder = None
 
-            if self.args.freeze_llm:
-                for param in self.encoder.parameters():
-                    param.requires_grad = False
+        # Decoder (usually set to False, True if part of an encoder-decoder
+        # architecture and in decoder-only stage).
+        if self.add_decoder:
+            self.decoder = ParallelTransformer(
+                config,
+                model_type=args.model_type,
+                layer_type=LayerType.decoder,
+                self_attn_mask_type=self.decoder_attn_mask_type,
+                pre_process=self.pre_process,
+                post_process=self.post_process)
+            self._decoder_key = 'decoder'
+        else:
+            self.decoder = None
 
         if self.post_process:
+            # Pooler.
+            if self.add_pooler:
+                self.pooler = Pooler(self.hidden_size, self.init_method)
+                self._pooler_key = 'pooler'
+
             if self.untie_embeddings_and_output_weights:
                 self.output_layer = tensor_parallel.ColumnParallelLinear(
-                    self.args.hidden_size,
-                    self.args.padded_vocab_size,
+                    args.hidden_size,
+                    args.padded_vocab_size,
                     config=config,
                     init_method=self.init_method,
                     bias=False) # Setting bias to False always to keep it consistent with embedding tying that also does not have a bias.
                 self._output_layer_key = 'output_layer'
-
-                if self.args.freeze_llm:
-                    for param in self.output_layer.parameters():
-                        param.requires_grad = False
-
-    def encode_images(self, images):
-        image_features = self.vision_tower(images)
-        image_features = self.mm_projector(image_features)
-        return image_features
 
     def set_input_tensor(self, input_tensor):
         """ See megatron.model.transformer.set_input_tensor()"""
@@ -477,67 +472,15 @@ class TransformerLanguageModel(MegatronModule):
                 enc_dec_attn_mask=None, tokentype_ids=None,
                 inference_params=None,
                 pooling_sequence_index=0,
-                enc_hidden_states=None, output_enc_hidden=False, images=None):
+                enc_hidden_states=None, output_enc_hidden=False):
 
-        image_features = self.encode_images(images)
-
-        input_embeds = self.embedding(enc_input_ids, enc_position_ids,
+        # Encoder embedding.
+        if self.pre_process:
+            encoder_input = self.embedding(enc_input_ids, enc_position_ids,
                                            tokentype_ids=tokentype_ids)
-        input_embeds = input_embeds.permute(1, 0, 2)
+        else:
+            encoder_input = None
 
-        new_input_embeds = []
-        for batch_idx, cur_input_ids in enumerate(enc_input_ids):
-            cur_input_embeds = input_embeds[batch_idx]  # s h
-            if (cur_input_ids == IMAGE_TOKEN_INDEX).sum() == 0:
-                # multimodal LLM, but the current sample is not multimodal
-                # FIXME: this is a hacky fix, for deepspeed zero3 to work
-                half_len = cur_input_ids.shape[0] // 2
-                cur_image_features = image_features[batch_idx]
-                cur_input_embeds_1 = cur_input_embeds[:half_len].unsqueeze(1)
-                cur_input_embeds_2 = cur_input_embeds[half_len:].unsqueeze(1)
-                cur_input_embeds = torch.cat([cur_input_embeds_1, cur_image_features[0:0], cur_input_embeds_2], dim=0)
-                new_input_embeds.append(cur_input_embeds)
-                continue
-            image_token_indices = torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0]
-            cur_new_input_embeds = []
-            cur_start = 0
-            while image_token_indices.numel() > 0:
-                cur_image_features = image_features[batch_idx].unsqueeze(1)
-                image_token_start = image_token_indices[0]
-                if getattr(self.args, 'tune_mm_mlp_adapter', False) and getattr(self.args, 'mm_use_im_start_end', False):
-                    cur_new_input_embeds.append(cur_input_embeds[cur_start:image_token_start-1].unsqueeze(1).detach())
-                    cur_new_input_embeds.append(cur_input_embeds[image_token_start-1:image_token_start].unsqueeze(1)) # special token: <im_start>
-                    cur_new_input_embeds.append(cur_image_features)
-                    cur_new_input_embeds.append(cur_input_embeds[image_token_start+1:image_token_start+2].unsqueeze(1)) # special token: <im_end>
-                    cur_start = image_token_start + 2
-                else:
-                    cur_new_input_embeds.append(cur_input_embeds[cur_start:image_token_start].unsqueeze(1))
-                    cur_new_input_embeds.append(cur_image_features)
-                    cur_start = image_token_start + 1
-
-                image_token_indices = torch.where(cur_input_ids[cur_start:] == IMAGE_TOKEN_INDEX)[0]
-            if cur_input_ids[cur_start:].numel() > 0:
-                if getattr(self.args, 'tune_mm_mlp_adapter', False) and getattr(self.args, 'mm_use_im_start_end', False):
-                    cur_new_input_embeds.append(cur_input_embeds[cur_start:].unsqueeze(1).detach())
-                else:
-                    cur_new_input_embeds.append(cur_input_embeds[cur_start:].unsqueeze(1))
-
-            cur_new_input_embeds = [x.to(device=enc_input_ids.device) for x in cur_new_input_embeds]
-            cur_new_input_embeds = torch.cat(cur_new_input_embeds, dim=0)
-            new_input_embeds.append(cur_new_input_embeds)
-
-        encoder_input = torch.cat(new_input_embeds, dim=1)
-
-        if enc_attn_mask is not None:
-            batch_size = enc_input_ids.shape[0]
-            new_enc_attn_mask = _prepare_4d_causal_attention_mask(
-                enc_attn_mask,
-                (batch_size, encoder_input.shape[0]),
-                encoder_input,
-                0
-            )
-
-        enc_attn_mask = new_enc_attn_mask
         # Retriever embedding.
         if self.add_retriever and self.pre_process:
             retriever_input = self.embedding(retriever_input_ids,
@@ -567,6 +510,16 @@ class TransformerLanguageModel(MegatronModule):
                                         device=device)
             enc_position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
 
+        batch_size = enc_input_ids.shape[0]
+        seq_length = enc_input_ids.shape[1]
+        enc_attn_mask = _prepare_4d_causal_attention_mask(
+            enc_attn_mask,
+            (batch_size, seq_length),
+            encoder_input,
+            0,
+            sliding_window=self.sliding_window,
+        )
+
         # Run encoder.
         if enc_hidden_states is None:
             if self.encoder is not None:
@@ -577,7 +530,7 @@ class TransformerLanguageModel(MegatronModule):
                     retriever_attn_mask=retriever_attn_mask,
                     inference_params=inference_params,
                     rotary_pos_emb=rotary_pos_emb,
-                    position_ids=None
+                    position_ids=enc_position_ids
                 )
             else:
                 encoder_output = self.encoder_hidden_state
@@ -619,9 +572,17 @@ class TransformerLanguageModel(MegatronModule):
         else:
             return decoder_output, encoder_output
 
+    def _gather_moe_state_dict(self, state_dict_, enc_or_dec_key):
+        """Handle MoE states separately"""
+        moe_state_dict_ = {}
+        for key in list(state_dict_[enc_or_dec_key].keys()):
+            if 'megatron_moe' in key and 'megatron_moe.gate.wg.weight' not in key:
+                moe_state_dict_[enc_or_dec_key + key] = state_dict_[enc_or_dec_key].pop(key)
+        return moe_state_dict_
+
     def state_dict_for_save_checkpoint(self, prefix='', keep_vars=False):
         """For easy load."""
-
+        args = get_args()
         state_dict_ = {}
         if self.pre_process:
             state_dict_[self._embedding_key] \
@@ -631,6 +592,11 @@ class TransformerLanguageModel(MegatronModule):
             state_dict_[self._encoder_key] \
                 = self.encoder.state_dict_for_save_checkpoint(prefix=prefix,
                                                               keep_vars=keep_vars)
+
+            if args.moe:
+                moe_state_dict_ = {}
+                moe_state_dict_.update(self._gather_moe_state_dict(state_dict_, self._encoder_key))
+
         if self.post_process:
             if self.add_pooler:
                 state_dict_[self._pooler_key] \
@@ -690,6 +656,23 @@ class TransformerLanguageModel(MegatronModule):
                 self.encoder.load_state_dict(state_dict_, strict=False)
             else:
                 self.encoder.load_state_dict(state_dict_, strict=strict)
+
+            # Gather encoder MoE states
+            if "moe_state_dict" in state_dict:
+                for key in list(state_dict["moe_state_dict"].keys()):
+                    if self._encoder_key in key:
+                        key_list = key.split('.')
+                        while key_list[0].find('encoder') == -1:
+                            key_list.pop(0)
+                        key_list[0] = key_list[0].replace("encoder", "")
+                        if key_list[0] == "":
+                            key_list.pop(0)
+                        actual_key = '.'.join(key_list)
+                        state_dict_[actual_key] = state_dict["moe_state_dict"].pop(key)
+                if len(state_dict["moe_state_dict"]) == 0:
+                    del state_dict["moe_state_dict"]
+
+            self.encoder.load_state_dict(state_dict_, strict=strict)
 
         # Pooler.
         if self.post_process:

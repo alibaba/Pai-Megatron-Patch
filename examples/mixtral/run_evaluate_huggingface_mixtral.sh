@@ -1,5 +1,5 @@
 #!/bin/bash
-# sh run_evaluate_huggingface_mistral.sh dsw /workspace/Pai-Megatron-Patch 7B 1 80 80 0 bf16 /mnt/llama2-datasets/alpaca_data.json /mnt/mistral-ckpts/Mistral-7B-v0.1
+# sh run_evaluate_huggingface_mixtral.sh dsw ../.. 7B 1 80 80 0 bf16 /mnt/llama2-datasets/alpaca_data.json /mnt/mixtral-ckpts/Mixtral-8x7B-v0.1
 
 set -e
 ENV=$1
@@ -8,7 +8,7 @@ MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-main
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=0
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
@@ -95,7 +95,7 @@ megatron_options=" \
         --patch-tokenizer-type MistralTokenizer
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_huggingface_mistral.py
+run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_huggingface_mixtral.py
  ${megatron_options} ${pr_options} ${load_options}"
 
 echo ${run_cmd}

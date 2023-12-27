@@ -17,7 +17,6 @@ import io
 import copy
 import json
 import torch
-from megatron.data.gpt_dataset import _build_index_mappings
 from megatron import get_args
 
 from megatron_patch.tokenizer import get_tokenizer
@@ -194,6 +193,7 @@ class LLamaIdxMapDataset(torch.utils.data.Dataset):
         assert np.max(documents) < indexed_dataset.sizes.shape[0]
 
         # Build index mappings.
+        from megatron.data.gpt_dataset import _build_index_mappings
         try:
             self.doc_idx, self.sample_idx, self.shuffle_idx, self.index_prefix = \
                 _build_index_mappings(self.name, data_prefix,

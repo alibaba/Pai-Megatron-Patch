@@ -13,97 +13,67 @@
 # limitations under the License.
 
 import torch
+from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
+
 from megatron.core.enums import ModelType
 from megatron import get_args
 from megatron import print_rank_0
-from megatron.core import parallel_state, tensor_parallel
-from megatron.core.pipeline_parallel.p2p_communication import recv_forward
+from megatron.core import parallel_state
 from megatron.core.pipeline_parallel.p2p_communication import send_forward
 from megatron.initialize import initialize_megatron
+from megatron.model import DistributedDataParallel as LocalDDP
+from megatron.model import Float16Module
 from megatron.utils import unwrap_model
-from megatron.utils import get_ltor_masks_and_position_ids
 from megatron.arguments import core_transformer_config_from_args
 
 from megatron_patch.data import build_evaluation_dataset
-from megatron_patch.checkpointing import load_checkpoint
 from megatron_patch.finetune_utils import build_data_loader
-from megatron_patch.model.mistral.gpt_model import GPTModel
-from megatron_patch.arguments import get_tasks_args
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import get_model
+from megatron_patch.arguments import get_tasks_args
+from transformers import AutoModelForCausalLM
 
 def get_model_provider():
+    """Based on evaluation metric set the parallel-output flag and
+    return the model provider."""
     def model_provider(pre_process=True, post_process=True):
-        """Build the model."""
         args = get_args()
-        config = core_transformer_config_from_args(args)
-        model = GPTModel(
-            config,
-            num_tokentypes=0,
-            parallel_output=True,
-            pre_process=pre_process,
-            post_process=post_process
-        )
-
+        """
+        from accelerate import load_checkpoint_and_dispatch
+        from accelerate import init_empty_weights
+        with init_empty_weights():
+            config = MixtralConfig()
+            model = MixtralForCausalLM(config=config)
+        model = load_checkpoint_and_dispatch(model, checkpoint=args.load, device_map=device_map, dtype=torch.bfloat16)
+        """
+        model = AutoModelForCausalLM.from_pretrained(args.load, torch_dtype=torch.bfloat16, device_map="auto")
         return model
 
     return model_provider
 
-def get_batch(batch):
-    """Generate a batch"""
-    args = get_args()
-    tokenizer = get_tokenizer()
-
-    # Items and their type.
-    keys = ['input_ids', 'labels']
-    datatype = torch.int64
-
-    data_b = tensor_parallel.broadcast_data(keys, batch, datatype)
-
-    tokens = data_b['input_ids'].long().cuda().contiguous()
-    labels = data_b['labels'].long().cuda().contiguous()
-
-    tokens = tokens[:, :-1].contiguous()
-    labels = labels[:, 1:].contiguous()
-    attention_mask = tokens.ne(tokenizer.pad_token_id)
-    _, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-        labels,
-        tokenizer.pad_token_id,
-        args.reset_position_ids,
-        args.reset_attention_mask,
-        True)
-
-    return tokens, labels, loss_mask, attention_mask, position_ids
 
 def forward_step(batch, model):
     """Forward step."""
-
-    tokens, labels, loss_mask, attention_mask, position_ids = get_batch(
-        batch)
+    tokenizer = get_tokenizer()
+    # Get the batch.
+    input_ids = batch['input_ids'].long().cuda()
+    labels = batch['labels'].long().cuda()
+    labels[labels == 0] = -100
+    attention_mask = input_ids.ne(tokenizer.pad_token_id)
 
     # Tell the model what our actual batch size will be
     args = get_args()
-    args.micro_batch_size = len(labels)
-    config = core_transformer_config_from_args(args)
-    tensor_shape = (args.seq_length, args.micro_batch_size, args.hidden_size)
-    input_tensor = recv_forward(tensor_shape, config)
 
     # Forward pass through the model.
-    unwrapped_model = unwrap_model(model)
-    unwrapped_model.set_input_tensor(input_tensor)
-    output = model(tokens, position_ids, attention_mask)
+    unwrapped_model = unwrap_model(model, (torchDDP, LocalDDP, Float16Module))
+    output = unwrapped_model(input_ids=input_ids,
+                             labels=labels,
+                             attention_mask=attention_mask)
+    config = core_transformer_config_from_args(args)
     send_forward(output, config)
-    #if parallel_state.is_pipeline_last_stage():
-    if output.shape[-1] != args.hidden_size:
-        loss_mask = loss_mask.view(-1).float()
-        # For loss, return the unreduced loss.
-        losses = tensor_parallel.vocab_parallel_cross_entropy(
-            output.contiguous().float(), labels.contiguous())
-        loss = torch.sum(
-            losses.view(-1) * loss_mask.contiguous().view(-1).float()) / loss_mask.sum()
-        print(loss)
-        print_rank_0(loss)
-        return loss
+    if parallel_state.is_pipeline_last_stage():
+        print_rank_0(output.loss)
+        return output.loss
 
     return None
 
@@ -133,7 +103,6 @@ def evaluate(data_loader, model):
 
     return total_output
 
-
 def main():
     """Main program."""
     args = get_args()
@@ -142,26 +111,20 @@ def main():
               'is not yet supported for text generation.')
         exit()
 
+    # Set up model and load checkpoint.
+    model = get_model(get_model_provider(),
+                      model_type=ModelType.encoder_or_decoder,
+                      wrap_with_ddp=False)
+
+    assert len(model) == 1, 'Above condition should have caught this'
+    model = model[0]
+
     # Data stuff.
     dataset = build_evaluation_dataset(args.dataset)
     dataloader = build_data_loader(dataset,
                                    args.micro_batch_size,
                                    args.num_workers,
                                    drop_last=False)
-
-
-    # Set up model and load checkpoint.
-    model = get_model(get_model_provider(),
-                      model_type=ModelType.encoder_or_decoder,
-                      wrap_with_ddp=False)
-
-    if args.load is not None:
-        load_checkpoint(model, None, None)
-
-    assert len(model) == 1, 'Above condition should have caught this'
-    model = model[0]
-
-
 
     # Run evaluation.
     evaluate(dataloader, model)

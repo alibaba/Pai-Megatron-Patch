@@ -25,10 +25,8 @@ from megatron.model.utils import scaled_init_method_normal
 from megatron.core.models.common.rotary_pos_embedding import RotaryEmbedding
 
 from megatron_patch.model.mistral.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
-from megatron_patch.data.llava.constants import IMAGE_TOKEN_INDEX
-from .clip_encoder import CLIPVisionTower
-from .mm_projector_builder import build_vision_projector
 from .transformer import ParallelTransformer
+from .visual import VisionTransformer
 
 def parallel_lm_logits(input_, word_embeddings_weight, parallel_output,
                        bias=None):
@@ -361,16 +359,10 @@ class TransformerLanguageModel(MegatronModule):
         self.add_retriever = self.args.retro_add_retriever
         self.untie_embeddings_and_output_weights = self.args.untie_embeddings_and_output_weights
 
-        self.vision_tower = CLIPVisionTower(self.args.vision_tower)
-        self.vision_tower.to(torch.half if self.args.fp16 else torch.bfloat16)
+        self.visual_config = {"heads": 16, "image_size": 448,  "image_start_id": 151857,
+                       "layers": 1, "mlp_ratio": 4.9231, "output_dim": 2048, "patch_size": 14, "width": 1664}
 
-        if self.args.freeze_clip_vision_tower:
-            for param in self.vision_tower.parameters():
-                param.requires_grad = False
-
-        self.args.mm_hidden_size = self.vision_tower.hidden_size
-        self.mm_projector = build_vision_projector(self.args)
-        self.mm_projector.to(torch.half if self.args.fp16 else torch.bfloat16)
+        self.visual = VisionTransformer(**self.visual_config)
 
         # Embeddings.
         if self.pre_process:
@@ -479,72 +471,49 @@ class TransformerLanguageModel(MegatronModule):
                 pooling_sequence_index=0,
                 enc_hidden_states=None, output_enc_hidden=False, images=None):
 
-        image_features = self.encode_images(images)
+        if torch.any(enc_input_ids == self.visual_config['image_start_id']):
+            bos_pos = torch.where(enc_input_ids == self.visual_config['image_start_id'])
+            eos_pos = torch.where(enc_input_ids == self.visual_config['image_start_id'] + 1)
+            assert (bos_pos[0] == eos_pos[0]).all()
+            img_pos = torch.stack((bos_pos[0], bos_pos[1], eos_pos[1]), dim=1)
+            images = []
+            for i, a, b in img_pos:
+                image = enc_input_ids[i][a + 1: b - 1].tolist()
+                image = image[: image.index(self.visual_config['image_start_id'] + 2)]
+                images.append(bytes(image).decode('utf-8'))
 
-        input_embeds = self.embedding(enc_input_ids, enc_position_ids,
-                                           tokentype_ids=tokentype_ids)
-        input_embeds = input_embeds.permute(1, 0, 2)
-
-        new_input_embeds = []
-        for batch_idx, cur_input_ids in enumerate(enc_input_ids):
-            cur_input_embeds = input_embeds[batch_idx]  # s h
-            if (cur_input_ids == IMAGE_TOKEN_INDEX).sum() == 0:
-                # multimodal LLM, but the current sample is not multimodal
-                # FIXME: this is a hacky fix, for deepspeed zero3 to work
-                half_len = cur_input_ids.shape[0] // 2
-                cur_image_features = image_features[batch_idx]
-                cur_input_embeds_1 = cur_input_embeds[:half_len].unsqueeze(1)
-                cur_input_embeds_2 = cur_input_embeds[half_len:].unsqueeze(1)
-                cur_input_embeds = torch.cat([cur_input_embeds_1, cur_image_features[0:0], cur_input_embeds_2], dim=0)
-                new_input_embeds.append(cur_input_embeds)
-                continue
-            image_token_indices = torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0]
-            cur_new_input_embeds = []
-            cur_start = 0
-            while image_token_indices.numel() > 0:
-                cur_image_features = image_features[batch_idx].unsqueeze(1)
-                image_token_start = image_token_indices[0]
-                if getattr(self.args, 'tune_mm_mlp_adapter', False) and getattr(self.args, 'mm_use_im_start_end', False):
-                    cur_new_input_embeds.append(cur_input_embeds[cur_start:image_token_start-1].unsqueeze(1).detach())
-                    cur_new_input_embeds.append(cur_input_embeds[image_token_start-1:image_token_start].unsqueeze(1)) # special token: <im_start>
-                    cur_new_input_embeds.append(cur_image_features)
-                    cur_new_input_embeds.append(cur_input_embeds[image_token_start+1:image_token_start+2].unsqueeze(1)) # special token: <im_end>
-                    cur_start = image_token_start + 2
-                else:
-                    cur_new_input_embeds.append(cur_input_embeds[cur_start:image_token_start].unsqueeze(1))
-                    cur_new_input_embeds.append(cur_image_features)
-                    cur_start = image_token_start + 1
-
-                image_token_indices = torch.where(cur_input_ids[cur_start:] == IMAGE_TOKEN_INDEX)[0]
-            if cur_input_ids[cur_start:].numel() > 0:
-                if getattr(self.args, 'tune_mm_mlp_adapter', False) and getattr(self.args, 'mm_use_im_start_end', False):
-                    cur_new_input_embeds.append(cur_input_embeds[cur_start:].unsqueeze(1).detach())
-                else:
-                    cur_new_input_embeds.append(cur_input_embeds[cur_start:].unsqueeze(1))
-
-            cur_new_input_embeds = [x.to(device=enc_input_ids.device) for x in cur_new_input_embeds]
-            cur_new_input_embeds = torch.cat(cur_new_input_embeds, dim=0)
-            new_input_embeds.append(cur_new_input_embeds)
-
-        encoder_input = torch.cat(new_input_embeds, dim=1)
-
-        if enc_attn_mask is not None:
-            batch_size = enc_input_ids.shape[0]
-            new_enc_attn_mask = _prepare_4d_causal_attention_mask(
-                enc_attn_mask,
-                (batch_size, encoder_input.shape[0]),
-                encoder_input,
-                0
-            )
-
-        enc_attn_mask = new_enc_attn_mask
-        # Retriever embedding.
-        if self.add_retriever and self.pre_process:
-            retriever_input = self.embedding(retriever_input_ids,
-                                             retriever_position_ids,
-                                             tokentype_ids=tokentype_ids)
+            images = self.visual.encode(images)
+            fake_images = None
         else:
-            retriever_input = None
+            fake_images=torch.zeros(1, 3, 224, 224).to(
+                dtype=self.visual.conv1.weight.dtype, device=self.visual.conv1.weight.device)
+            images = self.visual(fake_images)
+
+
+        # Encoder embedding.
+        if self.pre_process:
+            encoder_input = self.embedding(enc_input_ids, enc_position_ids,
+                                           tokentype_ids=tokentype_ids)
+        else:
+            encoder_input = None
+
+        encoder_input = encoder_input.permute(1, 0, 2)
+        if fake_images is not None:
+            encoder_input = encoder_input + images.mean()*0
+        elif images is not None:
+            for idx, (i, a, b) in enumerate(img_pos):
+                encoder_input[i][a + 1 : b] = images[idx]
+
+        encoder_input = encoder_input.permute(1, 0, 2)
+        batch_size = enc_input_ids.shape[0]
+        seq_length = enc_input_ids.shape[1]
+        enc_attn_mask = _prepare_4d_causal_attention_mask(
+            enc_attn_mask,
+            (batch_size, seq_length),
+            encoder_input,
+            0,
+            sliding_window=None,
+        )
 
         # Rotary positional embeddings
         rotary_pos_emb = None
@@ -573,11 +542,11 @@ class TransformerLanguageModel(MegatronModule):
                 encoder_output = self.encoder(
                     encoder_input,
                     enc_attn_mask,
-                    retriever_input=retriever_input,
+                    retriever_input=None,
                     retriever_attn_mask=retriever_attn_mask,
                     inference_params=inference_params,
                     rotary_pos_emb=rotary_pos_emb,
-                    position_ids=None
+                    position_ids=enc_position_ids
                 )
             else:
                 encoder_output = self.encoder_hidden_state

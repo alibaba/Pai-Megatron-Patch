@@ -15,16 +15,14 @@
 import numpy as np
 
 from megatron.data.dataset_utils import get_datasets_weights_and_num_samples
-from megatron.data.blendable_dataset import BlendableDataset
 from megatron import print_rank_0
-from megatron.data.gpt_dataset import get_indexed_dataset_
-from megatron.data.gpt_dataset import get_train_valid_test_split_
 from megatron import get_args
 
 from megatron_patch.tokenizer import build_tokenizer
 from .mistral import MistralRawDataset,  MistralIdxMapDataset
 from .llama import LLamaRawDataset, LLamaIdxMapDataset
-from .llava.mm_pretrain_dataset import LazySupervisedDataset
+from .llava.mm_pretrain_dataset import LazySupervisedDataset as LLavaSupervisedDataset
+from .qwen_vl import LazySupervisedDataset as QwenVLSupervisedDataset
 
 def build_evaluation_dataset(dataset):
 
@@ -54,10 +52,17 @@ def build_finetune_dataset(dataset):
 
         return train_dataset, valid_dataset
     elif dataset == 'LLava-SFT':
-        train_dataset = LazySupervisedDataset(args.train_data_path)
-        valid_dataset = LazySupervisedDataset(args.valid_data_path)
+        train_dataset = LLavaSupervisedDataset(args.train_data_path)
+        valid_dataset = LLavaSupervisedDataset(args.valid_data_path)
 
         return train_dataset, valid_dataset
+
+    elif dataset == 'Qwen-VL-SFT':
+        train_dataset = QwenVLSupervisedDataset(args.train_data_path)
+        valid_dataset = QwenVLSupervisedDataset(args.valid_data_path)
+
+        return train_dataset, valid_dataset
+
     else:
         raise NotImplementedError('dataset {} is not implemented.'.format(dataset))
 
@@ -81,9 +86,9 @@ def build_pretrain_dataset_from_original(dataset):
         return train_dataset, valid_dataset, test_dataset
 
     elif dataset == 'LLava-Pretrain-Raw':
-        train_dataset = LazySupervisedDataset(args.train_data_path)
-        valid_dataset = LazySupervisedDataset(args.valid_data_path)
-        test_dataset = LazySupervisedDataset(args.test_data_path)
+        train_dataset = LLavaSupervisedDataset(args.train_data_path)
+        valid_dataset = LLavaSupervisedDataset(args.valid_data_path)
+        test_dataset = LLavaSupervisedDataset(args.test_data_path)
 
         return train_dataset, valid_dataset, test_dataset
 
@@ -148,6 +153,7 @@ def build_pretrain_dataset_from_idxmap(data_prefix,
 
     # Blend.
     blending_train_dataset = None
+    from megatron.data.blendable_dataset import BlendableDataset
     if train_datasets:
         blending_train_dataset = BlendableDataset(train_datasets, weights, train_num_samples)
     blending_valid_dataset = None
@@ -164,6 +170,8 @@ def _build_train_valid_test_datasets(data_prefix, max_padding_length, dataset_ty
                                      train_valid_test_num_samples,
                                      seed, skip_warmup,
                                      return_doc_ids=False):
+    from megatron.data.gpt_dataset import get_indexed_dataset_
+    from megatron.data.gpt_dataset import get_train_valid_test_split_
     # Indexed dataset.
     indexed_dataset = get_indexed_dataset_(data_prefix, skip_warmup)
     total_num_of_documents = indexed_dataset.sizes.shape[0]

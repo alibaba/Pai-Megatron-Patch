@@ -17,7 +17,6 @@ import io
 import copy
 import json
 import torch
-from megatron.data.gpt_dataset import _build_index_mappings
 from megatron import get_args
 
 from megatron_patch.tokenizer import get_tokenizer
@@ -195,6 +194,7 @@ class MistralIdxMapDataset(torch.utils.data.Dataset):
         assert np.min(documents) >= 0
         assert np.max(documents) < indexed_dataset.sizes.shape[0]
 
+        from megatron.data.gpt_dataset import _build_index_mappings
         # Build index mappings.
         try:
             self.doc_idx, self.sample_idx, self.shuffle_idx, self.index_prefix = \
