@@ -23,7 +23,7 @@ from megatron import (get_args, get_num_microbatches, get_signal_handler,
                       print_rank_0, print_rank_last, update_num_microbatches)
 from megatron.checkpointing import save_checkpoint
 from megatron.core import mpu, tensor_parallel
-from megatron.initialize import (initialize_megatron, set_jit_fusion_options,
+from megatron.initialize import (set_jit_fusion_options,
                                  write_args_to_tensorboard)
 
 from megatron.model import Float16Module
@@ -38,6 +38,7 @@ from megatron.core.enums import ModelType
 from megatron.core.utils import get_model_config
 from megatron.model.vision.knn_monitor import compute_feature_bank
 
+from .arguments import validate_moe_args
 from .checkpointing import load_checkpoint
 
 # The earliest we can measure the start time.
@@ -83,7 +84,7 @@ def pretrain(train_valid_test_dataset_provider,
             to set already parse arguments.
     """
     if not moe:
-        # Initalize and get arguments, timers, and Tensorboard writer.
+        from megatron.initialize import initialize_megatron
         initialize_megatron(extra_args_provider=extra_args_provider,
                             args_defaults=args_defaults)
     else:
@@ -105,6 +106,8 @@ def pretrain(train_valid_test_dataset_provider,
     print_datetime('after megatron is initialized')
 
     args = get_args()
+    if not moe:
+        args.moe = False
     timers = get_timers()
 
     # Model, optimizer, and learning rate.

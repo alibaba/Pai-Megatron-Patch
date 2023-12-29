@@ -1,7 +1,16 @@
-# Copyright (c) Alibaba Cloud.
+# Copyright (c) 2023 Alibaba PAI Team.
 #
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from collections import OrderedDict
 import math
@@ -20,9 +29,17 @@ from torchvision.transforms import InterpolationMode
 
 
 def get_abs_pos(abs_pos, tgt_size):
-    # abs_pos: L, C
-    # tgt_size: M
-    # return: M, C
+    """
+    This function resamples absolute positional embeddings `abs_pos` to match a target size `tgt_size`.
+    If the target size is different from the source size, it performs interpolation; otherwise, returns the input.
+    
+    Args:
+        abs_pos (torch.Tensor): A tensor containing absolute positional embeddings.
+        tgt_size (int): The target sequence length after resampling.
+    
+    Returns:
+        torch.Tensor: A tensor containing the resampled positional embeddings.
+    """
     src_size = int(math.sqrt(abs_pos.size(0)))
     tgt_size = int(math.sqrt(tgt_size))
     dtype = abs_pos.dtype
@@ -40,9 +57,16 @@ def get_abs_pos(abs_pos, tgt_size):
 # https://github.com/facebookresearch/mae/blob/efb2a8062c206524e35e47d04501ed4f544c0ae8/util/pos_embed.py#L20
 def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False):
     """
-    grid_size: int of the grid height and width
-    return:
-    pos_embed: [grid_size*grid_size, embed_dim] or [1+grid_size*grid_size, embed_dim] (w/ or w/o cls_token)
+    Generate a 2D sine-cosine positional embedding.
+
+    Args:
+        embed_dim (int): The dimension of the embedding.
+        grid_size (int): The height and width of the 2D grid.
+        cls_token (bool): If True, an additional position for the class token is included.
+
+    Returns:
+        np.ndarray: A numpy array with shape [grid_size*grid_size, embed_dim] if `cls_token` is False,
+                    otherwise [1+grid_size*grid_size, embed_dim].
     """
     grid_h = np.arange(grid_size, dtype=np.float32)
     grid_w = np.arange(grid_size, dtype=np.float32)
@@ -57,6 +81,16 @@ def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False):
 
 
 def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
+    """
+    Generate a 2D sine-cosine positional embedding from a provided grid of coordinates.
+
+    Args:
+        embed_dim (int): The dimension of the embedding.
+        grid (np.ndarray): An array containing the grid coordinates with shape (num_positions, 2).
+
+    Returns:
+        np.ndarray: A numpy array with the generated positional embedding with shape (num_positions, embed_dim).
+    """
     assert embed_dim % 2 == 0
 
     # use half of dimensions to encode grid_h
@@ -69,9 +103,14 @@ def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
 
 def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     """
-    embed_dim: output dimension for each position
-    pos: a list of positions to be encoded: size (M,)
-    out: (M, D)
+    Generate a 1D sine-cosine positional embedding from a provided grid of coordinates.
+
+    Args:
+        embed_dim (int): The dimension of the embedding.
+        pos (np.ndarray): An array containing the grid coordinates with shape (num_positions, 1).
+
+    Returns:
+        np.ndarray: A numpy array with the generated positional embedding.
     """
     assert embed_dim % 2 == 0
     omega = np.arange(embed_dim // 2, dtype=np.float32)
@@ -92,8 +131,16 @@ class Resampler(nn.Module):
     """
     A 2D perceiver-resampler network with one cross attention layers by
         (grid_size**2) learnable queries and 2d sincos pos_emb
-    Outputs:
-        A tensor with the shape of (grid_size**2, embed_dim)
+
+    Attributes:
+        num_queries (int): The number of learnable queries, which determines the output sequence length.
+        embed_dim (int): The embedding dimension of the queries and the input key-value pairs.
+        num_heads (int): The number of attention heads.
+        pos_embed (nn.Parameter): A tensor containing the fixed 2D positional embeddings.
+        query (nn.Parameter): A tensor containing the learnable query embeddings.
+        attn (nn.MultiheadAttention): The multi-head attention module.
+        ln_q (nn.LayerNorm): Layer normalization applied to the queries.
+        ln_kv (nn.LayerNorm): Layer normalization applied to the input key-value pairs.
     """
     def __init__(
             self,
@@ -123,20 +170,18 @@ class Resampler(nn.Module):
         self.attn = nn.MultiheadAttention(embed_dim, num_heads)
         self.ln_q = norm_layer(embed_dim)
         self.ln_kv = norm_layer(embed_dim)
-        
-        # self.apply(self._init_weights)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
 
     def forward(self, x, attn_mask=None):
+        """
+        The forward pass of the Resampler module.
 
+        Args:
+            x (torch.Tensor): The input key-value pairs.
+            attn_mask (torch.Tensor, optional): An optional attention mask.
+
+        Returns:
+            torch.Tensor: The resampled output.
+        """
         pos_embed = get_abs_pos(self.pos_embed, x.size(1))
 
         x = self.kv_proj(x)
@@ -242,7 +287,6 @@ class VisualAttention(nn.Module):
 
         return output
 
-
 class VisualAttentionBlock(nn.Module):
     def __init__(
             self,
@@ -329,7 +373,25 @@ class TransformerBlock(nn.Module):
 
 
 class VisionTransformer(nn.Module):
-
+    """
+    A Vision Transformer (ViT) class for image classification tasks.
+    
+    Attributes:
+        image_size (int): The size of the input images (assumed square).
+        patch_size (int): The size of each image patch.
+        width (int): The dimensionality of the token embeddings.
+        layers (int): The number of transformer blocks.
+        heads (int): The number of attention heads in each block.
+        mlp_ratio (float): Determines the size of the MLP as a ratio of the embedding dimension.
+        n_queries (int): The number of queries for the attention pooling.
+        output_dim (int): The dimensionality of the output token embeddings.
+        positional_embedding (torch.nn.Parameter): The learnable positional embeddings.
+        conv1 (torch.nn.Conv2d): The convolutional layer used to obtain patch embeddings.
+        transformer (TransformerBlock): The sequence of transformer blocks.
+        attn_pool (Resampler): The attention pooling layer.
+        ln_post (torch.nn.LayerNorm): The final layer normalization layer.
+        proj (torch.nn.Parameter): The projection matrix for the output embeddings.
+    """
     def __init__(
             self,
             image_size: int,
@@ -359,7 +421,8 @@ class VisionTransformer(nn.Module):
             transforms.Normalize(mean=mean, std=std),
         ])
 
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=width, kernel_size=patch_size, stride=patch_size, bias=False)
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=width, 
+                               kernel_size=patch_size, stride=patch_size, bias=False)
 
         # class embeddings and positional embeddings
         scale = width ** -0.5

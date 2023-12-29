@@ -6,7 +6,6 @@
 """Tokenization classes for QWen."""
 
 import base64
-import logging
 import os
 import requests
 import unicodedata
@@ -19,9 +18,6 @@ from transformers.utils import try_to_load_from_cache
 
 import matplotlib.colors as mcolors
 from matplotlib.font_manager import FontProperties
-
-logger = logging.getLogger(__name__)
-
 
 VOCAB_FILES_NAMES = {"vocab_file": "qwen.tiktoken", "ttf": "SimSun.ttf"}
 FONT_PATH = try_to_load_from_cache("Qwen/Qwen-VL-Chat", "SimSun.ttf")
@@ -45,7 +41,6 @@ SPECIAL_TOKENS = (
     IMEND,
 ) + EXTRAS
 IMG_TOKEN_SPAN = 256
-
 
 def _load_tiktoken_bpe(tiktoken_bpe_file: str) -> Dict[bytes, int]:
     with open(tiktoken_bpe_file, "rb") as f:
@@ -172,24 +167,6 @@ class QWenTokenizer(PreTrainedTokenizer):
         self.im_start_id = self.special_tokens[IMSTART]
         self.im_end_id = self.special_tokens[IMEND]
 
-    def __getstate__(self):
-        # for pickle lovers
-        state = self.__dict__.copy()
-        del state['tokenizer']
-        return state
-
-    def __setstate__(self, state):
-        # tokenizer is not python native; don't pass it; rebuild it
-        self.__dict__.update(state)
-        enc = tiktoken.Encoding(
-            "Qwen",
-            pat_str=PAT_STR,
-            mergeable_ranks=self.mergeable_ranks,
-            special_tokens=self.special_tokens,
-        )
-        self.tokenizer = enc
-
-
     def __len__(self) -> int:
         return self.tokenizer.n_vocab
 
@@ -225,8 +202,12 @@ class QWenTokenizer(PreTrainedTokenizer):
         """
         Save only the vocabulary of the tokenizer (vocabulary).
 
+        Args:
+        save_directory (str): The directory where the vocabulary file will be saved.
+        **kwargs: Additional keyword arguments that are not used but included for compatibility with the base class.
+
         Returns:
-            `Tuple(str)`: Paths to the files saved.
+            Tuple(str): Paths to the files saved.
         """
         file_path = os.path.join(save_directory, "qwen.tiktoken")
         with open(file_path, "w", encoding="utf8") as w:
@@ -246,20 +227,18 @@ class QWenTokenizer(PreTrainedTokenizer):
         Converts a string in a sequence of tokens.
 
         Args:
-            text (`str`):
-                The sequence to be encoded.
+            text (`str`):The sequence to be encoded.
             allowed_special (`Literal["all"]` or `set`):
                 The surface forms of the tokens to be encoded as special tokens in regular texts.
                 Default to "all".
             disallowed_special (`Literal["all"]` or `Collection`):
                 The surface forms of the tokens that should not be in regular texts and trigger errors.
                 Default to an empty tuple.
-
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific encode method.
 
         Returns:
-            `List[bytes|str]`: The list of tokens.
+            List[bytes|str]: The list of tokens.
         """
         tokens = []
         text = unicodedata.normalize("NFC", text)
@@ -457,10 +436,6 @@ class QWenTokenizer(PreTrainedTokenizer):
                 visualizer.draw_text(box['ref'], (x1, y1), color=color, horizontal_alignment="left")
         return visualizer.output
 
-
-import colorsys
-import logging
-import math
 import numpy as np
 import matplotlib as mpl
 import matplotlib.colors as mplc
@@ -469,9 +444,6 @@ import torch
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from PIL import Image
 import random
-
-logger = logging.getLogger(__name__)
-
 
 class VisImage:
     def __init__(self, img, scale=1.0):
@@ -490,7 +462,6 @@ class VisImage:
             (self.height * self.scale + 1e-2) / self.dpi,
         )
         self.canvas = FigureCanvasAgg(fig)
-        # self.canvas = mpl.backends.backend_cairo.FigureCanvasCairo(fig)
         ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
         ax.axis("off")
         self.fig = fig
@@ -513,7 +484,6 @@ class VisImage:
         img_rgba = buffer.reshape(height, width, 4)
         rgb, alpha = np.split(img_rgba, [3], axis=2)
         return rgb.astype("uint8")
-
 
 class Visualizer:
     def __init__(self, img_rgb, metadata=None, scale=1.0):
@@ -583,5 +553,4 @@ class Visualizer:
         return self.output
 
     def get_output(self):
-        
         return self.output

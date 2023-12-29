@@ -12,18 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import torch
-
 from megatron_patch.expert_parallel_state import get_expert_parallel_world_size
 
 class _AllToAll(torch.autograd.Function):
     @staticmethod
-    def forward(ctx,
-                group,
-                input,
-                output_split_sizes,
-                input_split_sizes):
+    def forward(ctx, group, input, output_split_sizes, input_split_sizes):
+        """
+        The forward pass for the all-to-all communication operation.
+        
+        Args:
+            ctx: The context object that can be used to stash information
+                 for backward computation.
+            group: The process group to which the collective operation is applied.
+            input: The input tensor to be split across devices.
+            output_split_sizes: A tuple or list specifying the sizes of the output
+                                chunks for each device after the all-to-all operation.
+            input_split_sizes: A tuple or list specifying the sizes of the input
+                               chunks for each device before the all-to-all operation.
+        
+        Returns:
+            The output tensor with chunks of data received from all devices.
+        """
         ctx.group = group
         ctx.output_split_sizes = output_split_sizes
         ctx.input_split_sizes = input_split_sizes
@@ -53,6 +63,18 @@ class _AllToAll(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, *grad_output):
+        """
+        The backward pass for the all-to-all communication operation.
+        
+        Args:
+            ctx: The context object with saved information from the forward pass.
+            grad_output: The gradient tensor with respect to the output of the
+                         forward pass.
+        
+        Returns:
+            Tuple containing None for non-tensor inputs and the gradient with
+            respect to the input tensor of the forward pass.
+        """
         return (None, _AllToAll.apply(
             ctx.group, * grad_output,
             ctx.input_split_sizes,

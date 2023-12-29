@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from collections.abc import Callable
 from typing import Dict, TYPE_CHECKING, Any, Optional, Tuple
 
@@ -26,7 +25,6 @@ from megatron.core.tensor_parallel.mappings import (
     gather_from_tensor_model_parallel_region,
     gather_from_sequence_parallel_region,
     scatter_to_sequence_parallel_region
-
 )
 
 from megatron_patch import expert_parallel_state
@@ -36,7 +34,6 @@ if TYPE_CHECKING:
     Base = Module[Tensor]
 else:
     Base = Module
-
 
 uniform_map: Dict[torch.device, Callable] = {}
 gumbel_map: Dict[torch.device, Callable] = {}
@@ -85,7 +82,6 @@ def einsum(rule, a, b):
         return torch.bmm(a, b.transpose(1, 2)).squeeze(2)
     else:
         return torch.einsum(rule, a, b)
-
 
 def scatter_tokens_to_tensor_parallel_region(input_):
     # E, C, M -> C, E, M
@@ -289,8 +285,6 @@ def top1gating_tutel(logits: Tensor,
                                                  Tensor]:
 
     """Implements Top1Gating on logits."""
-    # if noisy_gate_policy == 'RSample':
-    #     logits_w_noise = logits + gumbel_rsample(logits.shape, device=logits.device)
     # everything is in fp32 in this function
     gates = F.softmax(logits, dim=1)
  

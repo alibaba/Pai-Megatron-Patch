@@ -185,30 +185,30 @@ tensor_parallel_params = [
     "self_attn.query.weight",
     "self_attn.key_value.weight",
     "self_attn.dense.weight",
-    "mlp.megatron_moe.experts.megatron_experts.0.dense_h_to_4h_1",
-    "mlp.megatron_moe.experts.megatron_experts.1.dense_h_to_4h_1",
-    "mlp.megatron_moe.experts.megatron_experts.2.dense_h_to_4h_1",
-    "mlp.megatron_moe.experts.megatron_experts.3.dense_h_to_4h_1",
-    "mlp.megatron_moe.experts.megatron_experts.4.dense_h_to_4h_1",
-    "mlp.megatron_moe.experts.megatron_experts.5.dense_h_to_4h_1",
-    "mlp.megatron_moe.experts.megatron_experts.6.dense_h_to_4h_1",
-    "mlp.megatron_moe.experts.megatron_experts.7.dense_h_to_4h_1",
-    "mlp.megatron_moe.experts.megatron_experts.0.dense_h_to_4h_2",
-    "mlp.megatron_moe.experts.megatron_experts.1.dense_h_to_4h_2",
-    "mlp.megatron_moe.experts.megatron_experts.2.dense_h_to_4h_2",
-    "mlp.megatron_moe.experts.megatron_experts.3.dense_h_to_4h_2",
-    "mlp.megatron_moe.experts.megatron_experts.4.dense_h_to_4h_2",
-    "mlp.megatron_moe.experts.megatron_experts.5.dense_h_to_4h_2",
-    "mlp.megatron_moe.experts.megatron_experts.6.dense_h_to_4h_2",
-    "mlp.megatron_moe.experts.megatron_experts.7.dense_h_to_4h_2",
-    "mlp.megatron_moe.experts.megatron_experts.0.dense_4h_to_h",
-    "mlp.megatron_moe.experts.megatron_experts.1.dense_4h_to_h",
-    "mlp.megatron_moe.experts.megatron_experts.2.dense_4h_to_h",
-    "mlp.megatron_moe.experts.megatron_experts.3.dense_4h_to_h",
-    "mlp.megatron_moe.experts.megatron_experts.4.dense_4h_to_h",
-    "mlp.megatron_moe.experts.megatron_experts.5.dense_4h_to_h",
-    "mlp.megatron_moe.experts.megatron_experts.6.dense_4h_to_h",
-    "mlp.megatron_moe.experts.megatron_experts.7.dense_4h_to_h"
+    "mlp.megatron_moe.experts.megatron_experts.0.dense_h_to_4h_1.weight",
+    "mlp.megatron_moe.experts.megatron_experts.1.dense_h_to_4h_1.weight",
+    "mlp.megatron_moe.experts.megatron_experts.2.dense_h_to_4h_1.weight",
+    "mlp.megatron_moe.experts.megatron_experts.3.dense_h_to_4h_1.weight",
+    "mlp.megatron_moe.experts.megatron_experts.4.dense_h_to_4h_1.weight",
+    "mlp.megatron_moe.experts.megatron_experts.5.dense_h_to_4h_1.weight",
+    "mlp.megatron_moe.experts.megatron_experts.6.dense_h_to_4h_1.weight",
+    "mlp.megatron_moe.experts.megatron_experts.7.dense_h_to_4h_1.weight",
+    "mlp.megatron_moe.experts.megatron_experts.0.dense_h_to_4h_2.weight",
+    "mlp.megatron_moe.experts.megatron_experts.1.dense_h_to_4h_2.weight",
+    "mlp.megatron_moe.experts.megatron_experts.2.dense_h_to_4h_2.weight",
+    "mlp.megatron_moe.experts.megatron_experts.3.dense_h_to_4h_2.weight",
+    "mlp.megatron_moe.experts.megatron_experts.4.dense_h_to_4h_2.weight",
+    "mlp.megatron_moe.experts.megatron_experts.5.dense_h_to_4h_2.weight",
+    "mlp.megatron_moe.experts.megatron_experts.6.dense_h_to_4h_2.weight",
+    "mlp.megatron_moe.experts.megatron_experts.7.dense_h_to_4h_2.weight",
+    "mlp.megatron_moe.experts.megatron_experts.0.dense_4h_to_h.weight",
+    "mlp.megatron_moe.experts.megatron_experts.1.dense_4h_to_h.weight",
+    "mlp.megatron_moe.experts.megatron_experts.2.dense_4h_to_h.weight",
+    "mlp.megatron_moe.experts.megatron_experts.3.dense_4h_to_h.weight",
+    "mlp.megatron_moe.experts.megatron_experts.4.dense_4h_to_h.weight",
+    "mlp.megatron_moe.experts.megatron_experts.5.dense_4h_to_h.weight",
+    "mlp.megatron_moe.experts.megatron_experts.6.dense_4h_to_h.weight",
+    "mlp.megatron_moe.experts.megatron_experts.7.dense_4h_to_h.weight"
 ]
 
 def recursive_print(name, val, spaces=0):
@@ -555,7 +555,6 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 _ = int(m.group(1))
                 # The name of the operation.
                 op_name = m.group(2)
-
                 # Is it a weight or a bias?
                 weight = m.group(3)
 
@@ -602,6 +601,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 else:
                     continue
 
+
                 if op_name + "." + weight in tensor_parallel_params:
                     dim = 1 if op_name in ["self_attn.dense",
                                             "mlp.megatron_moe.experts.megatron_experts.0.dense_4h_to_h",
@@ -613,6 +613,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                                             "mlp.megatron_moe.experts.megatron_experts.6.dense_4h_to_h",
                                             "mlp.megatron_moe.experts.megatron_experts.7.dense_4h_to_h"
                                            ] else 0
+
                     params = torch.chunk(params, args.target_tensor_model_parallel_size, dim=dim)
 
                 for i in range(args.target_tensor_model_parallel_size):
@@ -638,10 +639,8 @@ def convert_checkpoint_from_transformers_to_megatron(args):
 
                     dense_h_to_4h_name = 'mlp.megatron_moe.experts.megatron_experts.' + str(expert_id)+'.dense_h_to_4h.weight'
                     dense_h_to_4h_layer_name = f"layers.{layer}.{dense_h_to_4h_name}"
-
                     params_dict[dense_h_to_4h_layer_name] = torch.cat(
                     [dense_h_to_4h_1_weight, dense_h_to_4h_2_weight], dim=0)
-
                     del params_dict[dense_h_to_4h_1_layer_name]
                     del params_dict[dense_h_to_4h_2_layer_name]
 
@@ -697,6 +696,8 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 else f"mp_rank_{tp_rank:02d}_{pp_rank:03d}"
             )
 
+            save_dir = os.path.join(release_dir, checkpoint_dir)
+            os.makedirs(save_dir, exist_ok=True)
             for layer_id in range(config.num_hidden_layers):
                 for expert_id in range(config.num_local_experts):
 
@@ -712,12 +713,13 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                     output_state_dict[tp_rank]['model']['language_model']['encoder'].pop(moe_dense_4h_to_h_path)
 
                     moe_checkpoint_path = "layer_" + str(layer_id)+"_expert_" + str(expert_id) + "_" +checkpoint_dir+"_model_states.pt"
-                    torch.save(moe_state_dict, os.path.join(release_dir, moe_checkpoint_path))
+                    if args.target_tensor_model_parallel_size > 1:
+                        torch.save(moe_state_dict, os.path.join(save_dir, moe_checkpoint_path))
+                    else:
+                        torch.save(moe_state_dict, os.path.join(release_dir, moe_checkpoint_path))
 
             checkpoint_name = "model_rng.pt"
-            checkpoint_dir = os.path.join(release_dir, checkpoint_dir)
-            os.makedirs(checkpoint_dir, exist_ok=True)
-            checkpoint_path = os.path.join(checkpoint_dir, checkpoint_name)
+            checkpoint_path = os.path.join(save_dir, checkpoint_name)
             if args.print_checkpoint_structure:
                 print(
                     f"Checkpoint structure of model state dict shard belonging to TP rank {tp_rank} and PP rank"

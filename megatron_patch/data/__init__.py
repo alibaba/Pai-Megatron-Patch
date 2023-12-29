@@ -206,6 +206,8 @@ def _build_train_valid_test_datasets(data_prefix, max_padding_length, dataset_ty
                     name, data_prefix, documents, indexed_dataset,
                     train_valid_test_num_samples[index],
                     seed, max_padding_length, return_doc_ids)
+            else:
+                raise RuntimeError("The provided dataset_type is not supported in Pretrain mode. \nChoose from [LLama-Pretrain-Idxmap, Mistral-Pretrain-Idxmap].")
 
         return dataset
 

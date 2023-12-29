@@ -17,7 +17,6 @@ import torch
 
 from megatron import get_args
 from megatron.core import parallel_state, tensor_parallel
-from megatron.initialize import initialize_megatron
 from megatron.utils import average_losses_across_data_parallel_group
 from megatron.utils import get_ltor_masks_and_position_ids
 from megatron_patch.data import build_finetune_dataset
@@ -27,6 +26,7 @@ from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.arguments import get_tasks_args
 from megatron.arguments import core_transformer_config_from_args
 
+from megatron_patch.initialize import initialize_megatron
 
 def model_provider(pre_process=True, post_process=True):
     config = core_transformer_config_from_args(get_args())
@@ -60,8 +60,8 @@ def forward_step(data_iterator, model):
 
     tokens = tokens[:, :-1].contiguous()
     labels = labels[:, 1:].contiguous()
-
-    attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+    attention_mask = tokens.ne(tokenizer.pad_token_id)
+    _, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         labels,
         tokenizer.pad_token_id,
         args.reset_position_ids,
