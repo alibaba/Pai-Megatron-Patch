@@ -116,7 +116,8 @@ fi
 
 if [ $SP = true ] && [ $TP -gt 1 ]; then
     sp_options=" \
-		    --sequence-parallel"
+		    --sequence-parallel \
+		    --expert-tensor-parallelism"
 
 elif [ $SP = false ]; then
     sp_options=" \

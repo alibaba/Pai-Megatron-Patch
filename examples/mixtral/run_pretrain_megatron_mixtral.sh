@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_pretrain_megatron_mixtral.sh dsw ../.. 0.125B 1 8 1e-5 1e-6 2048 2048 0 bf16 8 1 sel true false false false 100000  /mnt/llama2-datasets/alpaca_data.json /mnt/mistral-ckpts/Mistral-7B-v0.1 10000000000 100000000 /mnt/output_patch_test
+#sh run_pretrain_megatron_mixtral.sh dsw ../.. 7B 1 8 1e-5 1e-6 80 80 0 bf16 1 1 sel true false false false 100  /mnt/llama2-datasets/alpaca_data.json /mnt/mixtral-ckpts/Mixtral-8x7B-v0.1-to-mg-tp1-pp1 10000000000 100000000 /mnt/test_mixtral_output
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -128,7 +128,9 @@ fi
 
 if [ $SP = true ] && [ $TP -gt 1 ]; then
     sp_options=" \
-		    --sequence-parallel"
+		    --sequence-parallel \
+		    --expert-tensor-parallelism
+		    "
 
 elif [ $SP = false ]; then
     sp_options=" \

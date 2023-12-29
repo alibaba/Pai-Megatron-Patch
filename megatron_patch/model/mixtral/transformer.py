@@ -112,7 +112,8 @@ class ParallelMLP(MegatronModule):
             bias=self.add_bias,
             gather_output=False,
             skip_bias_add=True,
-            is_expert=is_expert)
+            is_expert=is_expert,
+            expert_tensor_parallelism=args.expert_tensor_parallelism)
 
         self.bias_gelu_fusion = False
         self.activation_func = None
@@ -144,6 +145,7 @@ class ParallelMLP(MegatronModule):
             input_is_parallel=True,
             skip_bias_add=True,
             is_expert=is_expert,
+            expert_tensor_parallelism=args.expert_tensor_parallelism
         )
 
     def forward(self, hidden_states):

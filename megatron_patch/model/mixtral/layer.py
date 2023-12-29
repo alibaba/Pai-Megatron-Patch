@@ -88,23 +88,21 @@ class MoE(torch.nn.Module):
                                       use_tutel=use_tutel,
                                       expert_tensor_parallelism=expert_tensor_parallelism)
         if self.use_residual:
+            # For residual connection, use an additional MLP.
             self.mlp = expert
             # coefficient is used for weighted sum of the output of expert and mlp
             self.coefficient = torch.nn.Linear(hidden_size, 2)
 
     def forward(self, hidden_states, used_token=None):
-        """ MoE forward
+        """Forward pass for the MoE layer.
 
-        Arguments:
-            hidden_states (Tensor): input to the layer
-            used_token (Tensor, optional): default: None, mask only used tokens
+        Args:
+            hidden_states (Tensor): Input tensor to the layer.
+            used_token (Tensor, optional): Mask tensor indicating used tokens (e.g., for padding).
 
         Returns:
-            A tuple including output, gate loss, and expert count.
-
-            * output (Tensor): output of the model
-
-            * mlp_bias (Tensor): placehoder, no effect
+            output (Tensor): Output tensor after processing by the MoE layer.
+            gate_loss (Tensor): Gate loss for training the gating mechanism.
         """
         args = get_args()
         

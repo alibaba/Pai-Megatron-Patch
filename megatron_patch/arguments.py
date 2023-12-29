@@ -25,6 +25,8 @@ def validate_moe_args(args, defaults={}):
         if args.rank == 0:
             print('Experts set to %s, expert parallel size set to %d'
                   % (str(args.num_experts), args.moe_expert_parallel_size))
+    else:
+        args.moe = False
 
 def get_tasks_args(parser):
     group = parser.add_argument_group(title='patch')
@@ -327,5 +329,8 @@ def get_tasks_args(parser):
     group.add_argument('--router-type', type=str, default='topk',
                        choices=['topk', 'expert_choice'],
                        help='Options for router type, support top1 & top2 and expert_choice')
+
+    group.add_argument('--moe-input-feature-slicing', action='store_true',
+                       help='Enable moe all2all performance optimization.')
 
     return parser
