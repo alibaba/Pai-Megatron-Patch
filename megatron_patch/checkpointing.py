@@ -19,7 +19,6 @@ from collections import defaultdict
 import numpy as np
 import torch
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
-
 from megatron import update_num_microbatches
 from megatron.checkpointing import (_transpose_first_dim,
                                     find_checkpoint_rank_0,
@@ -28,7 +27,12 @@ from megatron.checkpointing import (_transpose_first_dim,
                                     read_metadata, set_checkpoint_version)
 from megatron.core import mpu, tensor_parallel
 from megatron.global_vars import get_args
-from megatron.model import DistributedDataParallel as LocalDDP
+
+try:
+    from megatron.model import DistributedDataParallel as LocalDDP
+except:
+    from megatron.core.distributed import DistributedDataParallel as LocalDDP
+
 from megatron.model import Float16Module
 from megatron.utils import print_rank_0, unwrap_model
 
