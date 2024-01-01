@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh nv_run_evaluate_megatron_mixtral.sh dsw ../.. 7B 1 81 81 0 bf16 2 1 sel false false true false /mnt/llama2-datasets/alpaca_data.json /mnt/mixtral-ckpts/Mixtral-8x7B-v0.1-to-mcore-tp2-pp1
+#sh mcore_run_pretrain_megatron_mixtral.sh dsw ../.. 7B 1 8 1e-5 1e-6 80 80 0 bf16 1 1 sel true false false false 100  /mnt/llama2-datasets/alpaca_data.json /mnt/mixtral-ckpts/Mixtral-8x7B-v0.1-to-mg-tp1-pp1 10000000000 100000000 /mnt/test_mixtral_output
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -13,7 +13,6 @@ MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
 GPUS_PER_NODE=8
-WORLD_SIZE=$GPUS_PER_NODE
 
 elif [ $ENV = dlc ]; then
 
@@ -27,28 +26,44 @@ DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $
 
 MODEL_SIZE=$3
 BATCH_SIZE=$4
-SEQ_LEN=$5
-PAD_LEN=$6
-EXTRA_VOCAB_SIZE=$7
-PR=$8
-TP=$9
-PP=${10}
-AC=${11}
-DO=${12}
-FL=${13}
-SP=${14}
-TE=${15}
-DATASET_PATH=${16}
-PRETRAIN_CHECKPOINT_PATH=${17}
+GLOBAL_BATCH_SIZE=$5
+LR=$6
+MIN_LR=$7
+SEQ_LEN=$8
+PAD_LEN=$9
+EXTRA_VOCAB_SIZE=${10}
+PR=${11}
+TP=${12}
+PP=${13}
+AC=${14}
+DO=${15}
+FL=${16}
+SP=${17}
+TE=${18}
+SAVE_INTERVAL=${19}
+DATASET_PATH=${20}
+PRETRAIN_CHECKPOINT_PATH=${21}
+TRAIN_TOKENS=${22}
+WARMUP_TOKENS=${23}
+OUTPUT_BASEPATH=${24}
 
-if [ $MODEL_SIZE = 7B ]; then
+if [ $MODEL_SIZE = 0.125B ]; then
+
+NUM_LAYERS=12
+HIDDEN_SIZE=768
+NUM_ATTN_HEADS=12
+INTERMEDIATE_SIZE=3072
+MPE=32768
+SLW=4096
+
+
+elif [ $MODEL_SIZE = 7B ]; then
 
 NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=14336
 MPE=32768
-SLW=4096
 
 gqa_options=" \
 		    --group-query-attention \
@@ -58,7 +73,6 @@ fi
 
 if [ $AC = full ]; then
     activation_checkpoint_options=" \
-        --recompute-num-layers 1 \
 		    --recompute-method uniform \
 		    --recompute-granularity full"
 elif [ $AC = sel ]; then
@@ -114,7 +128,8 @@ fi
 if [ $SP = true ] && [ $TP -gt 1 ]; then
     sp_options=" \
 		    --sequence-parallel \
-		    --expert-tensor-parallelism"
+		    --expert-tensor-parallelism
+		    "
 
 elif [ $SP = false ]; then
     sp_options=" \
@@ -126,46 +141,76 @@ if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
             --load $PRETRAIN_CHECKPOINT_PATH"
 fi
 
-EP=$(($WORLD_SIZE/$TP/$PP))
+TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 
-megatron_options=" \
-        --valid-data-path ${DATASET_PATH}
+NAME="${ENV}-pretrain-megatron-gpt3-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
+mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
+mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
+mkdir -p "${OUTPUT_BASEPATH}/log/"
+current_time=$(date "+%Y.%m.%d-%H.%M.%S")
+TENSORBOARD_DIR="${OUTPUT_BASEPATH}/tensorboard/${NAME}_${current_time}"
+mkdir -p ${TENSORBOARD_DIR}
+
+SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
+
+megatron_options="  \
+        --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
+        --train-data-path ${DATASET_PATH} \
+        --valid-data-path ${DATASET_PATH} \
+        --test-data-path ${DATASET_PATH} \
+        --lr ${LR} \
+        --min-lr ${MIN_LR} \
+        --lr-decay-style linear \
+        --adam-beta1 0.9 \
+        --adam-beta2 0.95 \
+        --weight-decay 0.1 \
+        --clip-grad 1.0 \
+        --init-method-std 0.006 \
+        --lr-decay-iters ${LR_DECAY_ITERS} \
+        --lr-warmup-iters ${LR_WARMUP_ITERS} \
+        --train-iters ${TRAIN_ITERS} \
         --micro-batch-size ${BATCH_SIZE} \
+        --global-batch-size ${GLOBAL_BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
         --num-attention-heads ${NUM_ATTN_HEADS} \
+        --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${MPE} \
-        --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --log-interval 1 \
-        --eval-interval 100 \
+        --eval-interval 10000 \
         --eval-iters 10 \
+        --save-interval ${SAVE_INTERVAL} \
+        --tensorboard-queue-size 1 \
+        --tensorboard-dir ${TENSORBOARD_DIR} \
+        --log-timers-to-tensorboard \
+        --log-batch-size-to-tensorboard \
+        --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
         --no-load-optim \
         --no-load-rng \
+        --num-workers 8 \
         --seed 1234 \
-        --num-workers 0 \
         --max-padding-length ${PAD_LEN} \
-        --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type MistralTokenizer \
-        --dataset Mistral-SFT \
-        --sliding-window ${SLW} \
+        --dataset Mistral-Pretrain-Raw \
         --swiglu \
         --use-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear \
-        --normalization RMSNorm \
-        --no-masked-softmax-fusion \
+        --normalization LayerNorm \
         --no-position-embedding \
+        --router-type topk \
         --num-experts 8 \
         --moe-router-type top2 \
         --use-mcore-models \
-        --expert-model-parallel-size ${EP}
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS nv_evaluate_megatron_mixtral.py
+run_cmd="torchrun $DISTRIBUTED_ARGS mcore_pretrain_megatron_mixtral.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}
