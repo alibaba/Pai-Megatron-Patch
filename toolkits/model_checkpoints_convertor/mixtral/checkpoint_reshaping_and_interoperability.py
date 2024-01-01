@@ -655,7 +655,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 qkv_name = 'self_attention.query_key_value.weight'
                 qkv_layer_name = f"layers.{layer}.{qkv_name}"
 
-                # torch.Size([32 128, 4096])
+                # torch.Size([8 512, 4096])
                 group_query_weight = query_weight.view(num_groups // args.target_tensor_model_parallel_size, num_heads // num_groups * head_dim, hidden_size)
                 # torch.Size(8, 256, 4096])
                 group_kv_weight = kv_weight.view(num_groups // args.target_tensor_model_parallel_size, 2 * head_dim, hidden_size)
