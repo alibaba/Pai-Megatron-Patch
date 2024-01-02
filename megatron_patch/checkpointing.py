@@ -553,9 +553,8 @@ def _load_moe_state_dict(checkpoint_path, state_dict, model_list, mpu):
 def _save_moe_checkpoint(save_dir, model_list):
     # Using layer_#_export_# to save the model's expert state_dict
     from megatron_patch.model.mixtral.layer import MoE
+    from megatron_patch import expert_parallel_state
     import re
-    moe_layer_id = 0
-
     # Loop through all the models in the list
     for model in model_list:
         # Loop through all the modules in the model
@@ -564,7 +563,7 @@ def _save_moe_checkpoint(save_dir, model_list):
             if isinstance(module, MoE):
                 moe_layer_id = module.get_moe_layer_index()
                 num_local_experts = module.num_local_experts
-                ep_rank = torch.distributed.get_rank(group=mpu.get_expert_parallel_group())
+                ep_rank = torch.distributed.get_rank(group=expert_parallel_state.get_expert_parallel_group())
 
                 # Extract the state dict of MoE experts
                 moe_state_dict = {
