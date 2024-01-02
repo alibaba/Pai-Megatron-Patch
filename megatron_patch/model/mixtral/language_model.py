@@ -611,6 +611,9 @@ class TransformerLanguageModel(MegatronModule):
                 = self.decoder.state_dict_for_save_checkpoint(prefix=prefix,
                                                               keep_vars=keep_vars)
 
+        if args.moe:
+            state_dict_["moe_state_dict"] = moe_state_dict_
+
         return state_dict_
 
     def load_state_dict(self, state_dict, strict=True):
