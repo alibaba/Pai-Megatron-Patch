@@ -417,11 +417,16 @@ def save_checkpoint(iteration, model, optimizer, opt_param_scheduler):
             if len(model) == 1:
                 model_state_dict['model'] = model[
                     0].state_dict_for_save_checkpoint()
+                if args.moe:
+                    # Remove moe states
+                    model_state_dict['model']['language_model'].pop('moe_state_dict')
             else:
                 for i in range(len(model)):
                     mpu.set_virtual_pipeline_model_parallel_rank(i)
                     model_state_dict['model%d' % i] = \
                         model[i].state_dict_for_save_checkpoint()
+                    if args.moe:
+                        model_state_dict['model%d' % i]['language_model'].pop('moe_state_dict')
         elif args.transformer_type == 'huggingface':
             model_state_dict['model'] = model[0].state_dict()
 
