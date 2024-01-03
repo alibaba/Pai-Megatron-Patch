@@ -289,6 +289,7 @@ def preprocess(sources, targets, tokenizer):
         label[:source_len] = -100
     return dict(input_ids=input_ids, labels=labels)
 
+
 def init_weight(model):
 
     def _init_weight(module):
@@ -298,6 +299,56 @@ def init_weight(model):
             nn.init.constant_(module.bias, 0)
 
     model.apply(_init_weight)
+
+
+def save_hf_format(model, tokenizer, args, sub_folder=""):
+    # used to save huggingface format, so we can use it for hf.from_pretrained
+    model_to_save = model.module if hasattr(model, 'module') else model
+    CONFIG_NAME = "config.json"
+    WEIGHTS_NAME = "pytorch_model.bin"
+    output_dir = os.path.join(args.save, sub_folder)
+    os.makedirs(output_dir, exist_ok=True)
+    output_model_file = os.path.join(output_dir, WEIGHTS_NAME)
+    output_config_file = os.path.join(output_dir, CONFIG_NAME)
+    save_dict = model_to_save.state_dict()
+    for key in list(save_dict.keys()):
+        if "lora" in key:
+            del save_dict[key]
+    torch.save(save_dict, output_model_file)
+    model_to_save.config.to_json_file(output_config_file)
+    tokenizer.save_vocabulary(output_dir)
+
+
+def _z3_params_to_fetch(param_list):
+    return [
+        p for p in param_list
+        if hasattr(p, 'ds_id') and p.ds_status == ZeroParamStatus.NOT_AVAILABLE
+    ]
+
+
+def save_zero_three_model(model_ema, global_rank, save_dir, zero_stage=0):
+    zero_stage_3 = (zero_stage == 3)
+    os.makedirs(save_dir, exist_ok=True)
+    WEIGHTS_NAME = "pytorch_model.bin"
+    output_model_file = os.path.join(save_dir, WEIGHTS_NAME)
+
+    model_to_save = model_ema.module if hasattr(model_ema, 'module') else model_ema
+    if not zero_stage_3:
+        if global_rank == 0:
+            torch.save(model_to_save.state_dict(), output_model_file)
+    else:
+        output_state_dict = {}
+        for k, v in model_to_save.named_parameters():
+            if hasattr(v, 'ds_id'):
+                with deepspeed.zero.GatheredParameters(_z3_params_to_fetch([v]), enabled=zero_stage_3):
+                    v_p = v.data.cpu()
+            else:
+                v_p = v.cpu()
+            if global_rank == 0 and "lora" not in k:
+                output_state_dict[k] = v_p
+        if global_rank == 0:
+            torch.save(output_state_dict, output_model_file)
+        del output_state_dict
 
 
 def main():
@@ -372,7 +423,7 @@ def main():
         hidden_size=args.hidden_size,
         num_attention_heads=args.num_attention_heads,
         intermediate_size=args.intermediate_size,
-        use_cache=False
+        use_cache=True
     )
 
     tokenizer = LlamaTokenizer.from_pretrained(
@@ -383,8 +434,7 @@ def main():
         max_length=args.seq_length,
         padding='max_length',
         truncation=True)
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+
     from transformers.deepspeed import is_deepspeed_zero3_enabled, deepspeed_config
     from transformers.utils import ContextManagers
     from transformers.modeling_utils import no_init_weights
@@ -463,6 +513,18 @@ def main():
     )
     trainer.train()
 
+    if args.save is not None:
+        args.global_rank = torch.distributed.get_rank()
+        print('saving the final model ...', args.global_rank)
+
+        if args.global_rank == 0:
+            save_hf_format(model, tokenizer, args)
+
+        if is_deepspeed_zero3_enabled():
+            # For zero stage 3, each gpu only has a part of the model, so we need a special save function
+            save_zero_three_model(model, args.global_rank, args.save, zero_stage=3)
+
 
 if __name__ == "__main__":
     main()
+
