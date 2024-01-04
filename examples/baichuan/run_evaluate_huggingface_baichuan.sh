@@ -1,5 +1,5 @@
 #!/bin/bash
-# sh run_evaluate_huggingface_baichuan.sh dsw /root/Megatron-LM-23.04/ /workspace/PAI-Megatron-Patch/ 13B 1 2048 80 0 fp16 /mnt/baichuan-datasets/alpaca_data.json /mnt/baichuan-ckpts/baichuan-13b-base
+# sh run_evaluate_huggingface_baichuan.sh dsw /root/Megatron-LM-230512/ /workspace/PAI-Megatron-Patch/ 13B 1 2048 80 0 fp16 /mnt/baichuan-datasets/alpaca_data.json /mnt/baichuan-ckpts/baichuan-13b-base
 set -e
 ENV=$1
 MEGATRON_PATH=$2

@@ -11,7 +11,7 @@ mv Llama-2-7b-hf llama2-7b-hf
 
 cd /mnt/workspace/PAI-Megatron-Patch/toolkits/model_checkpoints_convertor/llama
 sh model_convertor.sh \
-/root/Megatron-LM-23.04        \
+/root/Megatron-LM-230512        \
 /mnt/workspace/llama2-ckpts/llama2-7b-hf         \
 /mnt/workspace/llama2-ckpts/llama2-7b-hf-to-megatron-tp1-pp1  \
 1  \
@@ -63,7 +63,7 @@ export WORK_DIR=/mnt/workspace
 cd ${WORK_DIR}/PAI-Megatron-Patch/examples/llama2
 sh run_pretrain_megatron_llama.sh  \
 dsw  \
-/root/Megatron-LM-23.04   \
+/root/Megatron-LM-230512   \
 ${WORK_DIR}/PAI-Megatron-Patch  \
 7B   \
 1    \
@@ -120,7 +120,7 @@ export WORK_DIR=/mnt/workspace
 cd ${WORK_DIR}/PAI-Megatron-Patch/examples/llama2
 sh run_finetune_megatron_llama.sh  \
 dsw  \
-/root/Megatron-LM-23.04   \
+/root/Megatron-LM-230512  \
 ${WORK_DIR}/PAI-Megatron-Patch  \
 7B     \
 1      \

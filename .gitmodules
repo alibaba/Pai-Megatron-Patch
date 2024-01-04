@@ -1,6 +1,9 @@
-[submodule "Megatron-LM-main"]
-	path = Megatron-LM-main
+[submodule "Megatron-LM-230512"]
+	path = Megatron-LM-230512
 	url = https://github.com/NVIDIA/Megatron-LM.git
-[submodule "Megatron-LM-23.04"]
-	path = Megatron-LM-23.04
+[submodule "Megatron-LM-231007"]
+	path = Megatron-LM-231007
+	url = https://github.com/NVIDIA/Megatron-LM.git
+[submodule "Megatron-LM-231221"]
+	path = Megatron-LM-231221
 	url = https://github.com/NVIDIA/Megatron-LM.git

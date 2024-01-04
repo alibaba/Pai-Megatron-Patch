@@ -1,6 +1,6 @@
 #!/bin/bash
-#sh run_pretrain_megatron_gpt3.sh dsw {WORK_DIR}/Megatron-LM-23.04/ {WORK_DIR}/PAI-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 80 1 fp16 1 1 sel true false false 100000 {WORK_DIR}/gpt3-datasets/alpaca_data.json {WORK_DIR}/gpt3-ckpts/gpt3-7b-hf-to-megatron-tp1-pp1 100000000 10000 /mnt/output_gpt3
-#sh run_pretrain_megatron_gpt3.sh dsw /cpfs01/user/ken/llama/Megatron-LM-23.04/ /cpfs01/user/ken/llama/PAI-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 80 1 fp16 1 1 sel true false false 100000 /cpfs01/user/ken/llama/gpt3-datasets/alpaca_data.json none 100000000 10000 /cpfs01/user/ken/llama/output_gpt3
+#sh run_pretrain_megatron_gpt3.sh dsw {WORK_DIR}/Megatron-LM-230512/ {WORK_DIR}/PAI-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 80 1 fp16 1 1 sel true false false 100000 {WORK_DIR}/gpt3-datasets/alpaca_data.json {WORK_DIR}/gpt3-ckpts/gpt3-7b-hf-to-megatron-tp1-pp1 100000000 10000 /mnt/output_gpt3
+#sh run_pretrain_megatron_gpt3.sh dsw /cpfs01/user/ken/llama/Megatron-LM--230512/ /cpfs01/user/ken/llama/PAI-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 80 1 fp16 1 1 sel true false false 100000 /cpfs01/user/ken/llama/gpt3-datasets/alpaca_data.json none 100000000 10000 /cpfs01/user/ken/llama/output_gpt3
 set -e
 ENV=$1
 MEGATRON_PATH=$2
