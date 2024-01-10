@@ -15,7 +15,6 @@
 import argparse
 import os
 import re
-import types
 import torch
 from collections import OrderedDict
 
@@ -43,6 +42,15 @@ def add_args(parser):
     )
 
     parser.add_argument(
+        "--world_size",
+        type=int,
+        default=1,
+        help=(
+            "world_size"
+        ),
+    )
+
+    parser.add_argument(
         "--target_tensor_model_parallel_size",
         type=int,
         default=1,
@@ -57,6 +65,16 @@ def add_args(parser):
         default=1,
         help=(
             "The pipeline model parallel size of the converted checkpoint. "
+            "Only used when converting a Transformers checkpoint to a Megatron checkpoint."
+        ),
+    )
+
+    parser.add_argument(
+        "--target_expert_model_parallel_size",
+        type=int,
+        default=1,
+        help=(
+            "The tensor model parallel size of the converted checkpoint. "
             "Only used when converting a Transformers checkpoint to a Megatron checkpoint."
         ),
     )
@@ -153,6 +171,7 @@ column_split_tensor_parallel_params = [
     "mlp.megatron_moe.experts.megatron_experts.7.dense_4h_to_h.weight"
 ]
 
+
 def transformers_to_megatron_fix_query_key_value_ordering(
     param, checkpoint_version, num_splits, num_heads, hidden_size
 ):
@@ -192,6 +211,8 @@ def get_element_from_dict_by_path(d, path):
     return d
 
 def convert_checkpoint_from_transformers_to_megatron(args):
+
+    assert args.world_size // args.target_expert_model_parallel_size == args.target_tensor_model_parallel_size
 
     os.makedirs(args.save_path, exist_ok=True)
 
@@ -437,19 +458,48 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 params_dict = get_element_from_dict_by_path(output_state_dict[i], "model")
                 params_dict["output_layer.weight"] = out_lm_head[i].clone()
 
+        num_ep_groups = args.world_size // args.target_tensor_model_parallel_size
+        experts_ids = [x for x in range(config.num_local_experts)]
+        chunks = [experts_ids[x:x + config.num_local_experts//num_ep_groups] for x in range(0, len(experts_ids), config.num_local_experts//num_ep_groups)]
+
+        expert_group_mapping = {}
+        for idx, chunk in enumerate(chunks):
+            for ele in chunk:
+                expert_group_mapping[ele] = idx
+
+        expert_local_mapping = {}
+        for chunk in chunks:
+            for idx, ele in enumerate(chunk):
+                expert_local_mapping[ele] = idx
+
         # saving the state dict as per the tp_rank and pp_rank
         for tp_rank in range(args.target_tensor_model_parallel_size):
-            checkpoint_dir = (
-                f"mp_rank_{tp_rank:02d}"
-                if args.target_pipeline_model_parallel_size == 1
-                else f"mp_rank_{tp_rank:02d}_{pp_rank:03d}"
-            )
+            current_keys = list(output_state_dict[tp_rank]['model'].keys())
+            ep_state_dict = []
+            for i in range(args.target_expert_model_parallel_size):
+                ep_state_dict.append({})
+            for key in current_keys:
+                if "local_experts" in key:
+                    keywords = key.split(".")
+                    eid = int(keywords[6])
+                    expert_group_id = expert_group_mapping[eid]
+                    local_expert_id = expert_local_mapping[eid]
+                    keywords[6] = str(local_expert_id)
+                    ep_state_dict[expert_group_id][".".join(keywords)] = output_state_dict[tp_rank]['model'][key].clone()
+                    output_state_dict[tp_rank]['model'].pop(key)
 
-            save_dir = os.path.join(release_dir, checkpoint_dir)
-            os.makedirs(save_dir, exist_ok=True)
-            checkpoint_name = "model_optim_rng.pt"
-            checkpoint_path = os.path.join(save_dir, checkpoint_name)
-            torch.save(output_state_dict[tp_rank], checkpoint_path)
+            for ep_rank in range(args.target_expert_model_parallel_size):
+                checkpoint_dir = (
+                    f"mp_rank_{tp_rank:02d}"
+                    if args.target_expert_model_parallel_size == 1
+                    else f"mp_rank_{tp_rank:02d}_{ep_rank:03d}"
+                )
+                save_dir = os.path.join(release_dir, checkpoint_dir)
+                os.makedirs(save_dir, exist_ok=True)
+                checkpoint_name = "model_optim_rng.pt"
+                checkpoint_path = os.path.join(save_dir, checkpoint_name)
+                output_state_dict[tp_rank]['model'].update(ep_state_dict[ep_rank])
+                torch.save(output_state_dict[tp_rank], checkpoint_path)
 
 def main():
 

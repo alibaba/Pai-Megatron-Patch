@@ -7,7 +7,9 @@ SOURCE_CKPT_PATH=$2
 TARGET_CKPT_PATH=$3
 TP=$4
 PP=$5
-MN=$6 #mixtral-8x7b
+EP=$6
+WS=$7
+MN=$8 #mixtral-8x7b
 
 export PYTHONPATH=${MEGATRON_PATH}:$PYTHONPATH
 
@@ -17,6 +19,8 @@ python hf2mcore.py \
 --target_params_dtype fp16 \
 --target_tensor_model_parallel_size ${TP} \
 --target_pipeline_model_parallel_size ${PP} \
+--target_expert_model_parallel_size ${EP} \
+--world_size ${WS} \
 --model_name ${MN} \
 
 ELAPSED_TIME=$(($SECONDS - $START_TIME))
