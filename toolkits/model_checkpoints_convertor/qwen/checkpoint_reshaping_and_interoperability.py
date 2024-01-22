@@ -539,7 +539,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 m = layer_re.match(layer_name)
                 # Stop if that's not a layer
                 if m is None:
-                    break
+                    continue
 
                 # The index of the layer.
                 _ = int(m.group(1))
@@ -830,7 +830,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
             m = layer_re.match(key)
             # Stop if that's not a layer
             if m is None:
-                break
+                continue
 
             # The index of the layer.
             layer_idx = int(m.group(1)) + pp_rank * num_layers
