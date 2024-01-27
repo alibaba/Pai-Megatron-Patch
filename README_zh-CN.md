@@ -1,14 +1,16 @@
 ## Pai-Megatron-Patch是什么
 [English](./README.md) | 简体中文
 
-随着深度学习大语言模型的不断发展，其模型结构和量级在快速演化，依托大模型技术的应用更是层出不穷。
+随着深度学习大模型的不断发展，其模型结构和量级在快速演化，依托大模型技术的应用更是层出不穷。
 对于广大开发者来说不仅要考虑如何在复杂多变的场景下有效的将大模型消耗的算力发挥出来，还要应对大模型的持续迭代。
 开发简单易用的大模型训练工具就成了应对以上问题广受关注的技术方向，让开发者专注于大模型解决方案的开发，降低大模型训练加速性能优化和训练/推理全流程搭建的人力开发成本。
 
-Pai-Megatron-Patch工具是阿里云机器学习平台PAI算法团队研发，基于阿里云智算服务PAI-灵骏平台的大模型最佳实践解决方案配套工具，
-旨在帮助大模型开发者快速上手灵骏产品，完成大语言模型（LLM）的高效分布式训练，有监督指令微调，模型离线推理验证等完整大模型开发链路。
+Pai-Megatron-Patch工具是阿里人工智能平台PAI算法团队研发，基于阿里云智算服务PAI-灵骏平台的大模型最佳实践解决方案配套工具，
+旨在帮助大模型开发者快速上手灵骏产品，完成大模型的高效分布式训练，有监督指令微调，模型离线推理验证等完整大模型开发链路。
 该项目提供了业界主流开源大模型基于Megatron-LM的训练&离线推理验证流程，方便用户快速上手大模型训练。
 
+## Technical Reports
+- [Mixtral-8x7B在PAI灵骏的最佳实践](https://help.aliyun.com/zh/pai/use-cases/train-fine-tune-and-deploy-mixtral-by-using-intelligent-computing-lingjun)
 - [通义千问开源模型在PAI灵骏的最佳实践](https://mp.weixin.qq.com/s?__biz=Mzg4MzgxNDk2OA==&mid=2247491796&idx=1&sn=dc1d719313d794ae1aacdb07669a9545&chksm=cf430783f8348e950218bfcff861a2e6d2d92705807bf5b04f6e9268cc510ffa6e6aa2c87327#rd)
 - [阿里云机器学习PAI开源AI大模型训练工具Pai-Megatron-Patch, 助力大模型技术落地](https://zhuanlan.zhihu.com/p/655942437)
 - [基于单机最高能效270亿参数GPT模型的文本生成与理解](https://zhuanlan.zhihu.com/p/597652820)
