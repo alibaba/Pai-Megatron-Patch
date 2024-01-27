@@ -21,7 +21,7 @@ from megatron import print_rank_0
 from megatron.core import parallel_state
 from megatron.core.pipeline_parallel.p2p_communication import send_forward
 from megatron.initialize import initialize_megatron
-from megatron.model import DistributedDataParallel as LocalDDP
+from megatron.core import DistributedDataParallel as LocalDDP
 from megatron.model import Float16Module
 from megatron.utils import unwrap_model
 from megatron.arguments import core_transformer_config_from_args
@@ -30,7 +30,7 @@ from megatron_patch.data import build_evaluation_dataset
 from megatron_patch.finetune_utils import build_data_loader
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import get_model
-from megatron_patch.arguments import get_tasks_args
+from megatron_patch.arguments import get_patch_args
 from transformers import AutoModelForCausalLM
 
 def get_model_provider():
@@ -56,7 +56,7 @@ def forward_step(batch, model):
     """Forward step."""
     tokenizer = get_tokenizer()
     # Get the batch.
-    input_ids = batch['input_ids'].long().cuda()
+    input_ids = batch['tokens'].long().cuda()
     labels = batch['labels'].long().cuda()
     labels[labels == 0] = -100
     attention_mask = input_ids.ne(tokenizer.pad_token_id)
@@ -132,5 +132,5 @@ def main():
 
 
 if __name__ == '__main__':
-    initialize_megatron(extra_args_provider=get_tasks_args)
+    initialize_megatron(extra_args_provider=get_patch_args)
     main()

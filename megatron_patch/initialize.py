@@ -14,7 +14,7 @@ from megatron.initialize import _set_random_seed, _init_autoresume
 from megatron.initialize import _compile_dependencies
 
 from .arguments import validate_moe_args
-import megatron_patch.expert_parallel_state as moe_mpu
+
 
 
 def initialize_megatron(
@@ -133,12 +133,6 @@ def _initialize_distributed():
                 args.pipeline_model_parallel_size,
                 args.virtual_pipeline_model_parallel_size,
                 args.pipeline_model_parallel_split_rank,
-            )
-
-            moe_mpu.initialize_moe_model_parallel(
-                args.tensor_model_parallel_size,
-                args.pipeline_model_parallel_size,
-                expert_tensor_parallelism=args.expert_tensor_parallelism
             )
 
             if args.rank == 0:

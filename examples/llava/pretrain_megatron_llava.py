@@ -28,7 +28,7 @@ from megatron_patch.model.llava.gpt_model import GPTModel
 from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import pretrain
-from megatron_patch.arguments import get_tasks_args
+from megatron_patch.arguments import get_patch_args
 from megatron_patch.data.llava.constants import IGNORE_INDEX
 
 def model_provider(pre_process=True, post_process=True):
@@ -120,4 +120,4 @@ if __name__ == "__main__":
     pretrain(train_valid_test_datasets_provider, model_provider,
              ModelType.encoder_or_decoder,
              forward_step,
-             extra_args_provider=get_tasks_args)
+             extra_args_provider=get_patch_args)

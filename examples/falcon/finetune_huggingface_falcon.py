@@ -21,7 +21,7 @@ from megatron_patch.data.finetune_dataset import FalconDataset
 from megatron_patch.finetune_utils import finetune
 from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
-from megatron_patch.arguments import get_tasks_args
+from megatron_patch.arguments import get_patch_args
 
 
 def model_provider(pre_process=True, post_process=True):
@@ -61,7 +61,7 @@ def forward_step(data_iterator, model):
 
 
 if __name__ == '__main__':
-    initialize_megatron(extra_args_provider=get_tasks_args)
+    initialize_megatron(extra_args_provider=get_patch_args)
 
     finetune(train_valid_datasets_provider=train_valid_datasets_provider,
              model_provider=model_provider,

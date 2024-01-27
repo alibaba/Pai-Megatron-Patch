@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from functools import partial
 import torch
 
@@ -19,12 +20,12 @@ from megatron.core.enums import ModelType
 from megatron import get_args
 from megatron.utils import average_losses_across_data_parallel_group
 
-from megatron_patch.data.finetune_dataset import ChatGLMDataset
+from megatron_patch.data import \
+    build_pretrain_dataset_from_original, build_pretrain_dataset_from_idxmap
 from megatron_patch.model.chatglm.gpt_model import GPTModel
 from megatron_patch.tokenizer import build_tokenizer
-from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import pretrain
-from megatron_patch.arguments import get_tasks_args
+from megatron_patch.arguments import get_patch_args
 
 def model_provider(pre_process=True, post_process=True):
     args = get_args()
@@ -37,17 +38,13 @@ def model_provider(pre_process=True, post_process=True):
 
 
 def train_valid_test_datasets_provider(train_val_test_num_samples):
-    """Build train and validation dataset."""
+    """Build train, valid, and test datasets."""
     args = get_args()
-    tokenizer = get_tokenizer()
-    train_dataset = ChatGLMDataset(args.train_data, tokenizer,
-                                   args.source_seq_len, args.target_seq_len)
-    valid_dataset = ChatGLMDataset(args.valid_data, tokenizer,
-                                   args.source_seq_len, args.target_seq_len)
-    test_dataset = ChatGLMDataset(args.valid_data, tokenizer,
-                                  args.source_seq_len, args.target_seq_len)
-    return train_dataset, valid_dataset, test_dataset
 
+    train_ds, valid_ds, test_ds = \
+        build_pretrain_dataset_from_original(args.dataset)
+
+    return train_ds, valid_ds, test_ds
 
 def forward_step(data_iterator, model):
     """Forward step."""
@@ -78,4 +75,4 @@ if __name__ == '__main__':
              model_provider,
              ModelType.encoder_or_decoder,
              forward_step,
-             extra_args_provider=get_tasks_args)
+             extra_args_provider=get_patch_args)

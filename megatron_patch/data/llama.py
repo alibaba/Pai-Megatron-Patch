@@ -18,20 +18,12 @@ import copy
 import json
 import torch
 from megatron import get_args
-
+from datasets import load_dataset
+from tqdm import tqdm
 from megatron_patch.tokenizer import get_tokenizer
 
-class LLamaRawDataset(torch.utils.data.Dataset):
-    """A class for processing a LLama text dataset"""
-    def __init__(self, path, max_padding_length):
-        args = get_args()
-        self.tokenizer = get_tokenizer()
-        self.IGNORE_INDEX = self.tokenizer.pad_token_id
-        if "-Pretrain" in args.dataset:
-            self.max_padding_length = max_padding_length + 1
-        else:
-            self.max_padding_length = max_padding_length
-        PROMPT_DICT = {
+
+PROMPT_DICT = {
             'prompt_input':
             ('Below is an instruction that describes a task,'
              ' paired with an input that provides further context. '
@@ -44,31 +36,42 @@ class LLamaRawDataset(torch.utils.data.Dataset):
              '### Instruction:\n{instruction}\n\n### Response:'),
         }
 
-        list_data_dict = self.jload(path[0])
-        prompt_input, prompt_no_input = PROMPT_DICT[
-            'prompt_input'], PROMPT_DICT['prompt_no_input']
 
-        sources = [
-            prompt_input.format_map(example) if example.get('input', '') != ''
-            else prompt_no_input.format_map(example)
-            for example in list_data_dict
-        ]
-        if 'output' in list_data_dict[0].keys():
-            key = 'output'
-        elif 'content' in list_data_dict[0].keys():
-            key = 'content'
+class LLamaRawDataset(torch.utils.data.Dataset):
+    """A class for processing a LLama text dataset"""
+    def __init__(self, path, max_padding_length, split='train'):
+        args = get_args()
+        self.tokenizer = get_tokenizer()
+        self.IGNORE_INDEX = self.tokenizer.pad_token_id
+        if "-Pretrain" in args.dataset:
+            self.max_padding_length = max_padding_length + 1
+        else:
+            self.max_padding_length = max_padding_length
 
-        targets = [
-            f"{example[key]}{self.tokenizer.eos_token}"
-            for example in list_data_dict
-        ]
-        data_dict = self.preprocess(sources, targets, self.tokenizer)
+        list_data_dict = load_dataset(
+            'json',
+            data_files=path[0],
+            split=split,
+        )
 
-        self.input_ids = data_dict['input_ids']
-        self.labels = data_dict['labels']
+        train_dataset = list_data_dict.map(
+            self.preprocess,
+            batched=True,
+            batch_size=3000,
+            num_proc=32,
+            remove_columns=list_data_dict.column_names,
+            load_from_cache_file=True, # not args.overwrite_cache
+            desc="Running Encoding",
+            fn_kwargs={ "tokenizer": self.tokenizer }
+        )
+
+        key = 'output' if 'output' in list_data_dict.column_names else 'content'
+        self.input_ids = np.array(train_dataset['input_ids'])
+        self.labels = np.array(train_dataset['labels'])
         self.samples = []
-        for index, (inputs, labels) in enumerate(zip(self.input_ids, self.labels)):
-            if self.tokenizer.eos_token_id not in inputs or not list_data_dict[index][key]: continue
+        
+        for inputs, labels in tqdm(zip(self.input_ids, self.labels)):
+            if self.tokenizer.eos_token_id not in inputs: continue
             self.samples.append([inputs, labels])
 
         print('  >> total number of samples: {}'.format(len(self.samples)))
@@ -99,7 +102,7 @@ class LLamaRawDataset(torch.utils.data.Dataset):
         raw_sample = self.samples[idx]
         return self.gpt_convert_example_to_feature(raw_sample)
 
-    def preprocess(self, sources, targets, tokenizer):
+    def preprocess(self, examples, tokenizer):
         """
         Preprocess the data by tokenizing.
         Args:
@@ -109,11 +112,30 @@ class LLamaRawDataset(torch.utils.data.Dataset):
         Returns:
             dict: a dictionary containing the input_ids and labels for the examples
         """
+        prompt_input, prompt_no_input = PROMPT_DICT[
+            'prompt_input'], PROMPT_DICT['prompt_no_input']
 
-        examples = [s + t for s, t in zip(sources, targets)]
+        if 'input' not in examples:
+            examples ['input'] = [''] * len(examples['instruction'])
+        sources = [
+            prompt_input.format_map({"instruction":instruction, "input":minput}) if minput
+            else prompt_no_input.format_map({"instruction":instruction})
+            for instruction, minput in zip(examples['instruction'], examples['input'])
+        ]
+        if 'output' in examples:
+            key = 'output'
+        elif 'content' in examples:
+            key = 'content'
+
+        targets = [
+            f"{example}{self.tokenizer.eos_token}"
+            for example in examples[key]
+        ]
+
+        examples_raw = [s + t for s, t in zip(sources, targets)]
         examples_tokenized, sources_tokenized = [
-            self.tokenize(strings, tokenizer)
-            for strings in (examples, sources)
+            self.tokenize(strings, self.tokenizer)
+            for strings in (examples_raw, sources)
         ]
         input_ids = examples_tokenized['input_ids']
         labels = copy.deepcopy(input_ids)
@@ -135,7 +157,7 @@ class LLamaRawDataset(torch.utils.data.Dataset):
         tokenized_list = [
             tokenizer(
                 text,
-                return_tensors='np',
+                return_tensors='pt',
                 padding='max_length',
                 max_length=self.max_padding_length,
                 truncation=True,
@@ -166,6 +188,7 @@ class LLamaRawDataset(torch.utils.data.Dataset):
         }
 
         return train_sample
+
 
 class LLamaIdxMapDataset(torch.utils.data.Dataset):
     """LLAMA dataset class for mmap format data"""

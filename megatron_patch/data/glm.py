@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
-import io
+import random
 import json
 import math
 import os
@@ -22,10 +21,10 @@ from itertools import accumulate
 import numpy as np
 import torch
 
-from megatron import get_args
 from megatron_patch.tokenizer import get_tokenizer
 
-class GLM130BDataset(torch.utils.data.Dataset):
+
+class GLM130BRawDataset(torch.utils.data.Dataset):
     """A class for processing a GLM130B text dataset"""
     def __init__(self, path, tokenizer, max_seq_length, generation_length):
         """
@@ -125,7 +124,7 @@ class GLM130BDataset(torch.utils.data.Dataset):
                      dtype=np.int64),
         }
 
-class GLMDataset(GPTDataset):
+class GLMRawDataset(torch.utils.data.Dataset):
     """GLM dataset class."""
     def __init__(self, datapaths, tokenizer, max_source_seq_length,
                  max_target_seq_length):
@@ -244,11 +243,11 @@ class GLMDataset(GPTDataset):
 
         return train_sample
 
-class ChatGLMDataset(GPTDataset):
+class ChatGLMRawDataset(torch.utils.data.Dataset):
     """ChatGLM dataset class."""
-    def __init__(self, datapaths, tokenizer, max_source_length,
+    def __init__(self, datapaths, max_source_length,
                  max_target_length):
-        self.tokenizer = tokenizer
+        self.tokenizer = get_tokenizer()
         self.max_source_length = max_source_length
         self.max_target_length = max_target_length
         self.samples = []
@@ -313,118 +312,3 @@ class ChatGLMDataset(GPTDataset):
         }
 
         return train_sample
-
-
-
-class GLM130BIdxMapDataset(torch.utils.data.Dataset):
-    """GLM130B dataset class for mmap format data"""
-    def __init__(self,
-                 name,
-                 data_prefix,
-                 documents,
-                 indexed_dataset,
-                 num_samples,
-                 seq_length,
-                 generation_length,
-                 seed,
-                 return_doc_ids=False):
-        """
-        Initializes the GLM130BIdxMapDataset class.
-        Args:
-            name (str): Dataset name.
-            data_prefix (str): Path prefix.
-            documents (list of int): List of document indices.
-            indexed_dataset (object): Indexed dataset object.
-            num_samples (int): Number of samples.
-            seq_length (int): Maximum sequence length.
-            generation_length (int): Generation length (length of generated text).
-            seed (int): Random seed.
-            return_doc_ids (bool, optional): Whether to return document ids. Defaults to False.
-        """
-
-        self.max_seq_length = seq_length
-        self.generation_length = generation_length
-        self.tokenizer = get_tokenizer()
-        self.mask_id = self.tokenizer.get_command('[MASK]')
-        self.gmask_id = self.tokenizer.get_command('[gMASK]')
-
-        self.name = name
-        self.indexed_dataset = indexed_dataset
-        self.return_doc_ids = return_doc_ids
-
-        # Checks
-        assert np.min(documents) >= 0
-        assert np.max(documents) < indexed_dataset.sizes.shape[0]
-
-        # Build index mappings.
-        self.doc_idx, self.sample_idx, self.shuffle_idx, self.index_prefix = \
-            _build_index_mappings(self.name, data_prefix,
-                                  documents, self.indexed_dataset.sizes,
-                                  num_samples, seq_length, seed)
-
-    def __len__(self):
-        # -1 is due to data structure used to retieve the index:
-        #    sample i --> [sample_idx[i], sample_idx[i+1])
-        return self.sample_idx.shape[0] - 1
-
-    def __getitem__(self, idx):
-        # Get the shuffled index.
-        idx = self.shuffle_idx[idx]
-        # Start and end documents and offsets.
-        doc_index_f = self.sample_idx[idx][0]
-        doc_index_l = self.sample_idx[idx + 1][0]
-        offset_f = self.sample_idx[idx][1]
-        offset_l = self.sample_idx[idx + 1][1]
-        # If we are within the same document, just extract the chunk.
-        doc_ids = []
-        if doc_index_f == doc_index_l:
-            doc_ids.append(self.doc_idx[doc_index_f])
-            sample = self.indexed_dataset.get(self.doc_idx[doc_index_f],
-                                              offset=offset_f,
-                                              length=offset_l - offset_f + 1)
-        else:
-            # Otherwise, get the rest of the initial document.
-            doc_ids.append(self.doc_idx[doc_index_f])
-            sample_list = [
-                self.indexed_dataset.get(self.doc_idx[doc_index_f],
-                                         offset=offset_f)
-            ]
-            # Loop over all in between documents and add the entire document.
-            for i in range(doc_index_f + 1, doc_index_l):
-                doc_ids.append(self.doc_idx[i])
-                sample_list.append(self.indexed_dataset.get(self.doc_idx[i]))
-            # And finally add the relevant portion of last document.
-            doc_ids.append(self.doc_idx[doc_index_l])
-            sample_list.append(
-                self.indexed_dataset.get(self.doc_idx[doc_index_l],
-                                         length=offset_l + 1))
-            sample = np.concatenate(sample_list)
-
-        tokens = sample[:-2].tolist()
-        mask_id = self.gmask_id
-        sop_id = self.tokenizer.get_command('sop')
-
-        if idx == 0:
-            prompt, text = [], tokens
-        else:
-            prompt_length = self.max_seq_length - 1 - self.generation_length
-            prompt, text = tokens[:prompt_length], tokens[prompt_length:]
-
-        seq_length = len(prompt) + len(text) + 1
-        attention_mask = np.tril(
-            np.ones((seq_length, seq_length), dtype=np.int64))
-        attention_mask[:len(prompt) + 1, :len(prompt) + 1] = 1
-
-        return {
-            'tokens':
-            np.array(prompt + [mask_id, sop_id] + text[:-1], dtype=np.int64),
-            'targets':
-            np.array(prompt + [mask_id] + text, dtype=np.int64),
-            'position_ids':
-            np.arange(0, seq_length, dtype=np.int64),
-            'attention_mask':
-            attention_mask,
-            'loss_mask':
-            np.array([0] * (len(prompt) + 1) + [1] * len(text),
-                     dtype=np.int64),
-        }

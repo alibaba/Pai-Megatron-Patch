@@ -20,16 +20,19 @@ import torch
 from megatron import get_args
 
 from megatron_patch.tokenizer import get_tokenizer
+from .utils import get_ltor_masks_and_position_ids
 
 class MistralRawDataset(torch.utils.data.Dataset):
     def __init__(self, path, max_padding_length):
         args = get_args()
+        self.args = args
         self.tokenizer = get_tokenizer()
         self.IGNORE_INDEX = self.tokenizer.pad_token_id
         if "-Pretrain" in args.dataset:
             self.max_padding_length = max_padding_length + 1
         else:
             self.max_padding_length = max_padding_length
+        """
         PROMPT_DICT = {
             'prompt_input':
             ('Below is an instruction that describes a task,'
@@ -41,6 +44,11 @@ class MistralRawDataset(torch.utils.data.Dataset):
             ('Below is an instruction that describes a task. '
              'Write a response that appropriately completes the request.\n\n'
              '### Instruction:\n{instruction}\n\n### Response:'),
+        }
+        """
+        PROMPT_DICT = {
+            'prompt_input': ('[INST]{instruction} {input}[/INST]'),
+            'prompt_no_input':('[INST]{instruction}[/INST]'),
         }
 
         list_data_dict = self.jload(path[0])
@@ -158,111 +166,27 @@ class MistralRawDataset(torch.utils.data.Dataset):
         )
 
     def gpt_convert_example_to_feature(self, sample):
-        """
-        Convert a single sample containing input_id, label and loss_mask into a format suitable for GPT training.
-        """
         input_ids, labels = sample
-        train_sample = {
-            'input_ids': input_ids,
-            'labels': labels
-        }
 
-        return train_sample
-
-class MistralIdxMapDataset(torch.utils.data.Dataset):
-    """LLAMA dataset class for mmap format data"""
-    def __init__(self,
-                 name,
-                 data_prefix,
-                 documents,
-                 indexed_dataset,
-                 num_samples,
-                 seed,
-                 max_padding_length,
-                 return_doc_ids=False):
-
-        # self.IGNORE_INDEX = -100
-        args = get_args()
-        self.tokenizer = get_tokenizer()
-        self.max_padding_length = max_padding_length
-
-        self.name = name
-        self.indexed_dataset = indexed_dataset
-        self.return_doc_ids = return_doc_ids
-        self.split = args.split
-        # Checks
-        assert np.min(documents) >= 0
-        assert np.max(documents) < indexed_dataset.sizes.shape[0]
-
-        from megatron.data.gpt_dataset import _build_index_mappings
-        # Build index mappings.
-        try:
-            self.doc_idx, self.sample_idx, self.shuffle_idx, self.index_prefix = \
-                _build_index_mappings(self.name, data_prefix,
-                                  documents, self.indexed_dataset.sizes,
-                                  num_samples, self.max_padding_length, seed)
-        except:
-            self.doc_idx, self.sample_idx, self.shuffle_idx, self.desc, self.desc_hash = \
-                _build_index_mappings(self.name, data_prefix,
-                                  documents, self.indexed_dataset.sizes,
-                                  self.split, num_samples, self.max_padding_length, seed,
-                                  data_cache_path=None)
-
-    def __len__(self):
-        # -1 is due to data structure used to retieve the index:
-        #    sample i --> [sample_idx[i], sample_idx[i+1])
-        return self.sample_idx.shape[0] - 1
-
-    def __getitem__(self, idx):
-        # Get the shuffled index.
-        idx = self.shuffle_idx[idx]
-        # Start and end documents and offsets.
-        doc_index_f = self.sample_idx[idx][0]
-        doc_index_l = self.sample_idx[idx + 1][0]
-        offset_f = self.sample_idx[idx][1]
-        offset_l = self.sample_idx[idx + 1][1]
-        # If we are within the same document, just extract the chunk.
-        doc_ids = []
-
-        if doc_index_f == doc_index_l:
-            doc_ids.append(self.doc_idx[doc_index_f])
-            sample = self.indexed_dataset.get(self.doc_idx[doc_index_f],
-                                              offset=offset_f,
-                                              length=offset_l - offset_f + 1)
+        tokens_ = input_ids.long()
+        labels = tokens_[1:].contiguous()
+        tokens = tokens_[:-1].contiguous()
+        if "-Pretrain" in self.args.dataset:
+            eod_mask_loss = True
         else:
-            # Otherwise, get the rest of the initial document.
-            doc_ids.append(self.doc_idx[doc_index_f])
-            sample_list = [
-                self.indexed_dataset.get(self.doc_idx[doc_index_f],
-                                         offset=offset_f)
-            ]
-            # Loop over all in between documents and add the entire document.
-            for i in range(doc_index_f + 1, doc_index_l):
-                doc_ids.append(self.doc_idx[i])
-                sample_list.append(self.indexed_dataset.get(self.doc_idx[i]))
-            # And finally add the relevant portion of last document.
-            doc_ids.append(self.doc_idx[doc_index_l])
-            sample_list.append(
-                self.indexed_dataset.get(self.doc_idx[doc_index_l],
-                                         length=offset_l + 1))
-            sample = np.concatenate(sample_list)
+            eod_mask_loss = False
 
-        tokens = sample.tolist()
-        sample = []
-        sample.append(np.array(tokens))
-        sample.append(np.array(tokens))
+        attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+            tokens,
+            self.tokenizer.pad_token_id,
+            self.args.reset_position_ids,
+            self.args.reset_attention_mask,
+            eod_mask_loss)
 
-        return self.gpt_convert_example_to_feature(sample)
-
-    def gpt_convert_example_to_feature(self, sample):
-        input_ids, labels = sample
-        loss_mask = np.ones(labels.shape, dtype=np.int64)
-        loss_mask[labels == self.tokenizer.bos_token_id] = 0
-        loss_mask[labels == self.tokenizer.pad_token_id] = 0
-        train_sample = {
-            'input_ids': input_ids,
-            'labels': labels,
-            'loss_mask': loss_mask
+        return {
+            "tokens": tokens,
+            "labels": labels,
+            "attention_mask": attention_mask,
+            "loss_mask": loss_mask,
+            "position_ids": position_ids,
         }
-
-        return train_sample

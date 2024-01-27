@@ -20,12 +20,11 @@ from megatron.initialize import initialize_megatron
 from megatron.utils import average_losses_across_data_parallel_group
 from megatron.utils import get_ltor_masks_and_position_ids
 
-from megatron_patch.data.finetune_dataset import BloomDataset
+from megatron_patch.data import build_finetune_dataset
 from megatron_patch.finetune_utils import finetune
 from megatron_patch.model.bloom.gpt_model import GPTModel
-from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
-from megatron_patch.arguments import get_tasks_args
+from megatron_patch.arguments import get_patch_args
 
 def model_provider(pre_process=True, post_process=True):
     model = GPTModel(num_tokentypes=0,
@@ -37,11 +36,7 @@ def model_provider(pre_process=True, post_process=True):
 
 def train_valid_datasets_provider():
     args = get_args()
-    tokenizer = build_tokenizer(args)
-    train_dataset = BloomDataset(args.train_data, tokenizer,
-                                 args.max_padding_length)
-    valid_dataset = BloomDataset(args.valid_data, tokenizer,
-                                 args.max_padding_length)
+    train_dataset, valid_dataset = build_finetune_dataset(args.dataset)
     return train_dataset, valid_dataset
 
 
@@ -79,7 +74,7 @@ def forward_step(data_iterator, model):
 
 if __name__ == '__main__':
 
-    initialize_megatron(extra_args_provider=get_tasks_args)
+    initialize_megatron(extra_args_provider=get_patch_args)
 
     finetune(train_valid_datasets_provider=train_valid_datasets_provider,
              model_provider=model_provider,

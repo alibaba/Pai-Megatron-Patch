@@ -27,7 +27,7 @@ Pai-Megatron-Patch includes key components for building LLM training, such as mo
 In the reinforcement learning section, the patch offers PPO training workflows, enabling users to perform reinforcement learning with SFT models and RM models. Finally, the patch provides numerous usage examples to help users quickly start LLMs training and offline inference. For specific usage processes within Alibaba Cloud Lingjun products, please refer to the following link: [PAI-Lingjun Intelligent Computing Service LLM solution](https://www.aliyun.com/solution/tech-solution/pai_lingjun).
 
 <div align=center>
-<img src=patch_en.png width=600 height=400 />
+<img src=patch.png width=600 height=400 />
 </div>
 
 ## Installation

@@ -16,9 +16,11 @@ import json
 import numpy as np
 import torch
 
-class BloomDataset(torch.utils.data.Dataset):
+from megatron_patch.tokenizer import get_tokenizer
+
+class BloomRawDataset(torch.utils.data.Dataset):
     """A class for processing a Bloom text dataset"""
-    def __init__(self, datapaths, tokenizer, max_seq_length):
+    def __init__(self, datapaths, max_seq_length):
         """
         Initializes the dataset.
         Args:
@@ -26,7 +28,7 @@ class BloomDataset(torch.utils.data.Dataset):
             tokenizer(object): The tokenizer object.
             max_seq_length(int): The maximum length of sequences.
         """
-        self.tokenizer = tokenizer
+        self.tokenizer = get_tokenizer()
         self.max_seq_length = max_seq_length
         self.prompt = ''
         self.samples = []

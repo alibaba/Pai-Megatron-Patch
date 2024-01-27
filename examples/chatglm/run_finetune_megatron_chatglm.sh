@@ -1,9 +1,9 @@
 #!/bin/bash
-#sh run_finetune_megatron_chatglm.sh dsw /workspace/PAI-Megatron-Patch/Megatron-LM/ /workspace/PAI-Megatron-Patch/ 6B 4 64 64 1e-4 1e-5 fp16 1 1 sel true false false /mnt/glm-datasets/AdvertiseGen/train.json /mnt/glm-datasets/AdvertiseGen/dev.json /mnt/glm-ckpts/chatglm-6b-to-megatron/ 2 /mnt/output_megatron_chatglm/
+#sh run_finetune_megatron_chatglm.sh dsw /workspace/PAI-Megatron-Patch/ 6B 4 64 64 1e-4 1e-5 fp16 1 1 sel true false false /mnt/glm-datasets/AdvertiseGen/train.json /mnt/glm-datasets/AdvertiseGen/dev.json /mnt/glm-ckpts/chatglm-6b-to-megatron/ 2 /mnt/output_megatron_chatglm/
 set -e
 ENV=$1
-MEGATRON_PATH=$2
-MEGATRON_PATCH_PATH=$3
+MEGATRON_PATCH_PATH=$2
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-230512
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
@@ -24,24 +24,24 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$4
-BATCH_SIZE=$5
-SOURCE_SEQ_LEN=$6
-TARGET_SEQ_LEN=$7
-LR=$8
-MIN_LR=$9
-PR=${10}
-TP=${11}
-PP=${12}
-AC=${13}
-DO=${14}
-FL=${15}
-SP=${16}
-TRAIN_DATASET_PATH=${17}
-VALID_DATASET_PATH=${18}
-PRETRAIN_CHECKPOINT_PATH=${19}
-EPOCH=${20}
-OUTPUT_BASEPATH=${21}
+MODEL_SIZE=$3
+BATCH_SIZE=$4
+SOURCE_SEQ_LEN=$5
+TARGET_SEQ_LEN=$6
+LR=$7
+MIN_LR=$8
+PR=$9
+TP=${10}
+PP=${11}
+AC=${12}
+DO=${13}
+FL=${14}
+SP=${15}
+TRAIN_DATASET_PATH=${16}
+VALID_DATASET_PATH=${17}
+PRETRAIN_CHECKPOINT_PATH=${18}
+EPOCH=${19}
+OUTPUT_BASEPATH=${20}
 
 
 if [ $MODEL_SIZE = 6B ]; then

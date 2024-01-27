@@ -1,9 +1,9 @@
 #!/bin/bash
-#sh run_pretrain_megatron_chatglm.sh dsw /workspace/Megatron-LM/ /workspace/PAI-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 80 1 fp16 1 1 sel true false false 100000 /mnt/llama-datasets/alpaca_data.json /mnt/alpaca-ckpts/llama-7b-hf-to-megatron-tp1-pp1 100000000 10000 /mnt/output_llama
+#sh run_pretrain_megatron_chatglm.sh dsw /workspace/PAI-Megatron-Patch/ 7B 1 8 1e-5 1e-6 2048 80 1 fp16 1 1 sel true false false 100000 /mnt/llama-datasets/alpaca_data.json /mnt/alpaca-ckpts/llama-7b-hf-to-megatron-tp1-pp1 100000000 10000 /mnt/output_llama
 set -e
 ENV=$1
-MEGATRON_PATH=$2
-MEGATRON_PATCH_PATH=$3
+MEGATRON_PATCH_PATH=$2
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-230512
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
@@ -24,28 +24,28 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$4
-BATCH_SIZE=$5
-GLOBAL_BATCH_SIZE=$6
-LR=$7
-MIN_LR=$8
-S_T_SEQ_LEN=$9
-PAD_LEN=${10}
-EXTRA_VOCAB_SIZE=${11}
-PR=${12}
-TP=${13}
-PP=${14}
-AC=${15}
-DO=${16}
-FL=${17}
-SP=${18}
-SAVE_INTERVAL=${19}
-TRAIN_DATASET_PATH=${20}
-VALID_DATASET_PATH=${21}
-PRETRAIN_CHECKPOINT_PATH=${22}
-TRAIN_TOKENS=${23}
-WARMUP_TOKENS=${24}
-OUTPUT_BASEPATH=${25}
+MODEL_SIZE=$3
+BATCH_SIZE=$4
+GLOBAL_BATCH_SIZE=$5
+LR=$6
+MIN_LR=$7
+S_T_SEQ_LEN=$8
+PAD_LEN=$9
+EXTRA_VOCAB_SIZE=${10}
+PR=${11}
+TP=${12}
+PP=${13}
+AC=${14}
+DO=${15}
+FL=${16}
+SP=${17}
+SAVE_INTERVAL=${18}
+TRAIN_DATASET_PATH=${19}
+VALID_DATASET_PATH=${20}
+PRETRAIN_CHECKPOINT_PATH=${21}
+TRAIN_TOKENS=${22}
+WARMUP_TOKENS=${23}
+OUTPUT_BASEPATH=${24}
 
 
 if [ $MODEL_SIZE = 6B ]; then
@@ -171,7 +171,8 @@ megatron_options="  \
         --swiglu \
         --untie-embeddings-and-output-weights \
         --position-encoding-2d \
-        --patch-tokenizer-type ChatGLMTokenizerFromHF
+        --patch-tokenizer-type ChatGLMTokenizerFromHF \
+        --dataset ChatGLM-Pretrain-Raw \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megatron_chatglm.py

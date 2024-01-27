@@ -71,7 +71,7 @@ from typing import List, Optional, Tuple, Union
 from einops import rearrange
 
 
-def get_tasks_args(parser):
+def get_patch_args(parser):
     group = parser.add_argument_group(title='llama2')
 
     group.add_argument('--local-rank', type=int, default=None,
@@ -149,7 +149,7 @@ def get_tasks_args(parser):
 
 
 parser = argparse.ArgumentParser(description='PyTorch LLaMA Training')
-parser = get_tasks_args(parser)
+parser = get_patch_args(parser)
 args = parser.parse_args()
 
 class LlamaAttentionWithFlash(LlamaAttention):

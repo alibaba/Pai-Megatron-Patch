@@ -123,6 +123,17 @@ elif [ $tokenizer = "qwenbpe" ]; then
   --workers 16 \
   --append-eod
 
+elif [ $tokenizer = "mistralbpe" ]; then
+  python preprocess_data.py \
+  --input ${INPUT} \
+  --language zh \
+  --output-prefix ${output_data_dir}/wudao_mistralbpe_small \
+  --dataset-impl mmap \
+  --patch-tokenizer-type MistralTokenizer \
+  --load ${load_dir} \
+  --workers 16 \
+  --append-eod
+
 fi
 
 ELAPSED_TIME=$(($SECONDS - $START_TIME))

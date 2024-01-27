@@ -30,7 +30,7 @@ from transformers import (
 )
 from datasets import load_dataset
 
-def get_tasks_args(parser):
+def get_patch_args(parser):
 
     group = parser.add_argument_group(title='starcoder')
 
@@ -107,7 +107,7 @@ def get_tasks_args(parser):
 
 logger = logging.getLogger(__name__)
 parser = argparse.ArgumentParser(description='PyTorch Starcoder Training')
-parser = get_tasks_args(parser)
+parser = get_patch_args(parser)
 args = parser.parse_args()
 
 

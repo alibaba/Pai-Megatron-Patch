@@ -31,9 +31,8 @@ from megatron_patch.finetune_utils import build_data_loader
 from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import get_model
-#from megatron_patch.model.qwen.modeling_qwen import QWenLMHeadModel
 from transformers import AutoModelForCausalLM
-from megatron_patch.arguments import get_tasks_args
+from megatron_patch.arguments import get_patch_args
 
 
 def get_model_provider():
@@ -42,7 +41,6 @@ def get_model_provider():
     def model_provider(pre_process=True, post_process=True):
         args = get_args()
         tokenizer = build_tokenizer(args)
-        #model = QWenLMHeadModel.from_pretrained(args.load, trust_remote_code=False)
         model = AutoModelForCausalLM.from_pretrained(args.load,
                                                      trust_remote_code=True)
         model.resize_token_embeddings(len(tokenizer))
@@ -65,7 +63,7 @@ def forward_step(batch, model):
     args.micro_batch_size = len(labels)
 
     # Forward pass through the model.
-    unwrapped_model = unwrap_model(model, (torchDDP, LocalDDP, Float16Module))
+    unwrapped_model = unwrap_model(model, (torchDDP, LocalDDP, Float16Module)).cuda()
     output = unwrapped_model(input_ids=input_ids,
                              labels=labels,
                              attention_mask=attention_mask)
@@ -132,5 +130,5 @@ def main():
 
 
 if __name__ == '__main__':
-    initialize_megatron(extra_args_provider=get_tasks_args)
+    initialize_megatron(extra_args_provider=get_patch_args)
     main()

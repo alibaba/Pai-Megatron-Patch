@@ -1,5 +1,5 @@
 #!/bin/bash
-# sh run_pretrain_megatron_qwen.sh dsw /workspace/Pai-Megatron-Patch 7B 1 8 1e-5 1e-6 2048 2048 85 bf16 1 1 sel true true true false 100000 /mnt/qwen-datasets/wudao_qwenbpe_text_document /mnt/qwen-ckpts/qwen-7b-hf-to-mg-tp1-pp1 100000000 10000 /mnt/output_megatron_qwen/
+# sh run_pretrain_megatron_qwen.sh dsw ../.. 1.8B 1 8 1e-5 1e-6 2048 2048 85 bf16 1 1 sel true false false false 100000 /mnt/qwen-datasets/wudao_qwenbpe_content_document /mnt/qwen-ckpts/Qwen-1_8B 100000000 10000 /mnt/output_megatron_qwen/
 
 set -e
 ENV=$1
@@ -49,7 +49,15 @@ WARMUP_TOKENS=${23}
 OUTPUT_BASEPATH=${24}
 
 
-if [ $MODEL_SIZE = 7B ]; then
+if [ $MODEL_SIZE = 1.8B ]; then
+
+NUM_LAYERS=24
+HIDDEN_SIZE=2048
+NUM_ATTN_HEADS=16
+INTERMEDIATE_SIZE=5504
+rope_options=""
+
+elif [ $MODEL_SIZE = 7B ]; then
 
 NUM_LAYERS=32
 HIDDEN_SIZE=4096

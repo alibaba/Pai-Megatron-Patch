@@ -117,7 +117,8 @@ def build_tokenizer(args):
             special_tokens_dict['bos_token'] = DEFAULT_BOS_TOKEN
         if not tokenizer.unk_token:
             special_tokens_dict['unk_token'] = DEFAULT_UNK_TOKEN
-        tokenizer.add_special_tokens(special_tokens_dict)
+        # tokenizer.add_special_tokens(special_tokens_dict)
+        tokenizer.pad_token_id = tokenizer.eos_token_id
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'FalconTokenizer':
@@ -172,23 +173,19 @@ def build_tokenizer(args):
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'QwenTokenizer':
-        from .tokenization_qwen import QWenTokenizer
-        if args.load is None:
-            tokenizer = QWenTokenizer.from_pretrained(
-                'Qwen/Qwen-7B',
-                model_max_length=args.seq_length,
-                padding_side='right',
-                use_fast=False,
-            )
-        else:
-            tokenizer = QWenTokenizer.from_pretrained(
-                args.load,
-                model_max_length=args.seq_length,
-                padding_side='right',
-                use_fast=False,
-            )
-        tokenizer.pad_token_id = tokenizer.pad_id
-        tokenizer.eos_token_id = tokenizer.eod_id
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.load,
+            model_max_length=args.seq_length,
+            padding_side="right",
+            use_fast=True,
+            trust_remote_code=True
+        )
+        if tokenizer.pad_token is None:
+            tokenizer.add_special_tokens(special_tokens_dict=dict(pad_token="<|extra_0|>"))
+
+        tokenizer.pad_token_id = tokenizer.pad_token_id
+        tokenizer.eod = tokenizer.eod_id
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'QwenVLTokenizer':

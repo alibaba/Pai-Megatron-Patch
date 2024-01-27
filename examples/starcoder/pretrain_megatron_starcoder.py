@@ -22,13 +22,14 @@ from megatron.core import tensor_parallel
 from megatron.utils import average_losses_across_data_parallel_group
 from megatron.utils import get_ltor_masks_and_position_ids
 
-from megatron_patch.data.pretrain_dataset import \
-    build_pretrain_starcoder_datasets_from_original, build_pretrain_llama_datasets_from_idxmap
+from megatron_patch.data import \
+    build_pretrain_dataset_from_original, build_pretrain_dataset_from_idxmap
+
 from megatron_patch.model.starcoder.gpt_model import GPTModel
 from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import pretrain
-from megatron_patch.arguments import get_tasks_args
+from megatron_patch.arguments import get_patch_args
 
 def model_provider(pre_process=True, post_process=True):
     args = get_args()
@@ -41,18 +42,18 @@ def model_provider(pre_process=True, post_process=True):
 
 
 def train_valid_test_datasets_provider(train_val_test_num_samples):
+    """Build train, valid, and test datasets."""
     args = get_args()
-    if os.path.isfile(args.data_path[0]):
+
+    if os.path.isfile(args.train_data_path[0]):
         train_ds, valid_ds, test_ds = \
-            build_pretrain_starcoder_datasets_from_original(
-                data_prefix=args.data_path,
-                max_padding_length=args.max_padding_length)
+            build_pretrain_dataset_from_original(args.dataset)
     else:
         train_ds, valid_ds, test_ds = \
-            build_pretrain_llama_datasets_from_idxmap(
-                data_prefix=args.data_path,
+            build_pretrain_dataset_from_idxmap(
+                data_prefix=args.train_data_path,
                 max_padding_length=args.max_padding_length,
-                data_impl=args.data_impl,
+                dataset_type=args.dataset,
                 splits_string=args.split,
                 train_valid_test_num_samples=train_val_test_num_samples,
                 seed=args.seed,
@@ -60,7 +61,6 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
             )
 
     return train_ds, valid_ds, test_ds
-
 
 def forward_step(data_iterator, model):
     tokenizer = get_tokenizer()
@@ -104,4 +104,4 @@ if __name__ == '__main__':
              model_provider,
              ModelType.encoder_or_decoder,
              forward_step,
-             extra_args_provider=get_tasks_args)
+             extra_args_provider=get_patch_args)
