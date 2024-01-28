@@ -185,7 +185,7 @@ megatron_options="  \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type MistralTokenizer \
-        --dataset Mistral-Pretrain-Raw \
+        --dataset LLama-Pretrain-Raw \
         --sliding-window ${SLW} \
         --swiglu \
         --normalization RMSNorm \

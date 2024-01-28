@@ -1,6 +1,8 @@
 #!/bin/bash
-# sh run_evaluate_huggingface_qwen.sh dsw /workspace/Pai-Megatron-Patch 7B 1 2048 80 0 fp16 /mnt/qwen-datasets/wudao_train.json /mnt/qwen-ckpts/Qwen-7B
-# sh run_evaluate_huggingface_qwen.sh dsw /workspace/Pai-Megatron-Patch 14B 1 2048 80 0 fp16 /mnt/qwen-datasets/wudao_train.json /mnt/qwen-ckpts/Qwen-14B
+# sh run_evaluate_huggingface_qwen.sh dsw ../../../PAI-Megatron-Patch 7B 1 2048 80 0 fp16 /mnt/qwen-datasets/wudao_train.json /mnt/qwen-ckpts/Qwen-7B
+# sh run_evaluate_huggingface_qwen.sh dsw ../../../PAI-Megatron-Patch 14B 1 2048 80 0 fp16 /mnt/qwen-datasets/wudao_train.json /mnt/qwen-ckpts/Qwen-14B
+# sh run_evaluate_huggingface_qwen.sh dsw ../../../PAI-Megatron-Patch 1.8B 1 2048 80 0 fp16 /mnt/qwen-datasets/alpaca_zh-qwen-train.json /mnt/qwen-ckpts/Qwen-1_8B
+
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -8,7 +10,7 @@ MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-231007
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=0
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
@@ -35,7 +37,14 @@ DATASET_PATH=$9
 PRETRAIN_CHECKPOINT_PATH=${10}
 
 
-if [ $MODEL_SIZE = 7B ]; then
+if [ $MODEL_SIZE = 1.8B ]; then
+
+NUM_LAYERS=24
+HIDDEN_SIZE=2048
+NUM_ATTN_HEADS=16
+INTERMEDIATE_SIZE=5504
+
+elif [ $MODEL_SIZE = 7B ]; then
 
 NUM_LAYERS=32
 HIDDEN_SIZE=4096

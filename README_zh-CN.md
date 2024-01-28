@@ -1,14 +1,18 @@
 ## Pai-Megatron-Patch是什么
 [English](./README.md) | 简体中文
 
-随着深度学习大语言模型的不断发展，其模型结构和量级在快速演化，依托大模型技术的应用更是层出不穷。
+随着深度学习大模型的不断发展，其模型结构和量级在快速演化，依托大模型技术的应用更是层出不穷。
 对于广大开发者来说不仅要考虑如何在复杂多变的场景下有效的将大模型消耗的算力发挥出来，还要应对大模型的持续迭代。
 开发简单易用的大模型训练工具就成了应对以上问题广受关注的技术方向，让开发者专注于大模型解决方案的开发，降低大模型训练加速性能优化和训练/推理全流程搭建的人力开发成本。
 
-Pai-Megatron-Patch工具是阿里云机器学习平台PAI算法团队研发，基于阿里云智算服务PAI-灵骏平台的大模型最佳实践解决方案配套工具，
-旨在帮助大模型开发者快速上手灵骏产品，完成大语言模型（LLM）的高效分布式训练，有监督指令微调，模型离线推理验证等完整大模型开发链路。
-该项目提供了业界主流开源大模型基于Megatron-LM的训练&离线推理验证流程，方便用户快速上手大模型训练。
+Pai-Megatron-Patch工具是阿里人工智能平台PAI算法团队研发，基于阿里云智算服务PAI-灵骏平台的大模型最佳实践解决方案配套工具。
+Pai-Megatron-Patch是各类开源大模型和Megatron训练加速引擎之间的“桥梁”，为用户提供用Megatron训练开源大模型的易用性以及LLM算法场景定制化的灵活性。
+同时它可以帮助大模型开发者快速上手PAI灵骏产品，完成大模型的高效分布式训练，有监督指令微调，模型离线推理验证等完整大模型开发链路。
+该项目提供了业界主流开源大模型基于Megatron的训练&离线推理验证流程，方便用户快速上手大模型训练。
 
+
+## Technical Reports
+- [Mixtral-8x7B在PAI灵骏的最佳实践](https://help.aliyun.com/zh/pai/use-cases/train-fine-tune-and-deploy-mixtral-by-using-intelligent-computing-lingjun)
 - [通义千问开源模型在PAI灵骏的最佳实践](https://mp.weixin.qq.com/s?__biz=Mzg4MzgxNDk2OA==&mid=2247491796&idx=1&sn=dc1d719313d794ae1aacdb07669a9545&chksm=cf430783f8348e950218bfcff861a2e6d2d92705807bf5b04f6e9268cc510ffa6e6aa2c87327#rd)
 - [阿里云机器学习PAI开源AI大模型训练工具Pai-Megatron-Patch, 助力大模型技术落地](https://zhuanlan.zhihu.com/p/655942437)
 - [基于单机最高能效270亿参数GPT模型的文本生成与理解](https://zhuanlan.zhihu.com/p/597652820)
@@ -17,14 +21,14 @@ Pai-Megatron-Patch工具是阿里云机器学习平台PAI算法团队研发，�
 - [阿里云PAI获得FewCLUE基于大模型的小样本学习双料冠军](https://developer.aliyun.com/article/788081?spm=a2c6h.12873639.article-detail.17.11c5383cHpFZks&tlog=yuekan_8)
 
 新功能：
-- **支持用MegatronLM框架训练mixtral-8x7b MoE稀疏模型** [🔥🔥 2023.12.27]
-- **支持用MegatronLM框架微调多模态大模型qwen-vl.** [🔥🔥 2023.12.15]
-- **支持用MegatronLM框架微调多模态大模型LLava.** [🔥🔥 2023.12.01]
-- **支持用MegatronLM框架训练deepseek系列模型.** [🔥🔥 2023.11.24]
-- **支持用MegatronLM框架微调qwen-72B模型.** [🔥🔥 2023.11.23]
-- **支持用MegatronLM框架训练Mistral-7B, Yi-6B和Codellama-34B模型** [🔥🔥 2023.11.16]
+- **支持用Megatron-Core框架训练mixtral-8x7b MoE稀疏模型** [🔥🔥 2024.01.26]
+- **支持用Megatron-LM框架训练多模态大模型qwen-vl.** [🔥🔥 2023.12.15]
+- **支持用Megatron-LM框架训练多模态大模型LLava.** [🔥🔥 2023.12.01]
+- **支持用Megatron-LM框架训练deepseek系列模型.** [🔥🔥 2023.11.24]
+- **支持用Megatron-LM框架训练qwen-72B模型.** [🔥🔥 2023.11.23]
+- **支持用Megatron-LM框架训练Mistral-7B, Yi-6B和Codellama-34B模型** [🔥🔥 2023.11.16]
 - **升级Megatron-LM底座，帮助热门模型支持transformer engine和fp8训练.** [🔥🔥 2023.10.19]
-- **支持用MegatronLM框架训练qwen-14B和baichuan2-13B** [🔥🔥 2023.10.08]
+- **支持用Megatron-LM框架训练qwen-14B和baichuan2-13B** [🔥🔥 2023.10.08]
 
 ## 主要特性
 

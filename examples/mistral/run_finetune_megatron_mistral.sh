@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_finetune_megatron_mistral.sh dsw /workspace/Pai-Megatron-Patch 7B 2 1e-5 1e-6 80 80 0 bf16 8 1 sel true false true false  /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-datasets/alpaca_data.json /mnt/mistral-ckpts/Mistral-7B-v0.1-to-mg-tp8-pp1/ 2 /mnt/output_patch_test
+#sh run_finetune_megatron_mistral.sh dsw ../.. 7B 2 1e-5 1e-6 80 80 0 bf16 8 1 sel true false true false  /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-datasets/alpaca_data.json /mnt/mistral-ckpts/Mistral-7B-v0.1-to-mg-tp8-pp1/ 2 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -179,7 +179,7 @@ megatron_options="  \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type MistralTokenizer \
-        --dataset Mistral-SFT \
+        --dataset LLama-SFT \
         --sliding-window ${SLW} \
         --swiglu \
         --normalization RMSNorm \

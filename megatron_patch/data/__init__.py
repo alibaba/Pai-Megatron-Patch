@@ -19,10 +19,12 @@ from megatron import print_rank_0
 from megatron import get_args
 
 from megatron_patch.tokenizer import build_tokenizer
-from .mistral import MistralRawDataset,  MistralIdxMapDataset
-from .llama import LLamaRawDataset, LLamaIdxMapDataset
+from .llama import LLamaRawDataset
+from .bloom import BloomRawDataset
 from .llava.mm_pretrain_dataset import LazySupervisedDataset as LLavaSupervisedDataset
 from .qwen_vl import LazySupervisedDataset as QwenVLSupervisedDataset
+from .glm import ChatGLMRawDataset
+from .starcoder import StarcoderRawDataset
 
 def build_evaluation_dataset(dataset):
 
@@ -30,9 +32,6 @@ def build_evaluation_dataset(dataset):
     build_tokenizer(args)
     if dataset == 'LLama-SFT' or dataset == 'LLama-Pretrain-Raw':
         val_dataset = LLamaRawDataset(args.valid_data_path, args.max_padding_length)
-        return val_dataset
-    elif dataset == 'Mistral-SFT' or dataset == 'Mistral-Pretrain-Raw':
-        val_dataset = MistralRawDataset(args.valid_data_path, args.max_padding_length)
         return val_dataset
     else:
         raise NotImplementedError('dataset {} is not implemented.'.format(dataset))
@@ -46,11 +45,7 @@ def build_finetune_dataset(dataset):
         valid_dataset = LLamaRawDataset(args.valid_data_path, args.max_padding_length)
 
         return train_dataset, valid_dataset
-    elif dataset == 'Mistral-SFT':
-        train_dataset = MistralRawDataset(args.train_data_path, args.max_padding_length)
-        valid_dataset = MistralRawDataset(args.valid_data_path, args.max_padding_length)
 
-        return train_dataset, valid_dataset
     elif dataset == 'LLava-SFT':
         train_dataset = LLavaSupervisedDataset(args.train_data_path)
         valid_dataset = LLavaSupervisedDataset(args.valid_data_path)
@@ -63,6 +58,21 @@ def build_finetune_dataset(dataset):
 
         return train_dataset, valid_dataset
 
+    elif dataset == 'ChatGLM-SFT':
+        train_dataset = ChatGLMRawDataset(args.train_data_path, args.source_seq_len, args.target_seq_len)
+        valid_dataset = ChatGLMRawDataset(args.valid_data_path, args.source_seq_len, args.target_seq_len)
+        return train_dataset, valid_dataset
+
+    elif dataset == 'Bloom-SFT':
+        train_dataset = BloomRawDataset(args.train_data_path, args.max_padding_length)
+        valid_dataset = BloomRawDataset(args.valid_data_path, args.max_padding_length)
+        return train_dataset, valid_dataset
+
+    elif dataset == 'Starcoder-SFT':
+        train_dataset = StarcoderRawDataset(args.train_data_path, args.max_padding_length)
+        valid_dataset = StarcoderRawDataset(args.valid_data_path, args.max_padding_length)
+        return train_dataset, valid_dataset
+
     else:
         raise NotImplementedError('dataset {} is not implemented.'.format(dataset))
 
@@ -72,25 +82,32 @@ def build_pretrain_dataset_from_original(dataset):
     build_tokenizer(args)
     if dataset == 'LLama-Pretrain-Raw':
         train_dataset = LLamaRawDataset(args.train_data_path, args.max_padding_length)
-        valid_dataset = LLamaRawDataset(args.valid_data_path, args.max_padding_length)
-        test_dataset = LLamaRawDataset(args.test_data_path, args.max_padding_length)
+        #valid_dataset = LLamaRawDataset(args.valid_data_path, args.max_padding_length)
+        #test_dataset = LLamaRawDataset(args.test_data_path, args.max_padding_length)
         # customize your validation and test dataset here
 
-        return train_dataset, valid_dataset, test_dataset
-
-    elif dataset == 'Mistral-Pretrain-Raw':
-        train_dataset = MistralRawDataset(args.train_data_path, args.max_padding_length)
-        valid_dataset = MistralRawDataset(args.valid_data_path, args.max_padding_length)
-        test_dataset = MistralRawDataset(args.test_data_path, args.max_padding_length)
-
-        return train_dataset, valid_dataset, test_dataset
+        return train_dataset, train_dataset, train_dataset
 
     elif dataset == 'LLava-Pretrain-Raw':
         train_dataset = LLavaSupervisedDataset(args.train_data_path)
-        valid_dataset = LLavaSupervisedDataset(args.valid_data_path)
-        test_dataset = LLavaSupervisedDataset(args.test_data_path)
+        #valid_dataset = LLavaSupervisedDataset(args.valid_data_path)
+        #test_dataset = LLavaSupervisedDataset(args.test_data_path)
 
-        return train_dataset, valid_dataset, test_dataset
+        return train_dataset, train_dataset, train_dataset
+
+    elif dataset == 'ChatGLM-Pretrain-Raw':
+        train_dataset = ChatGLMRawDataset(args.train_data_path, args.source_seq_len, args.target_seq_len)
+        #valid_dataset = ChatGLMRawDataset(args.train_data_path, args.source_seq_len, args.target_seq_len)
+        #test_dataset = ChatGLMRawDataset(args.train_data_path, args.source_seq_len, args.target_seq_len)
+
+        return train_dataset, train_dataset, train_dataset
+
+    elif dataset == 'Starcoder-Pretrain-Raw':
+        train_dataset = StarcoderRawDataset(args.train_data_path, args.max_padding_length)
+        #valid_dataset = StarcoderRawDataset(args.train_data_path, args.max_padding_length)
+        #test_dataset = StarcoderRawDataset(args.train_data_path, args.max_padding_length)
+
+        return train_dataset, train_dataset, train_dataset
 
     else:
         raise NotImplementedError('dataset {} is not implemented.'.format(dataset))
@@ -170,11 +187,18 @@ def _build_train_valid_test_datasets(data_prefix, max_padding_length, dataset_ty
                                      train_valid_test_num_samples,
                                      seed, skip_warmup,
                                      return_doc_ids=False):
-    from megatron.data.gpt_dataset import get_indexed_dataset_
-    from megatron.data.gpt_dataset import get_train_valid_test_split_
+    try:
+        from megatron.data.gpt_dataset import get_indexed_dataset_
+        from megatron.data.gpt_dataset import get_train_valid_test_split_
+    except:
+        from megatron.data.dataset_utils import get_indexed_dataset_
+        from megatron.data.dataset_utils import get_train_valid_test_split_
     # Indexed dataset.
     indexed_dataset = get_indexed_dataset_(data_prefix, skip_warmup)
-    total_num_of_documents = indexed_dataset.sizes.shape[0]
+    try:
+        total_num_of_documents = indexed_dataset.sizes.shape[0]
+    except:
+        total_num_of_documents = indexed_dataset.document_indices.shape[0] - 1
     splits = get_train_valid_test_split_(splits_string, total_num_of_documents)
     # Print stats about the splits.
     print_rank_0(' > dataset split:')
@@ -197,17 +221,13 @@ def _build_train_valid_test_datasets(data_prefix, max_padding_length, dataset_ty
                                   step=1,
                                   dtype=np.int32)
             if dataset_type == 'LLama-Pretrain-Idxmap':
+                from .llama import LLamaIdxMapDataset
                 dataset = LLamaIdxMapDataset(
                     name, data_prefix, documents, indexed_dataset,
                     train_valid_test_num_samples[index],
                     seed, max_padding_length, return_doc_ids)
-            elif dataset_type == 'Mistral-Pretrain-Idxmap':
-                dataset = MistralIdxMapDataset(
-                    name, data_prefix, documents, indexed_dataset,
-                    train_valid_test_num_samples[index],
-                    seed, max_padding_length, return_doc_ids)
             else:
-                raise RuntimeError("The provided dataset_type is not supported in Pretrain mode. \nChoose from [LLama-Pretrain-Idxmap, Mistral-Pretrain-Idxmap].")
+                raise RuntimeError("The provided dataset_type is not supported in Pretrain mode. \nChoose from [LLama-Pretrain-Idxmap].")
 
         return dataset
 

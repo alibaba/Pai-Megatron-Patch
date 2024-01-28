@@ -30,7 +30,7 @@ from megatron_patch.data import build_evaluation_dataset
 from megatron_patch.finetune_utils import build_data_loader
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import get_model
-from megatron_patch.arguments import get_tasks_args
+from megatron_patch.arguments import get_patch_args
 from transformers import AutoModelForCausalLM
 
 def get_model_provider():
@@ -124,5 +124,5 @@ def main():
 
 
 if __name__ == '__main__':
-    initialize_megatron(extra_args_provider=get_tasks_args)
+    initialize_megatron(extra_args_provider=get_patch_args)
     main()

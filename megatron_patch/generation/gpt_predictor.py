@@ -19,8 +19,8 @@ from megatron.core.enums import ModelType
 from megatron import get_args
 from megatron import get_timers
 from megatron.training import get_model
+from megatron.checkpointing import load_checkpoint
 
-from megatron_patch.checkpointing import load_checkpoint
 from megatron_patch.generation.api import generate_and_post_process
 from megatron_patch.tokenizer import build_tokenizer
 

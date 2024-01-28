@@ -23,7 +23,7 @@ from megatron.utils import get_ltor_masks_and_position_ids
 from megatron_patch.finetune_utils import finetune
 from megatron_patch.model.llava.gpt_model import GPTModel
 from megatron_patch.tokenizer import get_tokenizer
-from megatron_patch.arguments import get_tasks_args
+from megatron_patch.arguments import get_patch_args
 from megatron_patch.tokenizer import build_tokenizer
 from megatron.arguments import core_transformer_config_from_args
 from megatron_patch.data.llava.constants import IGNORE_INDEX
@@ -100,7 +100,7 @@ def forward_step(data_iterator, model):
 
 if __name__ == '__main__':
 
-    initialize_megatron(extra_args_provider=get_tasks_args)
+    initialize_megatron(extra_args_provider=get_patch_args)
 
     args = get_args()
     build_tokenizer(args)

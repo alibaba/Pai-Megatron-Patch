@@ -25,14 +25,14 @@ from megatron.initialize import initialize_megatron
 from megatron.model import DistributedDataParallel as LocalDDP
 from megatron.model import Float16Module
 from megatron.utils import unwrap_model
+from megatron.checkpointing import load_checkpoint
 
-from megatron_patch.checkpointing import load_checkpoint
 from megatron_patch.data.evaluate_dataset import build_evaluation_dataset
 from megatron_patch.finetune_utils import build_data_loader
 from megatron_patch.model.glm130b.gpt_model import GPTModel
 from megatron_patch.tokenizer import build_tokenizer
 from megatron_patch.training import get_model
-from megatron_patch.arguments import get_tasks_args
+from megatron_patch.arguments import get_patch_args
 
 def get_model_provider(eval_metric):
     def model_provider(pre_process=True, post_process=True):
@@ -216,5 +216,5 @@ def main():
 
 
 if __name__ == '__main__':
-    initialize_megatron(extra_args_provider=get_tasks_args)
+    initialize_megatron(extra_args_provider=get_patch_args)
     main()

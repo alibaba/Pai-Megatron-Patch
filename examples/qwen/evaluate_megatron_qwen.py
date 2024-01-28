@@ -23,12 +23,12 @@ from megatron.initialize import initialize_megatron
 from megatron.utils import unwrap_model
 from megatron.utils import get_ltor_masks_and_position_ids
 from megatron.arguments import core_transformer_config_from_args
+from megatron.checkpointing import load_checkpoint
 
 from megatron_patch.data import build_evaluation_dataset
-from megatron_patch.checkpointing import load_checkpoint
 from megatron_patch.finetune_utils import build_data_loader
 from megatron_patch.model.qwen.gpt_model import GPTModel
-from megatron_patch.arguments import get_tasks_args
+from megatron_patch.arguments import get_patch_args
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import get_model
 
@@ -169,5 +169,5 @@ def main():
 
 
 if __name__ == '__main__':
-    initialize_megatron(extra_args_provider=get_tasks_args)
+    initialize_megatron(extra_args_provider=get_patch_args)
     main()

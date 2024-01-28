@@ -1,9 +1,10 @@
 #!/bin/bash
-#sh run_evaluate_megatron_mixtral.sh dsw ../.. 0.125B 1 81 81 0 bf16 2 1 sel false false true false /mnt/llama2-datasets/alpaca_data.json /mnt/mixtral-ckpts/Mixtral-8x7B-v0.1
+#sh run_evaluate_megatron_qwen_moe.sh dsw ../.. 1.8B 1 81 81 85 bf16 1 1 sel false false true false /mnt/qwen-datasets/alpaca_zh-qwen-train.json /mnt/qwen-ckpts/Qwen-1_8B-to-mcore-tp1-ep8/
+
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
-MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-231221
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-240126
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
@@ -54,6 +55,15 @@ SLW=4096
 gqa_options=" \
 		    --group-query-attention \
 		    --num-query-groups 8"
+
+elif [ $MODEL_SIZE = 1.8B ]; then
+
+NUM_LAYERS=24
+HIDDEN_SIZE=2048
+NUM_ATTN_HEADS=16
+INTERMEDIATE_SIZE=5504
+MPE=32768
+gqa_options=""
 
 elif [ $MODEL_SIZE = 7B ]; then
 
@@ -161,8 +171,8 @@ megatron_options=" \
         --num-workers 0 \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type MistralTokenizer \
-        --dataset Mistral-SFT \
+        --patch-tokenizer-type QwenTokenizer \
+        --dataset LLama-SFT \
         --swiglu \
         --use-rotary-position-embeddings \
         --position-embedding-type rope \
@@ -172,12 +182,14 @@ megatron_options=" \
         --no-masked-softmax-fusion \
         --no-position-embedding \
         --num-experts 8 \
-        --moe-router-type top2 \
+        --moe-router-topk 2 \
         --use-mcore-models \
-        --expert-model-parallel-size ${EP}
+        --no-rope-fusion \
+        --expert-model-parallel-size ${EP} \
+        --transformer-impl transformer_engine
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_megatron_mixtral.py
+run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_megatron_qwen_moe.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}

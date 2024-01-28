@@ -578,7 +578,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
 
     # Saving config and tokenzier files
     os.system("cp -rf "+args.load_path+"/*.json "+args.save_path)
-    os.system("cp -rf " + args.load_path + "/tokenizer.model " + args.save_path)
+    os.system("cp -rf " + args.load_path + "/tokeniz* " + args.save_path)
 
     # Saving the tracker file
     tracker_filepath = os.path.join(args.save_path,

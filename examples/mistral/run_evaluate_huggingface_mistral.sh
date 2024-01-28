@@ -1,5 +1,5 @@
 #!/bin/bash
-# sh run_evaluate_huggingface_mistral.sh dsw /workspace/Pai-Megatron-Patch 7B 1 80 80 0 bf16 /mnt/llama2-datasets/alpaca_data.json /mnt/mistral-ckpts/Mistral-7B-v0.1
+# sh run_evaluate_huggingface_mistral.sh dsw ../.. 7B 1 80 80 0 bf16 /mnt/llama2-datasets/alpaca_data.json /mnt/mistral-ckpts/Mistral-7B-v0.1
 
 set -e
 ENV=$1
@@ -88,7 +88,7 @@ megatron_options=" \
         --pipeline-model-parallel-size 1 \
         --no-load-optim \
         --num-workers 0 \
-        --dataset Mistral-SFT \
+        --dataset LLama-SFT \
         --use-distributed-optimizer \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \

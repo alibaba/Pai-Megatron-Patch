@@ -15,24 +15,12 @@
 import copy
 import io
 import json
-import math
-import os
-from bisect import bisect_right
-from itertools import accumulate
 import numpy as np
 import torch
 
-from megatron.data.dataset_utils import get_datasets_weights_and_num_samples
-from megatron.data.blendable_dataset import BlendableDataset
-from megatron import get_args
-from megatron import print_rank_0
-from megatron.data.gpt_dataset import _build_index_mappings
-from megatron.data.gpt_dataset import get_indexed_dataset_
-from megatron.data.gpt_dataset import get_train_valid_test_split_
-
 from megatron_patch.tokenizer import get_tokenizer
 
-class StarcoderDataset(torch.utils.data.Dataset):
+class StarcoderRawDataset(torch.utils.data.Dataset):
     """Starcoder dataset class"""
     def __init__(self, datapath, max_padding_length):
         """

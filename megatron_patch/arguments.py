@@ -12,23 +12,49 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
 import argparse
+import dataclasses
+import torch.nn.functional as F
 
-def validate_moe_args(args, defaults={}):
-    if args.num_experts is not None:
-        args.moe = True
-        if args.moe_expert_parallel_size is None:
-            args.moe_expert_parallel_size = args.data_parallel_size
-            if args.tensor_model_parallel_size > 0 and not args.expert_tensor_parallelism:
-                # EP will use the span of DP*TP
-                args.moe_expert_parallel_size *= args.tensor_model_parallel_size
-        if args.rank == 0:
-            print('Experts set to %s, expert parallel size set to %d'
-                  % (str(args.num_experts), args.moe_expert_parallel_size))
+
+def core_transformer_config_from_args(args, TransformerConfig):
+
+    # Translate args to core transformer configuration
+    kw_args = {}
+    for f in dataclasses.fields(TransformerConfig):
+        if hasattr(args, f.name):
+            kw_args[f.name] = getattr(args, f.name)
+    kw_args['persist_layer_norm'] = not args.no_persist_layer_norm
+    kw_args['layernorm_zero_centered_gamma'] = args.apply_layernorm_1p
+    kw_args['layernorm_epsilon'] = args.norm_epsilon
+    kw_args['deallocate_pipeline_outputs'] = True
+    kw_args['pipeline_dtype'] = args.params_dtype
+    kw_args['batch_p2p_comm'] = not args.overlap_p2p_comm
+    kw_args['num_moe_experts'] = args.num_experts
+    if args.swiglu:
+        kw_args['activation_func'] = F.silu
+        kw_args['gated_linear_unit'] = True
+        kw_args['bias_activation_fusion'] = args.bias_swiglu_fusion
     else:
-        args.moe = False
+        kw_args['bias_activation_fusion'] = args.bias_gelu_fusion
+    if args.squared_relu:
+        assert not args.swiglu
+        def squared_relu(x):
+            return torch.pow(F.relu(x), 2)
+        kw_args['activation_func'] = squared_relu
+    if args.init_method_xavier_uniform:
+        kw_args['init_method'] = torch.nn.init.xavier_uniform_
+        kw_args['scaled_init_method'] = torch.nn.init.xavier_uniform_
+    if args.group_query_attention:
+        kw_args['num_query_groups'] = args.num_query_groups
+    else:
+        kw_args['num_query_groups'] = None
 
-def get_tasks_args(parser):
+    # Return Transformer config.
+    return TransformerConfig(**kw_args)
+
+def get_patch_args(parser):
     group = parser.add_argument_group(title='patch')
 
     for action in vars(group)['_actions']:
@@ -89,7 +115,7 @@ def get_tasks_args(parser):
 
     group.add_argument('--extra-vocab-size',
                        type=int,
-                       default=1,
+                       default=0,
                        help='--extra-vocab-size')
 
     group.add_argument('--keep-last',
@@ -300,16 +326,14 @@ def get_tasks_args(parser):
     group.add_argument('--expert-interval', type=int, default=2,
                        help='Use experts in every "expert-interval" layers')
 
+    group.add_argument('--moe', action='store_true')
+
     group.add_argument('--moe-topk', type=int, default=1,
                        help='moe-topk')
 
     group.add_argument('--moe-expert-parallel-size', type=int, default=None,
                        help='Degree of the MoE expert parallelism. By default, '
                        'the size of this value will be automatically determined.')
-
-    group.add_argument('--disable-moe-token-dropping', action='store_false',
-                       help='Disable MoE expert token dropping.',
-                       dest='moe_token_dropping')
 
     group.add_argument('--moe-train-capacity-factor', type=float, default=1.0,
                        help='The capacity of the MoE expert at training time')
@@ -333,4 +357,31 @@ def get_tasks_args(parser):
     group.add_argument('--moe-input-feature-slicing', action='store_true',
                        help='Enable moe all2all performance optimization.')
 
+    """
+    
+    group.add_argument(
+        '--moe-token-dropping',
+        action='store_true',
+        help='Currently unsupported. '
+             'This feature involves selectively dropping and padding tokens for each expert '
+             'to achieve a specified capacity, similar to to GShard, Switch-Transformer, and DeepSpeed-MoE.',
+    )
+    
+    group.add_argument(
+        '--moe-router-type',
+        type=str,
+        default='sinkhorn',
+        help='Options for router type. Currently supports sinkhorn and topk router.',
+    )
+
+    group.add_argument(
+        '--moe-grouped-gemm',
+        action='store_true',
+        help='When there are multiple experts per rank, compress '
+        'multiple local (potentially small) gemms in a single kernel '
+        'launch to improve the utilization and performance by '
+        'leveraging the Grouped GEMM feature introduced since '
+        'CUTLASS 2.8 (https://github.com/fanshiqing/grouped_gemm).',
+    )
+    """
     return parser

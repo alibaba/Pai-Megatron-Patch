@@ -18,7 +18,7 @@ from megatron.core.enums import ModelType
 
 from megatron_patch.generation.gpt_predictor import GPTPredictor
 from megatron_patch.model.bloom.gpt_model import GPTModel
-from megatron_patch.arguments import get_tasks_args
+from megatron_patch.arguments import get_patch_args
 
 class MegatronGPTPredictor(GPTPredictor):
     def model_provider(self, pre_process=True, post_process=True):
@@ -33,6 +33,6 @@ class MegatronGPTPredictor(GPTPredictor):
 
 
 if __name__ == '__main__':
-    initialize_megatron(extra_args_provider=get_tasks_args)
+    initialize_megatron(extra_args_provider=get_patch_args)
     predictor = MegatronGPTPredictor()
     predictor.predict()

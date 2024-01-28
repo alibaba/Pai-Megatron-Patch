@@ -14,28 +14,32 @@
 
 import os
 import torch
+from torch import Tensor
 from functools import partial
 from typing import Union
+
 from megatron import get_args
 from megatron import get_timers
 from megatron.core import mpu, tensor_parallel
 from megatron.core.enums import ModelType
 import megatron.model
 from megatron.utils import (
-    get_ltor_masks_and_position_ids,
+    get_batch_on_this_tp_rank,
     get_batch_on_this_cp_rank,
     average_losses_across_data_parallel_group
 )
+from megatron.core.datasets.blended_megatron_dataset_builder import BlendedMegatronDatasetBuilder
 from megatron.training import pretrain
+from megatron.core.datasets.gpt_dataset import GPTDatasetConfig
+from megatron.core.datasets.gpt_dataset import GPTDataset
 
-from megatron_patch.data import \
-    build_pretrain_dataset_from_original, build_pretrain_dataset_from_idxmap
+from megatron_patch.data import build_pretrain_dataset_from_original
 from megatron_patch.tokenizer import get_tokenizer, build_tokenizer
-from megatron_patch.arguments import get_tasks_args
+from megatron_patch.arguments import get_patch_args
 from megatron_patch.arguments import core_transformer_config_from_args
-from megatron_patch.model.mixtral_mcore.model import GPTModel
-from megatron_patch.model.mixtral_mcore.layer_specs import get_gpt_layer_with_transformer_engine_spec
-from megatron_patch.model.mixtral_mcore.transformer_config import TransformerConfig
+from megatron_patch.model.mixtral.model import GPTModel
+from megatron_patch.model.mixtral.layer_specs import get_gpt_layer_with_transformer_engine_spec
+from megatron_patch.model.mixtral.transformer_config import TransformerConfig
 
 def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megatron.model.GPTModel]:
     args = get_args()
@@ -59,41 +63,49 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megat
     return model
 
 def get_batch(data_iterator):
-    """Generate a batch"""
+    """Generate a batch."""
+
+    # TODO: this is pretty hacky, find a better way
+    if (not mpu.is_pipeline_first_stage()) and (not mpu.is_pipeline_last_stage()):
+        return None, None, None, None, None
+
+    # get batches based on the TP rank you are on
+    batch = get_batch_on_this_tp_rank(data_iterator)
+
+    # slice batch along sequence dimension for context parallelism
+    batch = get_batch_on_this_cp_rank(batch)
+    return batch.values()
+
+def loss_func(loss_mask: Tensor, output_tensor: Tensor):
+    """Loss function.
+
+    Args:
+        loss_mask (Tensor): Used to mask out some portions of the loss
+        output_tensor (Tensor): The tensor with the losses
+    """
     args = get_args()
-    tokenizer = get_tokenizer()
-    datatype = torch.int64
 
-    keys = ['input_ids', 'labels']
-    if data_iterator is not None:
-        data = next(data_iterator)
-    else:
-        data = None
-    data_b = tensor_parallel.broadcast_data(keys, data, datatype)
-    tokens_ = data_b['input_ids'].long()
-
-    labels = tokens_[:, 1:].contiguous()
-    tokens = tokens_[:, :-1].contiguous()
-    attention_mask = tokens.ne(tokenizer.pad_token_id)
-    # Get the masks and postition ids.
-    _, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-        tokens,
-        tokenizer.pad_token_id,
-        args.reset_position_ids,
-        args.reset_attention_mask,
-        True)
-
-    return tokens, labels, loss_mask, attention_mask, position_ids
-
-def loss_func(loss_mask, output_tensor):
     losses = output_tensor.float()
     loss_mask = loss_mask.view(-1).float()
-    loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+    if args.context_parallel_size > 1:
+        loss = torch.cat([torch.sum(losses.view(-1) * loss_mask).view(1), loss_mask.sum().view(1)])
+        torch.distributed.all_reduce(loss, group=mpu.get_context_parallel_group())
+        loss = loss[0] / loss[1]
+    else:
+        loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+
+    # Check individual rank losses are not NaN prior to DP all-reduce.
+    if args.check_for_nan_in_loss_and_grad:
+        global_rank = torch.distributed.get_rank()
+        assert not loss.isnan(), (
+            f'Rank {global_rank}: found NaN in local forward loss calculation. '
+            f'Device: {torch.cuda.current_device()}, node: {os.uname()[1]}'
+        )
 
     # Reduce loss for logging.
     averaged_loss = average_losses_across_data_parallel_group([loss])
 
-    return loss, {'lm loss': averaged_loss[0]}
+    return loss * args.context_parallel_size, {'lm loss': averaged_loss[0]}
 
 
 def forward_step(data_iterator, model):
@@ -112,30 +124,39 @@ def forward_step(data_iterator, model):
     return output_tensor, partial(loss_func, loss_mask)
 
 
+def is_dataset_built_on_rank():
+    return (mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()) and mpu.get_tensor_model_parallel_rank() == 0
+
+def core_gpt_dataset_config_from_args(args):
+    return GPTDatasetConfig(
+        is_built_on_rank=is_dataset_built_on_rank,
+        random_seed=args.seed,
+        sequence_length=args.seq_length,
+        blend=args.data_path,
+        split=args.split,
+        path_to_cache=args.data_cache_path,
+    )
+
 def train_valid_test_datasets_provider(train_val_test_num_samples):
     """Build train, valid, and test datasets."""
     args = get_args()
-
     if os.path.isfile(args.train_data_path[0]):
-        train_ds, valid_ds, test_ds = \
-            build_pretrain_dataset_from_original(args.dataset)
+                train_ds, valid_ds, test_ds = \
+                                    build_pretrain_dataset_from_original(args.dataset)
     else:
-        train_ds, valid_ds, test_ds = \
-            build_pretrain_dataset_from_idxmap(
-                data_prefix=args.train_data_path,
-                max_padding_length=args.max_padding_length,
-                dataset_type=args.dataset,
-                splits_string=args.split,
-                train_valid_test_num_samples=train_val_test_num_samples,
-                seed=args.seed,
-                skip_warmup=(not args.mmap_warmup)
-            )
+        train_ds, valid_ds, test_ds = BlendedMegatronDatasetBuilder(
+            GPTDataset,
+            train_val_test_num_samples,
+            core_gpt_dataset_config_from_args(args)
+        ).build()
 
     return train_ds, valid_ds, test_ds
 
 
 if __name__ == "__main__":
+
+    train_valid_test_datasets_provider.is_distributed = True
     pretrain(train_valid_test_datasets_provider, model_provider,
              ModelType.encoder_or_decoder,
              forward_step,
-             extra_args_provider=get_tasks_args)
+             extra_args_provider=get_patch_args)

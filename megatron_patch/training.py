@@ -17,7 +17,6 @@ import sys
 import time
 
 import torch
-from megatron import get_current_global_batch_size
 from megatron import (get_args, get_num_microbatches, get_signal_handler,
                       get_tensorboard_writer, get_timers, is_last_rank,
                       print_rank_0, print_rank_last, update_num_microbatches)
@@ -36,9 +35,14 @@ from megatron.utils import (calc_params_l2_norm,
 from megatron.core.pipeline_parallel.schedules import get_forward_backward_func
 from megatron.core.enums import ModelType
 from megatron.core.utils import get_model_config
-from megatron.model.vision.knn_monitor import compute_feature_bank
+try:
+    from megatron.core import DistributedDataParallel as DDP
+except:
+    from megatron.model import DistributedDataParallel as DDP
 
-from .checkpointing import load_checkpoint, save_checkpoint
+from megatron.model.vision.knn_monitor import compute_feature_bank
+from megatron.checkpointing import load_checkpoint, save_checkpoint
+from megatron.optimizer import get_megatron_optimizer
 
 # The earliest we can measure the start time.
 _TRAIN_START_TIME = time.time()
@@ -50,8 +54,7 @@ def pretrain(train_valid_test_dataset_provider,
              forward_step_func,
              process_non_loss_data_func=None,
              extra_args_provider=None,
-             args_defaults={'tokenizer_type': 'GPT2BPETokenizer'},
-             moe=False):
+             args_defaults={'tokenizer_type': 'GPT2BPETokenizer'}):
     """Main training program.
     Refer to https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/training.py
 
@@ -82,13 +85,11 @@ def pretrain(train_valid_test_dataset_provider,
         args_defaults: a dictionary from argument-name to argument-value. It
             to set already parse arguments.
     """
-    if not moe:
-        from megatron.initialize import initialize_megatron
-        initialize_megatron(extra_args_provider=extra_args_provider,
-                            args_defaults=args_defaults)
-    else:
-        from megatron_patch.initialize import initialize_megatron
-        initialize_megatron(extra_args_provider=extra_args_provider)
+
+    from megatron.initialize import initialize_megatron
+    initialize_megatron(extra_args_provider=extra_args_provider,
+                        args_defaults=args_defaults)
+
     # Set pytorch JIT layer fusion options and warmup JIT functions.
     set_jit_fusion_options()
 
@@ -105,8 +106,6 @@ def pretrain(train_valid_test_dataset_provider,
     print_datetime('after megatron is initialized')
 
     args = get_args()
-    if not moe:
-        args.moe = False
     timers = get_timers()
 
     # Model, optimizer, and learning rate.
@@ -181,37 +180,6 @@ def pretrain(train_valid_test_dataset_provider,
                                    test_data_iterator, model,
                                    iteration, process_non_loss_data_func, config,
                                    verbose=True, write_to_tensorboard=not args.skip_train)
-
-
-def update_train_iters(args):
-
-    # For iteration-based training, we don't need to do anything
-    if args.train_iters:
-        return
-
-    # Constant batch size with sample-based training.
-    if args.rampup_batch_size is None:
-        args.train_iters = args.train_samples // args.global_batch_size
-
-    else:
-        # Sample based training with rampup batch size.
-        iterations = 0
-        consumed_samples = 0
-        # Rampup phase.
-        while consumed_samples <= int(args.rampup_batch_size[2]):
-            update_num_microbatches(consumed_samples, consistency_check=False)
-            consumed_samples += get_current_global_batch_size()
-            iterations += 1
-        # Reset
-        update_num_microbatches(0, consistency_check=False)
-        # Constant phase
-        # Note that we throw away any partial last batch.
-        iterations += (args.train_samples - consumed_samples) // \
-                      args.global_batch_size
-        args.train_iters = iterations
-
-    print_rank_0('setting training iterations to {}'.format(args.train_iters))
-
 
 def get_model(model_provider_func, model_type=ModelType.encoder_or_decoder, wrap_with_ddp=True):
     """Build the model."""
@@ -308,16 +276,26 @@ def get_model(model_provider_func, model_type=ModelType.encoder_or_decoder, wrap
         model = [Float16Module(model_module, args) for model_module in model]
 
     if wrap_with_ddp:
-        if not args.moe:
-            from megatron.model import DistributedDataParallel as DDP
-        else:
-            from megatron_patch.distributed import DistributedDataParallel as DDP
-        model = [DDP(model_module,
-                     data_parallel_group=mpu.get_data_parallel_group(),
-                     accumulate_allreduce_grads_in_fp32=args.accumulate_allreduce_grads_in_fp32,
-                     overlap_grad_reduce=args.overlap_grad_reduce,
-                     use_distributed_optimizer=args.use_distributed_optimizer)
-                 for model_module in model]
+        try:
+            model = [DDP(model_module,
+                         data_parallel_group=mpu.get_data_parallel_group(),
+                         accumulate_allreduce_grads_in_fp32=args.accumulate_allreduce_grads_in_fp32,
+                         overlap_grad_reduce=args.overlap_grad_reduce,
+                         use_distributed_optimizer=args.use_distributed_optimizer)
+                     for model_module in model]
+        except:
+
+            config = get_model_config(model[0])
+            model = [DDP(config,
+                         model_chunk,
+                         data_parallel_group=mpu.get_data_parallel_group(with_context_parallel=True),
+                         accumulate_allreduce_grads_in_fp32=args.accumulate_allreduce_grads_in_fp32,
+                         overlap_grad_reduce=args.overlap_grad_reduce,
+                         use_distributed_optimizer=args.use_distributed_optimizer,
+                         # Turn off bucketing for model_chunk 2 onwards, since communication for these
+                         # model chunks is overlapped with compute anyway.
+                         disable_bucketing=(model_chunk_idx > 0))
+                     for (model_chunk_idx, model_chunk) in enumerate(model)]
 
         # Broadcast params from data parallel src rank to other data parallel ranks.
         if args.data_parallel_random_init:
@@ -337,28 +315,24 @@ def setup_model_and_optimizer(model_provider_func,
     model = get_model(model_provider_func, model_type)
     unwrapped_model = unwrap_model(model)
 
-    if args.load is not None and args.no_load_optim:
-        load_checkpoint(model, None, None)
-
-    if not args.moe:
-        from megatron.optimizer import get_megatron_optimizer
-        optimizer = get_megatron_optimizer(model, no_wd_decay_cond, scale_lr_cond,
-                                           lr_mult)
-    else:
-        from megatron.optimizer import get_megatron_optimizer
-        #from megatron_patch.optimizer import get_megatron_optimizer
-        optimizer = get_megatron_optimizer(model, no_wd_decay_cond, scale_lr_cond,
-                                           lr_mult)
+    optimizer = get_megatron_optimizer(model, no_wd_decay_cond,
+                                       scale_lr_cond, lr_mult)
     opt_param_scheduler = get_optimizer_param_scheduler(optimizer)
 
     if args.load is not None:
         timers = get_timers()
         timers('load-checkpoint', log_level=0).start(barrier=True)
-        args.iteration = load_checkpoint(model, optimizer, opt_param_scheduler)
+        try:
+            args.iteration, args.num_floating_point_operations_so_far = load_checkpoint(
+                model, optimizer, opt_param_scheduler)
+        except:
+            args.iteration = load_checkpoint(
+                model, optimizer, opt_param_scheduler)
         timers('load-checkpoint').stop(barrier=True)
         timers.log(['load-checkpoint'])
     else:
         args.iteration = 0
+        args.num_floating_point_operations_so_far = 0
 
     # get model without FP16 and/or DDP wrappers
     if args.iteration == 0 and len(unwrapped_model) == 1 \
@@ -371,7 +345,6 @@ def setup_model_and_optimizer(model_provider_func,
     return model, optimizer, opt_param_scheduler
 
 
-
 def train_step(forward_step_func, data_iterator,
                model, optimizer, opt_param_scheduler, config):
     """Single training step."""
@@ -380,7 +353,10 @@ def train_step(forward_step_func, data_iterator,
 
     # Set grad to zero.
     for partition in model:
-        partition.zero_grad_buffer()
+        try:
+            partition.zero_grad_buffer()
+        except:
+            partition.zero_grad_buffer(zero_buffer=(not args.use_distributed_optimizer))
     optimizer.zero_grad()
 
     # Forward pass.
@@ -409,9 +385,11 @@ def train_step(forward_step_func, data_iterator,
     update_successful, grad_norm, num_zeros_in_grad = optimizer.step(args, timers)
     timers('optimizer').stop()
 
-    # Gather params.
-    if update_successful:
-        optimizer.gather_model_params(args, timers)
+    try:
+        if update_successful:
+            optimizer.gather_model_params(args, timers)
+    except:
+        pass
 
     # Vision momentum.
     if args.vision_pretraining and args.vision_pretraining_type == "dino":
@@ -626,7 +604,6 @@ def save_checkpoint_and_time(iteration, model, optimizer, opt_param_scheduler):
     timers('save-checkpoint').stop(barrier=True)
     timers.log(['save-checkpoint'])
 
-
 def train(forward_step_func, model, optimizer, opt_param_scheduler,
           train_data_iterator, valid_data_iterator,
           process_non_loss_data_func, config):
@@ -652,10 +629,8 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
     config.timers = timers
     # TODO: Remove this once we move DDP to Core.
 
-    if not args.moe:
-        from megatron.model import DistributedDataParallel as DDP
-    else:
-        from megatron_patch.distributed import DistributedDataParallel as DDP
+
+
 
     if len(model) == 1 and isinstance(model[0], DDP) and \
         args.overlap_grad_reduce:

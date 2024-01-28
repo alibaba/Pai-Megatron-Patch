@@ -21,60 +21,47 @@ from megatron import get_args
 from megatron import print_rank_0
 from megatron.core import mpu, tensor_parallel
 from megatron.core.enums import ModelType
-import megatron.model
-from megatron.core.transformer.spec_utils import import_module
 from megatron.utils import (
     get_ltor_masks_and_position_ids,
     get_batch_on_this_cp_rank,
     average_losses_across_data_parallel_group
 )
-from megatron.arguments import core_transformer_config_from_args
-from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_with_transformer_engine_spec
 from megatron.checkpointing import load_checkpoint
 from megatron.training import get_model
-from megatron.core.models.gpt import GPTModel
+from megatron.initialize import initialize_megatron
 
+from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.data import build_evaluation_dataset
 from megatron_patch.finetune_utils import build_data_loader
-from megatron_patch.arguments import get_tasks_args
-from megatron_patch.tokenizer import get_tokenizer
-from megatron_patch.initialize import initialize_megatron
+from megatron_patch.arguments import get_patch_args
+from megatron_patch.arguments import core_transformer_config_from_args
+from megatron_patch.model.mixtral.model import GPTModel
+from megatron_patch.model.mixtral.layer_specs import get_gpt_layer_with_transformer_engine_spec
+from megatron_patch.model.mixtral.transformer_config import TransformerConfig
+
+import torch._dynamo
+
+torch._dynamo.config.suppress_errors = True
+
 
 def get_model_provider():
     def model_provider(pre_process=True, post_process=True):
         args = get_args()
-        print_rank_0('building GPT model ...')
-        config = core_transformer_config_from_args(get_args())
-
-        if args.use_mcore_models:
-            if args.spec is not None:
-                transformer_layer_spec = import_module(args.spec)
-            else:
-                transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm)
-
-            model = GPTModel(
-                config=config,
-                transformer_layer_spec=transformer_layer_spec,
-                vocab_size=args.padded_vocab_size,
-                max_sequence_length=args.max_position_embeddings,
-                pre_process=pre_process,
-                post_process=post_process,
-                fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
-                parallel_output=True,
-                share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
-                position_embedding_type=args.position_embedding_type,
-                rotary_percent=args.rotary_percent
-            )
-        else:
-            assert(args.context_parallel_size == 1), "Context parallelism is only supported with Megatron Core!"
-
-            model = megatron.model.GPTModel(
-                config,
-                num_tokentypes=0,
-                parallel_output=True,
-                pre_process=pre_process,
-                post_process=post_process
-            )
+        config = core_transformer_config_from_args(get_args(), TransformerConfig)
+        transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm)
+        model = GPTModel(
+            config=config,
+            transformer_layer_spec=transformer_layer_spec,
+            vocab_size=args.padded_vocab_size,
+            max_sequence_length=args.max_position_embeddings,
+            pre_process=pre_process,
+            post_process=post_process,
+            fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
+            parallel_output=True,
+            share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
+            position_embedding_type=args.position_embedding_type,
+            rotary_percent=args.rotary_percent
+        )
 
         return model
 
@@ -115,7 +102,7 @@ def forward_step(batch, model):
     # Tell the model what our actual batch size will be
     args = get_args()
     args.micro_batch_size = len(labels)
-    config = core_transformer_config_from_args(args)
+    config = core_transformer_config_from_args(args, TransformerConfig)
     tensor_shape = (args.seq_length, args.micro_batch_size, args.hidden_size)
     input_tensor = recv_forward(tensor_shape, config)
 
@@ -196,5 +183,5 @@ def main():
 
 
 if __name__ == '__main__':
-    initialize_megatron(extra_args_provider=get_tasks_args)
+    initialize_megatron(extra_args_provider=get_patch_args)
     main()

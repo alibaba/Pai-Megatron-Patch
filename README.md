@@ -1,17 +1,17 @@
 ## Introduction
 English | [简体中文](./README_zh-CN.md)
 
-Pai-Megatron-Patch (https://github.com/alibaba/Pai-Megatron-Patch) is a deep learning training toolkit built for developers to train and predict large language models (LLMs) by using MegatronLM framework easily. With the continuous development of LLMs, the model structure and scale are rapidly evolving. Although these models can be conveniently manufactured using Transformers or DeepSpeed training framework, the training efficiency is comparably low. This phenomenon becomes even severer when the model scale exceeds 10 billion. The primary objective of Pai-Megatron-Patch is to effectively utilize the computational power of GPUs for LLM. This tool allows convenient training of commonly used LLM with all the accelerating techniques provided by Megatron-LM.
+Pai-Megatron-Patch (https://github.com/alibaba/Pai-Megatron-Patch) is a deep learning training toolkit built for developers to train and predict LLMs & VLMs by using Megatron framework easily. With the continuous development of LLMs, the model structure and scale are rapidly evolving. Although these models can be conveniently manufactured using Transformers or DeepSpeed training framework, the training efficiency is comparably low. This phenomenon becomes even severer when the model scale exceeds 10 billion. The primary objective of Pai-Megatron-Patch is to effectively utilize the computational power of GPUs for LLM. This tool allows convenient training of commonly used LLM with all the accelerating techniques provided by Megatron-LM.
 
 What's New:
-- **Support fine-tuning mixtral-8x7b moe model by using Megatron-LM.** [🔥🔥 2023.12.27]
-- **Support fine-tuning qwen-vl multimodel by using Megatron-LM.** [🔥🔥 2023.12.15]
-- **Support fine-tuning LLava multimodel by using Megatron-LM.** [🔥🔥 2023.12.01]
-- **Support fine-tuning deepseek model by using Megatron-LM.** [🔥🔥 2023.11.24]
-- **Support fine-tuning qwen-72B model by using Megatron-LM.** [🔥🔥 2023.11.23]
-- **Support Mistral-7B, Yi-6B and Codellama-34B** [🔥🔥 2023.11.16]
+- **Support training mixtral-8x7b moe model by using Megatron-Core.** [🔥🔥 2024.01.26]
+- **Support training qwen-vl multimodel by using Megatron-LM.** [🔥🔥 2023.12.15]
+- **Support training LLava multimodel by using Megatron-LM.** [🔥🔥 2023.12.01]
+- **Support training deepseek model by using Megatron-LM.** [🔥🔥 2023.11.24]
+- **Support training qwen-72B model by using Megatron-LM.** [🔥🔥 2023.11.23]
+- **Support training Mistral-7B, Yi-6B and Codellama-34B** [🔥🔥 2023.11.16]
 - **Upgrade Megatron-LM for Llama2, qwen and baichuan2 to use transformer engine and fp8.** [🔥🔥 2023.10.19]
-- **Support qwen-14B and baichuan2-13B model by using Megatron-LM.** [🔥🔥 2023.10.08]
+- **Support training qwen-14B and baichuan2-13B model by using Megatron-LM.** [🔥🔥 2023.10.08]
 ## Highlights
 Pai-Megatron-Patch is developed by the Alibaba Cloud Machine Learning Platform (PAI) algorithm team.  The tool aims to assist developers in quickly getting started with Lingjun products and completing the entire development pipeline for LLM, including efficient distributed training, supervised fine-tuning, and offline model inference or verification. It has several merits as follows:
 
@@ -27,7 +27,7 @@ Pai-Megatron-Patch includes key components for building LLM training, such as mo
 In the reinforcement learning section, the patch offers PPO training workflows, enabling users to perform reinforcement learning with SFT models and RM models. Finally, the patch provides numerous usage examples to help users quickly start LLMs training and offline inference. For specific usage processes within Alibaba Cloud Lingjun products, please refer to the following link: [PAI-Lingjun Intelligent Computing Service LLM solution](https://www.aliyun.com/solution/tech-solution/pai_lingjun).
 
 <div align=center>
-<img src=patch_en.png width=600 height=400 />
+<img src=patch.png width=600 height=400 />
 </div>
 
 ## Installation
@@ -37,6 +37,7 @@ $ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.g
 ```
 
 ## Technical Reports
+- [Mixtral-8x7B在PAI灵骏的最佳实践](https://help.aliyun.com/zh/pai/use-cases/train-fine-tune-and-deploy-mixtral-by-using-intelligent-computing-lingjun)
 - [通义千问开源模型在PAI灵骏的最佳实践](https://mp.weixin.qq.com/s?__biz=Mzg4MzgxNDk2OA==&mid=2247491796&idx=1&sn=dc1d719313d794ae1aacdb07669a9545&chksm=cf430783f8348e950218bfcff861a2e6d2d92705807bf5b04f6e9268cc510ffa6e6aa2c87327#rd)
 - [阿里云机器学习PAI开源AI大模型训练工具Pai-Megatron-Patch, 助力大模型技术落地](https://zhuanlan.zhihu.com/p/655942437)
 - [基于单机最高能效270亿参数GPT模型的文本生成与理解](https://zhuanlan.zhihu.com/p/597652820)
