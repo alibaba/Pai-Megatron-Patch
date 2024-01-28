@@ -57,6 +57,9 @@ def forward_step(data_iterator, model):
 
     tokens = data_iterator['input_ids'].long().cuda().contiguous()
     labels = data_iterator['labels'].long().cuda().contiguous()
+
+    tokens = tokens[:, :-1].contiguous()
+    labels = labels[:, 1:].contiguous()
     attention_mask = tokens.ne(tokenizer.pad_token_id)
     _, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         labels,
@@ -69,19 +72,15 @@ def forward_step(data_iterator, model):
                    position_ids=position_ids,
                    attention_mask=attention_mask)
 
-    shift_logits = logits[..., :-1, :].contiguous()
-    shift_labels = labels[..., 1:].contiguous()
-    loss_mask = loss_mask[..., 1:].contiguous()
-
-    def loss_func(loss_mask, shift_logits):
+    def loss_func(loss_mask, logits):
         losses = tensor_parallel.vocab_parallel_cross_entropy(
-            shift_logits.contiguous().float(), shift_labels.contiguous())
+            logits.contiguous().float(), labels.contiguous())
         loss_mask = loss_mask.view(-1).float()
         loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
         averaged_loss = average_losses_across_data_parallel_group([loss])
         return loss, {'lm loss': averaged_loss[0]}
 
-    return shift_logits, partial(loss_func, loss_mask)
+    return logits, partial(loss_func, loss_mask)
 
 
 if __name__ == '__main__':

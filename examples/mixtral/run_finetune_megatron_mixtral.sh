@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_finetune_megatron_mixtral.sh dsw ../.. 0.125B 1 1e-5 1e-6 80 80 0 bf16 2 1 sel false false true false /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-datasets/alpaca_data.json /mnt/mixtral-ckpts/Mixtral-8x7B-v0.1 2 /mnt/output_patch_test
+#sh run_finetune_megatron_mixtral.sh dsw ../.. 0.125B 1 1e-5 1e-6 80 80 0 bf16 1 1 sel false false true false /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-datasets/alpaca_data.json /mnt/mixtral-ckpts/Mixtral-8x7B-v0.1 2 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2

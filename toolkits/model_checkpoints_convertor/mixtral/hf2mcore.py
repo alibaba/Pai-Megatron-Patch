@@ -153,7 +153,7 @@ internal_to_output_mapping = {
 
 megatron_to_transformers = {
     "self_attention.linear_proj": "self_attn.o_proj",
-    "mlp.router.gate": "block_sparse_moe.gate",
+    "mlp.router": "block_sparse_moe.gate",
     }
 
 tensor_parallel_params = [

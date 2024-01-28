@@ -41,6 +41,7 @@ from megatron_patch.model.mixtral.model import GPTModel
 from megatron_patch.model.mixtral.layer_specs import get_gpt_layer_with_transformer_engine_spec
 from megatron_patch.model.mixtral.transformer_config import TransformerConfig
 
+
 def get_model_provider():
     def model_provider(pre_process=True, post_process=True):
         args = get_args()
@@ -78,6 +79,8 @@ def get_batch(batch):
     tokens = data_b['input_ids'].long().cuda().contiguous()
     labels = data_b['labels'].long().cuda().contiguous()
 
+    tokens = tokens[:, :-1].contiguous()
+    labels = labels[:, 1:].contiguous()
     attention_mask = tokens.ne(tokenizer.pad_token_id)
     _, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         labels,
