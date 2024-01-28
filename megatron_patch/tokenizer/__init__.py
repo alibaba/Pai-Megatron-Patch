@@ -88,21 +88,14 @@ def build_tokenizer(args):
         tokenizer.pad_token = tokenizer.eos_token
 
     elif args.patch_tokenizer_type == 'LLamaTokenizer':
-        import transformers
-        if args.load is None:
-            tokenizer = transformers.LlamaTokenizer.from_pretrained(
-                'decapoda-research/llama-7b-hf',
-                model_max_length=args.seq_length,
-                padding_side='right',
-                use_fast=False,
-            )
-        else:
-            tokenizer = transformers.LlamaTokenizer.from_pretrained(
-                args.load,
-                model_max_length=args.seq_length,
-                padding_side='right',
-                use_fast=False,
-            )
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.load,
+            model_max_length=args.seq_length,
+            padding_side="right",
+            use_fast=True,
+            trust_remote_code=True
+        )
         DEFAULT_PAD_TOKEN = '[PAD]'
         DEFAULT_EOS_TOKEN = '</s>'
         DEFAULT_BOS_TOKEN = '<s>'
@@ -117,8 +110,8 @@ def build_tokenizer(args):
             special_tokens_dict['bos_token'] = DEFAULT_BOS_TOKEN
         if not tokenizer.unk_token:
             special_tokens_dict['unk_token'] = DEFAULT_UNK_TOKEN
-        # tokenizer.add_special_tokens(special_tokens_dict)
-        tokenizer.pad_token_id = tokenizer.eos_token_id
+
+        tokenizer.add_special_tokens(special_tokens_dict)
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'FalconTokenizer':
@@ -184,8 +177,7 @@ def build_tokenizer(args):
         if tokenizer.pad_token is None:
             tokenizer.add_special_tokens(special_tokens_dict=dict(pad_token="<|extra_0|>"))
 
-        tokenizer.pad_token_id = tokenizer.pad_token_id
-        tokenizer.eod = tokenizer.eod_id
+        tokenizer.eos_token_id = tokenizer.im_end_id
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'QwenVLTokenizer':
@@ -197,6 +189,7 @@ def build_tokenizer(args):
             use_fast=False,
             trust_remote_code=False,
         )
+
         tokenizer.pad_token_id = tokenizer.eod_id
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 

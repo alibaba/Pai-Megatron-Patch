@@ -20,6 +20,7 @@ import torch
 from megatron import get_args
 from datasets import load_dataset
 from tqdm import tqdm
+
 from megatron_patch.tokenizer import get_tokenizer
 
 
@@ -36,6 +37,12 @@ PROMPT_DICT = {
              '### Instruction:\n{instruction}\n\n### Response:'),
         }
 
+"""
+PROMPT_DICT = {
+    'prompt_input': ('[INST]{instruction} {input}[/INST]'),
+    'prompt_no_input':('[INST]{instruction}[/INST]'),
+}
+"""
 
 class LLamaRawDataset(torch.utils.data.Dataset):
     """A class for processing a LLama text dataset"""
@@ -62,10 +69,9 @@ class LLamaRawDataset(torch.utils.data.Dataset):
             remove_columns=list_data_dict.column_names,
             load_from_cache_file=True, # not args.overwrite_cache
             desc="Running Encoding",
-            fn_kwargs={ "tokenizer": self.tokenizer }
+            fn_kwargs={"tokenizer": self.tokenizer}
         )
 
-        key = 'output' if 'output' in list_data_dict.column_names else 'content'
         self.input_ids = np.array(train_dataset['input_ids'])
         self.labels = np.array(train_dataset['labels'])
         self.samples = []

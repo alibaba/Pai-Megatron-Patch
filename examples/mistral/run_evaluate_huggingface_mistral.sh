@@ -88,7 +88,7 @@ megatron_options=" \
         --pipeline-model-parallel-size 1 \
         --no-load-optim \
         --num-workers 0 \
-        --dataset Mistral-SFT \
+        --dataset LLama-SFT \
         --use-distributed-optimizer \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \

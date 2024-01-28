@@ -179,7 +179,7 @@ megatron_options="  \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type MistralTokenizer \
-        --dataset Mistral-SFT \
+        --dataset LLama-SFT \
         --sliding-window ${SLW} \
         --swiglu \
         --normalization RMSNorm \

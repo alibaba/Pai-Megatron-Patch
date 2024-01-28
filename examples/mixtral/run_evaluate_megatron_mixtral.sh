@@ -163,7 +163,7 @@ megatron_options=" \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type MistralTokenizer \
-        --dataset Mistral-SFT \
+        --dataset LLama-SFT \
         --swiglu \
         --use-rotary-position-embeddings \
         --position-embedding-type rope \
