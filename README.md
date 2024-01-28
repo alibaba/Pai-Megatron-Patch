@@ -1,17 +1,17 @@
 ## Introduction
 English | [简体中文](./README_zh-CN.md)
 
-Pai-Megatron-Patch (https://github.com/alibaba/Pai-Megatron-Patch) is a deep learning training toolkit built for developers to train and predict LLMs & VLMs by using MegatronLM framework easily. With the continuous development of LLMs, the model structure and scale are rapidly evolving. Although these models can be conveniently manufactured using Transformers or DeepSpeed training framework, the training efficiency is comparably low. This phenomenon becomes even severer when the model scale exceeds 10 billion. The primary objective of Pai-Megatron-Patch is to effectively utilize the computational power of GPUs for LLM. This tool allows convenient training of commonly used LLM with all the accelerating techniques provided by Megatron-LM.
+Pai-Megatron-Patch (https://github.com/alibaba/Pai-Megatron-Patch) is a deep learning training toolkit built for developers to train and predict LLMs & VLMs by using Megatron framework easily. With the continuous development of LLMs, the model structure and scale are rapidly evolving. Although these models can be conveniently manufactured using Transformers or DeepSpeed training framework, the training efficiency is comparably low. This phenomenon becomes even severer when the model scale exceeds 10 billion. The primary objective of Pai-Megatron-Patch is to effectively utilize the computational power of GPUs for LLM. This tool allows convenient training of commonly used LLM with all the accelerating techniques provided by Megatron-LM.
 
 What's New:
-- **Support fine-tuning mixtral-8x7b moe model by using Megatron-Core.** [🔥🔥 2023.12.27]
-- **Support fine-tuning qwen-vl multimodel by using Megatron-LM.** [🔥🔥 2023.12.15]
-- **Support fine-tuning LLava multimodel by using Megatron-LM.** [🔥🔥 2023.12.01]
-- **Support fine-tuning deepseek model by using Megatron-LM.** [🔥🔥 2023.11.24]
-- **Support fine-tuning qwen-72B model by using Megatron-LM.** [🔥🔥 2023.11.23]
-- **Support Mistral-7B, Yi-6B and Codellama-34B** [🔥🔥 2023.11.16]
+- **Support training mixtral-8x7b moe model by using Megatron-Core.** [🔥🔥 2024.01.26]
+- **Support training qwen-vl multimodel by using Megatron-LM.** [🔥🔥 2023.12.15]
+- **Support training LLava multimodel by using Megatron-LM.** [🔥🔥 2023.12.01]
+- **Support training deepseek model by using Megatron-LM.** [🔥🔥 2023.11.24]
+- **Support training qwen-72B model by using Megatron-LM.** [🔥🔥 2023.11.23]
+- **Support training Mistral-7B, Yi-6B and Codellama-34B** [🔥🔥 2023.11.16]
 - **Upgrade Megatron-LM for Llama2, qwen and baichuan2 to use transformer engine and fp8.** [🔥🔥 2023.10.19]
-- **Support qwen-14B and baichuan2-13B model by using Megatron-LM.** [🔥🔥 2023.10.08]
+- **Support training qwen-14B and baichuan2-13B model by using Megatron-LM.** [🔥🔥 2023.10.08]
 ## Highlights
 Pai-Megatron-Patch is developed by the Alibaba Cloud Machine Learning Platform (PAI) algorithm team.  The tool aims to assist developers in quickly getting started with Lingjun products and completing the entire development pipeline for LLM, including efficient distributed training, supervised fine-tuning, and offline model inference or verification. It has several merits as follows:
 
