@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
 import io
 import copy
 import json
@@ -20,7 +19,6 @@ import torch
 from megatron import get_args
 
 from megatron_patch.tokenizer import get_tokenizer
-from .utils import get_ltor_masks_and_position_ids
 
 class MistralRawDataset(torch.utils.data.Dataset):
     def __init__(self, path, max_padding_length):
@@ -166,27 +164,13 @@ class MistralRawDataset(torch.utils.data.Dataset):
         )
 
     def gpt_convert_example_to_feature(self, sample):
+        """
+        Convert a single sample containing input_id, label and loss_mask into a format suitable for GPT training.
+        """
         input_ids, labels = sample
-
-        tokens_ = input_ids.long()
-        labels = tokens_[1:].contiguous()
-        tokens = tokens_[:-1].contiguous()
-        if "-Pretrain" in self.args.dataset:
-            eod_mask_loss = True
-        else:
-            eod_mask_loss = False
-
-        attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-            tokens,
-            self.tokenizer.pad_token_id,
-            self.args.reset_position_ids,
-            self.args.reset_attention_mask,
-            eod_mask_loss)
-
-        return {
-            "tokens": tokens,
-            "labels": labels,
-            "attention_mask": attention_mask,
-            "loss_mask": loss_mask,
-            "position_ids": position_ids,
+        train_sample = {
+            'input_ids': input_ids,
+            'labels': labels
         }
+
+        return train_sample

@@ -70,12 +70,12 @@ def get_batch(batch):
     tokenizer = get_tokenizer()
 
     # Items and their type.
-    keys = ['tokens', 'labels']
+    keys = ['input_ids', 'labels']
     datatype = torch.int64
 
     data_b = tensor_parallel.broadcast_data(keys, batch, datatype)
 
-    tokens = data_b['tokens'].long().cuda().contiguous()
+    tokens = data_b['input_ids'].long().cuda().contiguous()
     labels = data_b['labels'].long().cuda().contiguous()
 
     attention_mask = tokens.ne(tokenizer.pad_token_id)

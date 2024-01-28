@@ -56,7 +56,7 @@ def forward_step(batch, model):
     """Forward step."""
     tokenizer = get_tokenizer()
     # Get the batch.
-    input_ids = batch['tokens'].long().cuda()
+    input_ids = batch['input_ids'].long().cuda()
     labels = batch['labels'].long().cuda()
     labels[labels == 0] = -100
     attention_mask = input_ids.ne(tokenizer.pad_token_id)

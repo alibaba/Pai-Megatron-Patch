@@ -67,7 +67,7 @@ def forward_step(data_iterator, model):
     except BaseException:
         data_iterator = data_iterator
 
-    tokens = data_iterator['tokens'].long().cuda().contiguous()
+    tokens = data_iterator['input_ids'].long().cuda().contiguous()
     labels = data_iterator['labels'].long().cuda().contiguous()
 
     tokens = tokens[:, :-1].contiguous()

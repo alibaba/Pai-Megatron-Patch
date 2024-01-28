@@ -24,6 +24,7 @@ from megatron.core import mpu, tensor_parallel
 from megatron.core.enums import ModelType
 import megatron.model
 from megatron.utils import (
+    get_batch_on_this_tp_rank,
     get_batch_on_this_cp_rank,
     average_losses_across_data_parallel_group
 )
@@ -33,7 +34,7 @@ from megatron.core.datasets.gpt_dataset import GPTDatasetConfig
 from megatron.core.datasets.gpt_dataset import GPTDataset
 
 from megatron_patch.data import build_pretrain_dataset_from_original
-from megatron_patch.data.utils import get_batch_on_this_tp_rank
+from megatron_patch.data.utils import get_batch_on_this_tp_rank_original
 from megatron_patch.tokenizer import get_tokenizer, build_tokenizer
 from megatron_patch.arguments import get_patch_args
 from megatron_patch.arguments import core_transformer_config_from_args
@@ -69,11 +70,23 @@ def get_batch(data_iterator):
     if (not mpu.is_pipeline_first_stage()) and (not mpu.is_pipeline_last_stage()):
         return None, None, None, None, None
 
-    # get batches based on the TP rank you are on
-    batch = get_batch_on_this_tp_rank(data_iterator)
+    args = get_args()
 
-    # slice batch along sequence dimension for context parallelism
-    batch = get_batch_on_this_cp_rank(batch)
+    if "-Raw" in args.dataset:
+        # get batches based on the TP rank you are on
+        batch = get_batch_on_this_tp_rank_original(data_iterator)
+        # slice batch along sequence dimension for context parallelism
+        batch = get_batch_on_this_cp_rank(batch)
+
+    elif "-Idxmap" in args.dataset:
+        # get batches based on the TP rank you are on
+        batch = get_batch_on_this_tp_rank(data_iterator)
+        # slice batch along sequence dimension for context parallelism
+        batch = get_batch_on_this_cp_rank(batch)
+
+    else:
+        raise ValueError("please set correct --dataset ")
+
     return batch.values()
 
 def loss_func(loss_mask: Tensor, output_tensor: Tensor):
@@ -140,7 +153,7 @@ def core_gpt_dataset_config_from_args(args):
 def train_valid_test_datasets_provider(train_val_test_num_samples):
     """Build train, valid, and test datasets."""
     args = get_args()
-    if os.path.isfile(args.train_data_path[0]):
+    if "-Raw" in args.dataset:
                 train_ds, valid_ds, test_ds = \
                                     build_pretrain_dataset_from_original(args.dataset)
     else:
