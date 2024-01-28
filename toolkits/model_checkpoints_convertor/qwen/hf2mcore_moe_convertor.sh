@@ -1,5 +1,5 @@
 #!/bin/bash
-# bash hf2mcore_convertor.sh ../../../Megatron-LM-231221/ /mnt/qwen-ckpts/Qwen-1_8B /mnt/qwen-ckpts/Qwen-1_8B-to-mcore-tp4-ep4/ 4 1 4 16 qwen-1.8b false
+# bash hf2mcore_moe_convertor.sh ../../../Megatron-LM-240126/ /mnt/qwen-ckpts/Qwen-1_8B /mnt/qwen-ckpts/Qwen-1_8B-to-mcore-tp4-ep4/ 4 1 4 16 qwen-1.8b false
 set -e
 START_TIME=$SECONDS
 
@@ -24,7 +24,7 @@ fi
 
 export PYTHONPATH=${MEGATRON_PATH}:$PYTHONPATH
 
-python hf2mcore.py \
+python hf2mcore_moe.py \
 --load_path ${SOURCE_CKPT_PATH} \
 --save_path ${TARGET_CKPT_PATH} \
 --target_params_dtype fp16 \
