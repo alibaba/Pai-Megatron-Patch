@@ -42,6 +42,25 @@ from megatron_patch.model.mixtral.model import GPTModel
 from megatron_patch.model.mixtral.layer_specs import get_gpt_layer_with_transformer_engine_spec
 from megatron_patch.model.mixtral.transformer_config import TransformerConfig
 
+
+def grouped_gemm_hook(module, state_dict, prefix, local_metadata, strict, 
+                missing_keys, unexpected_keys, error_msgs):
+    num_layer = len(module.decoder.layers)
+    num_local_experts = module.decoder.layers[0].mlp.num_local_experts
+    hidden_size = module.config.hidden_size
+    for l in range(num_layer):
+        up_projs, down_projs = [], []
+        for e in range(num_local_experts):
+            up_proj = state_dict[f'decoder.layers.{l}.mlp.experts.local_experts.{e}.linear_fc1.weight']
+            down_proj = state_dict[f'decoder.layers.{l}.mlp.experts.local_experts.{e}.linear_fc2.weight']
+            up_projs.append(up_proj.transpose(1, 0))
+            down_projs.append(down_proj.transpose(1, 0))
+        with torch.no_grad():
+            up_weight = torch.stack(up_projs).view(hidden_size, -1)
+            module.decoder.layers[l].mlp.experts.weight1.copy_(up_weight)
+            module.decoder.layers[l].mlp.experts.weight2.copy_(torch.cat(down_projs, dim=0))
+
+
 def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megatron.model.GPTModel]:
     args = get_args()
     build_tokenizer(args)
@@ -60,7 +79,8 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megat
         position_embedding_type=args.position_embedding_type,
         rotary_percent=args.rotary_percent
     )
-
+    if args.moe_grouped_gemm:
+        model._register_load_state_dict_pre_hook(grouped_gemm_hook, with_module=True)
     return model
 
 def get_batch(data_iterator):
