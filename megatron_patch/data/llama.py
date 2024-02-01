@@ -134,7 +134,7 @@ class LLamaRawDataset(torch.utils.data.Dataset):
             key = 'content'
 
         targets = [
-            f"{example}{self.tokenizer.eos_token}"
+            example + " " + self.tokenizer.eos_token
             for example in examples[key]
         ]
 
