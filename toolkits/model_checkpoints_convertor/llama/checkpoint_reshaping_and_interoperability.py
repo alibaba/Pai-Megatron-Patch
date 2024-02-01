@@ -26,6 +26,7 @@ random.seed(seed)
 np.random.seed(seed)
 torch.manual_seed(seed)
 
+from safetensors.torch import load_file
 from transformers import AutoTokenizer, GPT2Config, LlamaConfig
 from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint
 
@@ -378,12 +379,12 @@ def convert_checkpoint_from_transformers_to_megatron(args):
         print("Unable to import Megatron, please specify the path to Megatron using --megatron-path. Exiting.")
         exit(1)
 
-    # load the transformers model state dict and config
+    # load the transformers model state dict and config [support pytorch_model.bin format]
     sub_dirs = [x for x in os.listdir(args.load_path) if x.startswith("pytorch_model")]
     if len(sub_dirs) == 1:
         checkpoint_name = "pytorch_model.bin"
         state_dict = torch.load(os.path.join(args.load_path, checkpoint_name), map_location="cpu")
-    else:
+    elif len(sub_dirs) > 1:
         if args.model_name == "llama-13b" or args.model_name == "llama-30b":
             num_checkpoints = len(sub_dirs) - 2
             state_dict = merge_transformers_sharded_states_13b(args.load_path, num_checkpoints)
@@ -391,8 +392,15 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 args.model_name == "llama2-70b" or args.model_name == "llama2-7b" or args.model_name == "llama2-13b":
             num_checkpoints = len(sub_dirs) - 1
             state_dict = merge_transformers_sharded_states_7b(args.load_path, num_checkpoints)
+    else:
+        # load the transformers model state dict and config [support safetensors format]
+        sub_dirs = sorted([x for x in os.listdir(args.load_path) if x.endswith(".safetensors")])
+        state_dict = {}
+        for checkpoint_name in sub_dirs:
+            current_chunk = load_file(os.path.join(args.load_path, checkpoint_name), 'cpu')
+            state_dict.update(current_chunk)
 
-    config = GPT2Config.from_pretrained(args.load_path)
+    config = LlamaConfig.from_pretrained(args.load_path)
 
     internal_state_dict = {}
 
