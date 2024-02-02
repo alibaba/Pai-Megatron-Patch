@@ -94,7 +94,6 @@ class ParallelMLP(MegatronModule):
         args = get_args()
 
         self.add_bias = config.add_bias_linear
-
         ffn_hidden_size = config.ffn_hidden_size
         if config.gated_linear_unit:
             ffn_hidden_size *= 2
@@ -105,7 +104,7 @@ class ParallelMLP(MegatronModule):
             ffn_hidden_size,
             config=config,
             init_method=config.init_method,
-            bias=self.add_bias,
+            bias=args.add_bias_linear_fc,
             gather_output=False,
             skip_bias_add=True,
             is_expert=is_expert,
@@ -138,7 +137,7 @@ class ParallelMLP(MegatronModule):
             config.hidden_size,
             config=config,
             init_method=config.output_layer_init_method,
-            bias=self.add_bias,
+            bias=args.add_bias_linear_fc,
             input_is_parallel=True,
             skip_bias_add=True,
             is_expert=is_expert,
@@ -605,7 +604,7 @@ class ParallelAttention(MegatronModule):
             config.hidden_size,
             config=config,
             init_method=config.output_layer_init_method,
-            bias=args.add_bias_linear,
+            bias=args.add_bias_attn_fc,
             input_is_parallel=True,
             skip_bias_add=True)
 

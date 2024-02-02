@@ -429,6 +429,8 @@ def convert_checkpoint_from_transformers_to_megatron(args):
     # Saving config and tokenzier files
     os.system("cp -rf "+args.load_path+"/*.json "+args.save_path)
     os.system("cp -rf " + args.load_path + "/qwen.tiktoken " + args.save_path)
+    os.system("cp -rf " + args.load_path + "/tokeni* " + args.save_path)
+    os.system("cp -rf " + args.load_path + "/*.py " + args.save_path)
 
     # Saving the tracker file
     tracker_filepath = os.path.join(args.save_path, "latest_checkpointed_iteration.txt")
@@ -657,7 +659,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 else f"mp_rank_{tp_rank:02d}_{pp_rank:03d}"
             )
 
-            checkpoint_name = "model_rng.pt"
+            checkpoint_name = "model_optim_rng.pt"
             checkpoint_dir = os.path.join(release_dir, checkpoint_dir)
             os.makedirs(checkpoint_dir, exist_ok=True)
             checkpoint_path = os.path.join(checkpoint_dir, checkpoint_name)
@@ -680,6 +682,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     Args:
         args (argparse.Namespace): the arguments to the script
     """
+    os.makedirs(args.save_path, exist_ok=True)
     # Load Megatron-LM checkpoint arguments from the state dict
     sub_dirs = os.listdir(args.load_path)
     possible_sub_dirs = ["mp_rank_00", "mp_rank_00_000"]
@@ -724,7 +727,21 @@ def convert_checkpoint_from_megatron_to_transformers(args):
         dtype = torch.bfloat16
     else:
         dtype = torch.float32
-    if megatron_args.hidden_size == 4096:
+
+    if megatron_args.hidden_size == 2048:
+        config = QWenConfig_14b(
+            auto_map={
+            "AutoConfig": "configuration_qwen.QWenConfig",
+            "AutoModelForCausalLM": "modeling_qwen.QWenLMHeadModel"},
+            architectures="QWenLMHeadModel",
+            vocab_size=151936,
+            hidden_size=2048,
+            num_hidden_layers=24,
+            num_attention_heads=16,
+            intermediate_size=11008,
+            seq_length=8192,
+        )
+    elif megatron_args.hidden_size == 4096:
         config = QWenConfig(
             auto_map={
             "AutoConfig": "configuration_qwen.QWenConfig",

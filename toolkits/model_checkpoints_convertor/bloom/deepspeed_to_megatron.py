@@ -66,7 +66,7 @@ def _create_checkpoint_paths(base_folder, iteration, tp_degree, pp_degree):
             rank_folder = f'mp_rank_' \
                           f'{i:02d}' if pp_degree == 1\
                 else f'mp_rank_{i:02d}_{j:03d}'
-            ckpt_path = os.path.join(rank_folder, 'model_rng.pt')
+            ckpt_path = os.path.join(rank_folder, 'model_optim_rng.pt')
             path_list[i].append(
                 os.path.join(base_folder, iter_folder, ckpt_path))
 

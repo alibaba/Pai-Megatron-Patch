@@ -232,7 +232,7 @@ def get_megatron_sharded_states(args, tp_size, pp_size, ep_size, pp_rank):
             state_dict = torch.load(checkpoint_path, map_location="cpu")
             ep_length = len([i for i in state_dict['model'] if 'linear_fc2.weight' in i])
             # combine experts within a tensor_parallel
-            local_expert_num = len([i for i in state_dict['model'].keys() if 'layers.0' in i and 'linear_fc2' in i])
+            local_expert_num = len([i for i in state_dict['model'].keys() if 'layers.0' in i and 'linear_fc2' in i and 'extra_state' not in i])
             for key, value in list(state_dict['model'].items()):
                 if 'linear_fc' in key:
                     key_list = key.split('.')
@@ -807,7 +807,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
             # Transpose the QKV matrix.
             elif (
                 op_name == "attention.linear_qkv" or op_name == "self_attention.linear_qkv"
-            ) and weight_or_bias == "weight":
+            ):
 
                 checkpoint_version = 3.0
                 out_qkv = megatron_to_transformers_fix_query_key_value_ordering(
@@ -818,10 +818,11 @@ def convert_checkpoint_from_megatron_to_transformers(args):
                     hidden_size_per_head,
                 )
 
-                out_qkv = torch.chunk(out_qkv, 3, 0)
-                output_state_dict[layer_name + f".self_attn.q_proj.weight"] = out_qkv[0].clone()
-                output_state_dict[layer_name + f".self_attn.k_proj.weight"] = out_qkv[1].clone()
-                output_state_dict[layer_name + f".self_attn.v_proj.weight"] = out_qkv[2].clone()
+                if weight_or_bias == 'weight':
+                    out_qkv = torch.chunk(out_qkv, 3, 0)
+                    output_state_dict[layer_name + f".self_attn.q_proj.weight"] = out_qkv[0].clone()
+                    output_state_dict[layer_name + f".self_attn.k_proj.weight"] = out_qkv[1].clone()
+                    output_state_dict[layer_name + f".self_attn.v_proj.weight"] = out_qkv[2].clone()
 
             # Transpose the weights.
             elif weight_or_bias == "weight":

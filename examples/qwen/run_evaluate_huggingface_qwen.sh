@@ -1,7 +1,7 @@
 #!/bin/bash
-# sh run_evaluate_huggingface_qwen.sh dsw ../../../PAI-Megatron-Patch 7B 1 2048 80 0 fp16 /mnt/qwen-datasets/wudao_train.json /mnt/qwen-ckpts/Qwen-7B
-# sh run_evaluate_huggingface_qwen.sh dsw ../../../PAI-Megatron-Patch 14B 1 2048 80 0 fp16 /mnt/qwen-datasets/wudao_train.json /mnt/qwen-ckpts/Qwen-14B
-# sh run_evaluate_huggingface_qwen.sh dsw ../../../PAI-Megatron-Patch 1.8B 1 2048 80 0 fp16 /mnt/qwen-datasets/alpaca_zh-qwen-train.json /mnt/qwen-ckpts/Qwen-1_8B
+# sh run_evaluate_huggingface_qwen.sh dsw ../../../PAI-Megatron-Patch 1.8B 1 2048 128 0 fp16 /mnt/qwen-datasets/alpaca_zh-qwen-train.json /mnt/qwen-ckpts/Qwen-1_8B
+# sh run_evaluate_huggingface_qwen.sh dsw ../../../PAI-Megatron-Patch 7B 1 2048 128 0 fp16 /mnt/qwen-datasets/alpaca_zh-qwen-train.json /mnt/qwen-ckpts/Qwen-7B
+# sh run_evaluate_huggingface_qwen.sh dsw ../../../PAI-Megatron-Patch 14B 1 2048 128 0 fp16 /mnt/qwen-datasets/alpaca_zh-qwen-train.json /mnt/qwen-ckpts/Qwen-14B
 
 set -e
 ENV=$1

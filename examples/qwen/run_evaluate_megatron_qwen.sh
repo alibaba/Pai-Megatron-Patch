@@ -1,6 +1,7 @@
 #!/bin/bash
-#sh run_evaluate_megatron_qwen.sh dsw /workspace/Pai-Megatron-Patch 7B 1 2048 2048 85 bf16 2 1 sel true false false false /mnt/qwen-datasets/alpaca_zh.json /mnt/qwen-ckpts/qwen-7b-hf-to-mg-tp2-pp1
-#sh run_evaluate_megatron_qwen.sh dsw /workspace/Pai-Megatron-Patch 72B 1 2048 2048 213 bf16 4 2 sel true true false false /mnt/qwen-datasets/alpaca_zh.json /mnt/qwen-ckpts/Qwen-72B-Chat_v0_5_sharded-tp4-pp2
+#sh run_evaluate_megatron_qwen.sh dsw ../.. 1.8B 1 128 128 85 bf16 1 1 sel true false false false /mnt/qwen-datasets/alpaca_zh-qwen-train.json /mnt/qwen-ckpts/Qwen-1_8B-to-mg-tp1-pp1
+#sh run_evaluate_megatron_qwen.sh dsw ../.. 7B 1 2048 128 85 bf16 2 1 sel true false false false /mnt/qwen-datasets/alpaca_zh-qwen-train.json /mnt/qwen-ckpts/qwen-7b-hf-to-mg-tp2-pp1
+#sh run_evaluate_megatron_qwen.sh dsw ../.. 72B 1 2048 128 213 bf16 4 2 sel true true false false /mnt/qwen-datasets/alpaca_zh-qwen-train.json /mnt/qwen-ckpts/Qwen-72B-Chat_v0_5_sharded-tp4-pp2
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -41,7 +42,15 @@ TE=${15}
 DATASET_PATH=${16}
 PRETRAIN_CHECKPOINT_PATH=${17}
 
-if [ $MODEL_SIZE = 7B ]; then
+if [ $MODEL_SIZE = 1.8B ]; then
+
+NUM_LAYERS=24
+HIDDEN_SIZE=2048
+NUM_ATTN_HEADS=16
+INTERMEDIATE_SIZE=5504
+rope_options=""
+
+elif [ $MODEL_SIZE = 7B ]; then
 
 NUM_LAYERS=32
 HIDDEN_SIZE=4096
@@ -166,7 +175,9 @@ megatron_options=" \
         --use-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
-        --disable-bias-linear \
+        --norm-epsilon 1e-6 \
+        --disable-bias-linear-fc \
+        --disable-bias-attn-fc
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_megatron_qwen.py

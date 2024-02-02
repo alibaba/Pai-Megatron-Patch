@@ -62,7 +62,7 @@ NUM_LAYERS=24
 HIDDEN_SIZE=2048
 NUM_ATTN_HEADS=16
 INTERMEDIATE_SIZE=5504
-MPE=32768
+MPE=8192
 gqa_options=""
 
 elif [ $MODEL_SIZE = 7B ]; then
@@ -177,7 +177,6 @@ megatron_options=" \
         --use-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
-        --disable-bias-linear \
         --normalization RMSNorm \
         --no-masked-softmax-fusion \
         --no-position-embedding \
@@ -186,7 +185,10 @@ megatron_options=" \
         --use-mcore-models \
         --no-rope-fusion \
         --expert-model-parallel-size ${EP} \
-        --transformer-impl transformer_engine
+        --transformer-impl transformer_engine \
+        --norm-epsilon 1e-6 \
+        --disable-bias-linear-fc \
+        --disable-bias-attn-fc
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_megatron_qwen_moe.py
