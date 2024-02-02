@@ -57,7 +57,9 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megat
         parallel_output=True,
         share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
         position_embedding_type=args.position_embedding_type,
-        rotary_percent=args.rotary_percent
+        rotary_percent=args.rotary_percent,
+        rotary_base=10000,
+        seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
     )
 
     return model

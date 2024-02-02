@@ -640,7 +640,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 else f"mp_rank_{tp_rank:02d}_{pp_rank:03d}"
             )
 
-            checkpoint_name = "model_rng.pt"
+            checkpoint_name = "model_optim_rng.pt"
             checkpoint_dir = os.path.join(release_dir, checkpoint_dir)
             os.makedirs(checkpoint_dir, exist_ok=True)
             checkpoint_path = os.path.join(checkpoint_dir, checkpoint_name)

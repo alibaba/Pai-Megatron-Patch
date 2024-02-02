@@ -161,8 +161,6 @@ def main():
     assert len(model) == 1, 'Above condition should have caught this'
     model = model[0]
 
-
-
     # Run evaluation.
     evaluate(dataloader, model)
     print_rank_0('done :-)')

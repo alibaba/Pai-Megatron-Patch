@@ -718,7 +718,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                     else:
                         torch.save(moe_state_dict, os.path.join(release_dir, moe_checkpoint_path))
 
-            checkpoint_name = "model_rng.pt"
+            checkpoint_name = "model_optim_rng.pt"
             checkpoint_path = os.path.join(save_dir, checkpoint_name)
             if args.print_checkpoint_structure:
                 print(

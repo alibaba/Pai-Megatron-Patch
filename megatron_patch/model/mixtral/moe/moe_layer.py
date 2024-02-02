@@ -16,12 +16,13 @@ from abc import ABC, abstractmethod
 import torch
 
 from megatron.core import parallel_state
-from megatron.core.transformer.mlp import MLPSubmodules
 from megatron.core.transformer.module import MegatronModule
+
 from .experts import GroupedMLP, SequentialMLP
 from .router import TopKRouter
 from .token_dispatcher import MoEDroplessTokenDispatcher
 from ..transformer_config import TransformerConfig
+from ..transformer.mlp import MLPSubmodules
 
 
 class BaseMoELayer(MegatronModule, ABC):

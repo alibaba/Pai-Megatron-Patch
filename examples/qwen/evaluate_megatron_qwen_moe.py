@@ -26,9 +26,11 @@ from megatron.utils import (
     get_batch_on_this_cp_rank,
     average_losses_across_data_parallel_group
 )
+
 from megatron.checkpointing import load_checkpoint
 from megatron.training import get_model
 from megatron.initialize import initialize_megatron
+
 
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.data import build_evaluation_dataset
@@ -38,11 +40,6 @@ from megatron_patch.arguments import core_transformer_config_from_args
 from megatron_patch.model.mixtral.model import GPTModel
 from megatron_patch.model.mixtral.layer_specs import get_gpt_layer_with_transformer_engine_spec
 from megatron_patch.model.mixtral.transformer_config import TransformerConfig
-
-import torch._dynamo
-
-torch._dynamo.config.suppress_errors = True
-
 
 def get_model_provider():
     def model_provider(pre_process=True, post_process=True):
@@ -60,7 +57,9 @@ def get_model_provider():
             parallel_output=True,
             share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
             position_embedding_type=args.position_embedding_type,
-            rotary_percent=args.rotary_percent
+            rotary_percent=args.rotary_percent,
+            rotary_base=10000,
+            seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
         )
 
         return model

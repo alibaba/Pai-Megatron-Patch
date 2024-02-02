@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from megatron.core.enums import ModelType
 from megatron import get_args
 from megatron.initialize import initialize_megatron
 from megatron.arguments import core_transformer_config_from_args

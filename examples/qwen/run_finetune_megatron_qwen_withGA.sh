@@ -209,8 +209,9 @@ megatron_options="  \
         --use-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
-        --disable-bias-linear \
-        --norm-epsilon 1e-6
+        --norm-epsilon 1e-6 \
+        --disable-bias-linear-fc \
+        --disable-bias-attn-fc
         "
 
 

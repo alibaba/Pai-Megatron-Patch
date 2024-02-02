@@ -198,8 +198,9 @@ megatron_options="  \
         --use-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
-        --disable-bias-linear \
-        --norm-epsilon 1e-6
+        --norm-epsilon 1e-6 \
+        --disable-bias-linear-fc \
+        --disable-bias-attn-fc
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS finetune_megatron_qwen.py

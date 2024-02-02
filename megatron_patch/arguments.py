@@ -357,31 +357,31 @@ def get_patch_args(parser):
     group.add_argument('--moe-input-feature-slicing', action='store_true',
                        help='Enable moe all2all performance optimization.')
 
-    """
-    
-    group.add_argument(
-        '--moe-token-dropping',
-        action='store_true',
-        help='Currently unsupported. '
-             'This feature involves selectively dropping and padding tokens for each expert '
-             'to achieve a specified capacity, similar to to GShard, Switch-Transformer, and DeepSpeed-MoE.',
-    )
-    
-    group.add_argument(
-        '--moe-router-type',
-        type=str,
-        default='sinkhorn',
-        help='Options for router type. Currently supports sinkhorn and topk router.',
-    )
+    group.add_argument('--disable-bias-linear-fc', action='store_false',
+                       help='Disable bias in the linear layers',
+                       dest='add_bias_linear_fc')
+
+    group.add_argument('--disable-bias-attn-fc', action='store_false',
+                       help='Disable bias in the linear layers',
+                       dest='add_bias_attn_fc')
+
+    group.add_argument('--task-list', type=str, default="all", help='Either "all" or comma separated list of tasks.')
 
     group.add_argument(
-        '--moe-grouped-gemm',
-        action='store_true',
-        help='When there are multiple experts per rank, compress '
-        'multiple local (potentially small) gemms in a single kernel '
-        'launch to improve the utilization and performance by '
-        'leveraging the Grouped GEMM feature introduced since '
-        'CUTLASS 2.8 (https://github.com/fanshiqing/grouped_gemm).',
+        "--verbosity",
+        type=str,
+        default="INFO",
+        help="Logging verbosity",
     )
-    """
+
+    group.add_argument('--adaptive-seq-len',  default = False, action='store_true',
+                       help='Should the sequence length be adapted to the batch during evaluation,'
+                            ' if in fp16 the results will be slightly different due to numerical'
+                            ' errors but greatly speed up evaluation.')
+
+    group.add_argument('--eval-fp32', default=False, action='store_true', help='Should the evaluation run in fp32')
+
+    group.add_argument('--num-fewshot', type=int, default=None,
+                       help='num fewshot')
+
     return parser

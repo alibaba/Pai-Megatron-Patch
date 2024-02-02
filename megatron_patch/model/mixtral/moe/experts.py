@@ -21,10 +21,12 @@ from megatron.core.tensor_parallel.layers import (
     _initialize_affine_weight_gpu,
 )
 from megatron.core.tensor_parallel.utils import divide
-from megatron.core.transformer.mlp import MLP, MLPSubmodules
+
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.moe import grouped_gemm_util as gg
 from megatron.core.transformer.transformer_config import TransformerConfig
+
+from ..transformer.mlp import MLP, MLPSubmodules
 
 
 class GroupedMLP(MegatronModule):
@@ -161,6 +163,7 @@ class SequentialMLP(MegatronModule):
     def __init__(self, num_local_experts, config: TransformerConfig, submodules: MLPSubmodules):
         super().__init__(config=config)
         self.add_bias = config.add_bias_linear
+        self.add_bias_fc = config.add_bias_linear_fc
         self.num_local_experts = num_local_experts
         self.local_experts = torch.nn.ModuleList()
         for _ in range(self.num_local_experts):
@@ -184,7 +187,7 @@ class SequentialMLP(MegatronModule):
             output, output_bias = expert(hidden)
 
             output_local[start:end] = output
-            if self.add_bias:
+            if self.add_bias and self.add_bias_fc:
                 output_bias = output_bias.expand_as(output)
                 output_bias_local[start:end, :] = output_bias
 
