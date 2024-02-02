@@ -28,6 +28,7 @@ from megatron.initialize import (set_jit_fusion_options,
 from megatron.model import Float16Module
 from megatron.training import (build_train_valid_test_data_iterators,
                                get_optimizer_param_scheduler,
+                               setup_model_and_optimizer,
                                print_datetime)
 from megatron.utils import (calc_params_l2_norm,
                             check_adlr_autoresume_termination, report_memory,
@@ -42,7 +43,6 @@ except:
 
 from megatron.model.vision.knn_monitor import compute_feature_bank
 from megatron.checkpointing import load_checkpoint, save_checkpoint
-from megatron.optimizer import get_megatron_optimizer
 
 # The earliest we can measure the start time.
 _TRAIN_START_TIME = time.time()
@@ -303,47 +303,6 @@ def get_model(model_provider_func, model_type=ModelType.encoder_or_decoder, wrap
                 model_module.broadcast_params()
 
     return model
-
-def setup_model_and_optimizer(model_provider_func,
-                              model_type,
-                              no_wd_decay_cond=None,
-                              scale_lr_cond=None,
-                              lr_mult=1.0):
-    """Setup model and optimizer."""
-    args = get_args()
-
-    model = get_model(model_provider_func, model_type)
-    unwrapped_model = unwrap_model(model)
-
-    optimizer = get_megatron_optimizer(model, no_wd_decay_cond,
-                                       scale_lr_cond, lr_mult)
-    opt_param_scheduler = get_optimizer_param_scheduler(optimizer)
-
-    if args.load is not None:
-        timers = get_timers()
-        timers('load-checkpoint', log_level=0).start(barrier=True)
-        try:
-            args.iteration, args.num_floating_point_operations_so_far = load_checkpoint(
-                model, optimizer, opt_param_scheduler)
-        except:
-            args.iteration = load_checkpoint(
-                model, optimizer, opt_param_scheduler)
-        timers('load-checkpoint').stop(barrier=True)
-        timers.log(['load-checkpoint'])
-    else:
-        args.iteration = 0
-        args.num_floating_point_operations_so_far = 0
-
-    # get model without FP16 and/or DDP wrappers
-    if args.iteration == 0 and len(unwrapped_model) == 1 \
-        and hasattr(unwrapped_model[0], 'init_state_dict_from_bert'):
-        print_rank_0("Initializing ICT from pretrained BERT model")
-        unwrapped_model[0].init_state_dict_from_bert()
-        if args.fp16:
-            optimizer.reload_model_params()
-
-    return model, optimizer, opt_param_scheduler
-
 
 def train_step(forward_step_func, data_iterator,
                model, optimizer, opt_param_scheduler, config):
