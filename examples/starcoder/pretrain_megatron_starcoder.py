@@ -20,6 +20,7 @@ from megatron.core.enums import ModelType
 from megatron import get_args
 from megatron.core import tensor_parallel
 from megatron.utils import average_losses_across_data_parallel_group
+from megatron.arguments import core_transformer_config_from_args
 from megatron.utils import get_ltor_masks_and_position_ids
 
 from megatron_patch.data import \
@@ -34,10 +35,14 @@ from megatron_patch.arguments import get_patch_args
 def model_provider(pre_process=True, post_process=True):
     args = get_args()
     build_tokenizer(args)
-    model = GPTModel(num_tokentypes=0,
-                     parallel_output=True,
-                     pre_process=pre_process,
-                     post_process=post_process)
+    config = core_transformer_config_from_args(get_args())
+    model = GPTModel(
+        config,
+        num_tokentypes=0,
+        parallel_output=True,
+        pre_process=pre_process,
+        post_process=post_process
+    )
     return model
 
 

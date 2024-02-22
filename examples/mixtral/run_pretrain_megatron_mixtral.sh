@@ -211,6 +211,8 @@ megatron_options="  \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear \
+        --disable-bias-linear-fc \
+        --disable-bias-attn-fc \
         --normalization RMSNorm \
         --no-masked-softmax-fusion \
         --no-position-embedding \

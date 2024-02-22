@@ -222,6 +222,7 @@ def get_megatron_sharded_states(args, tp_size, pp_size, ep_size, pp_rank):
     """
     tp_state_dicts = [{'model':{}} for i in range(tp_size)]
     global_ep_index = 0
+    nnodes = args.world_size // 8
     for tp_index, i in enumerate(range(tp_size)):
         for ep_index, j in enumerate(range(ep_size)):
             print(f"Loading mp_rank_{i:02d}_{j:03d}...")
@@ -235,7 +236,7 @@ def get_megatron_sharded_states(args, tp_size, pp_size, ep_size, pp_rank):
                 if 'linear_fc' in key:
                     key_list = key.split('.')
                     local_ep_index = int(key_list[6])
-                    key_list[6] = str(ep_index * 2 + local_ep_index)
+                    key_list[6] = str(ep_index * nnodes + local_ep_index)
                     del state_dict['model'][key]
                     state_dict['model']['.'.join(key_list)] = value
             tp_state_dicts[tp_index]['model'].update(state_dict['model'])
@@ -633,11 +634,19 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                     output_state_dict[tp_rank]['model'].pop(key)
 
             for ep_rank in range(args.target_expert_model_parallel_size):
-                checkpoint_dir = (
-                    f"mp_rank_{tp_rank:02d}"
-                    if args.target_expert_model_parallel_size == 1
-                    else f"mp_rank_{tp_rank:02d}_{ep_rank:03d}"
-                )
+                if args.target_pipeline_model_parallel_size == 1:
+                    checkpoint_dir = (
+                        f"mp_rank_{tp_rank:02d}"
+                        if args.target_expert_model_parallel_size == 1
+                        else f"mp_rank_{tp_rank:02d}_{ep_rank:03d}"
+                    )
+                elif args.target_pipeline_model_parallel_size > 1:
+                    checkpoint_dir = (
+                        f"mp_rank_{tp_rank:02d}"
+                        if args.target_expert_model_parallel_size == 1
+                        else f"mp_rank_{tp_rank:02d}_{pp_rank:03d}_{ep_rank:03d}"
+                    )
+
                 save_dir = os.path.join(release_dir, checkpoint_dir)
                 os.makedirs(save_dir, exist_ok=True)
                 checkpoint_name = "model_optim_rng.pt"
@@ -659,9 +668,8 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     os.makedirs(args.save_path, exist_ok=True)
 
     # Saving config and tokenzier files
-    config_path = '/'.join(args.load_path.split('/')[:-1])
-    os.system("cp -rf "+config_path+"/*.json " + args.save_path)
-    os.system("cp -rf " + config_path + "/tokenizer.model " + args.save_path)
+    os.system("cp -rf "+args.load_path +"/*.json " + args.save_path)
+    os.system("cp -rf " + args.load_path + "/tokenizer.model " + args.save_path)
     import glob
     if glob.glob(args.load_path+"/mp_rank*/distrib*"):
     # if os.path.exists(args.load_path+"/mp_rank*/distrib*"):

@@ -1,12 +1,12 @@
 #! /bin/bash
 START_TIME=$SECONDS
-MEGATRON_PATH=$1
-MEGATRON_PATCH_PATH=$2
+MEGATRON_PATCH_PATH=$1
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-240126
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
-input_data_dir=$3
-tokenizer=$4
-output_data_dir=$5
-load_dir=$6
+input_data_dir=$2
+tokenizer=$3
+output_data_dir=$4
+load_dir=$5
 
 INPUT="${input_data_dir}"
 
@@ -127,7 +127,7 @@ elif [ $tokenizer = "mistralbpe" ]; then
   python preprocess_data.py \
   --input ${INPUT} \
   --language zh \
-  --output-prefix ${output_data_dir}/wudao_mistralbpe_small \
+  --output-prefix ${output_data_dir}/SlimPajama_mistralbpe \
   --dataset-impl mmap \
   --patch-tokenizer-type MistralTokenizer \
   --load ${load_dir} \

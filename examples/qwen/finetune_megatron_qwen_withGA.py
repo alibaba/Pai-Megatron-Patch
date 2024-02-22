@@ -17,12 +17,12 @@ import torch
 import os
 
 from megatron.core.enums import ModelType
-from megatron.utils import get_ltor_masks_and_position_ids
 from megatron.arguments import core_transformer_config_from_args
 from megatron import get_args
 from megatron.core import tensor_parallel
 from megatron.utils import average_losses_across_data_parallel_group
 
+from megatron_patch.data.utils import get_batch_on_this_tp_rank_original
 from megatron_patch.data import \
     build_pretrain_dataset_from_original, build_pretrain_dataset_from_idxmap
 from megatron_patch.model.qwen.gpt_model import GPTModel
@@ -37,7 +37,7 @@ def model_provider(pre_process=True, post_process=True):
     model = GPTModel(
         config,
         num_tokentypes=0,
-        parallel_output=True,
+        parallel_output=args.enable_parallel_output,
         pre_process=pre_process,
         post_process=post_process
     )
@@ -45,38 +45,33 @@ def model_provider(pre_process=True, post_process=True):
 
 def forward_step(data_iterator, model):
     args = get_args()
-    tokenizer = get_tokenizer()
-    keys = ['input_ids', 'labels']
-    try:
-        data_iterator = next(data_iterator)
-    except BaseException:
-        data_iterator = data_iterator
-    datatype = torch.int64
-    data_b = tensor_parallel.broadcast_data(keys, data_iterator, datatype)
-    tokens = data_b['input_ids'].long().cuda().contiguous()
-    labels = data_b['labels'].long().cuda().contiguous()
-
-    tokens = tokens[:, :-1].contiguous()
-    labels = labels[:, 1:].contiguous()
-
-    attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-        labels,
-        tokenizer.pad_token_id,
-        args.reset_position_ids,
-        args.reset_attention_mask,
-        True)
+    batch = get_batch_on_this_tp_rank_original(data_iterator)
+    tokens = batch['tokens']
+    labels = batch['labels']
+    position_ids = batch["position_ids"]
+    attention_mask = batch["attention_mask"]
+    loss_mask = batch['loss_mask']
 
     logits = model(input_ids=tokens,
                    position_ids=position_ids,
                    attention_mask=attention_mask)
 
-    def loss_func(loss_mask, logits):
-        losses = tensor_parallel.vocab_parallel_cross_entropy(
-            logits.contiguous().float(), labels.contiguous())
-        loss_mask = loss_mask.view(-1).float()
-        loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
-        averaged_loss = average_losses_across_data_parallel_group([loss])
-        return loss, {'lm loss': averaged_loss[0]}
+    if args.enable_parallel_output:
+
+        def loss_func(loss_mask, logits):
+            losses = tensor_parallel.vocab_parallel_cross_entropy(
+                logits.contiguous().float(), labels.contiguous())
+            loss_mask = loss_mask.view(-1).float()
+            loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+            averaged_loss = average_losses_across_data_parallel_group([loss])
+            return loss, {'lm loss': averaged_loss[0]}
+    else:
+
+        def loss_func(loss_mask, logits):
+            loss_func = torch.nn.CrossEntropyLoss(ignore_index=-100)
+            loss = loss_func(torch.squeeze(logits).contiguous().float(), torch.squeeze(labels))
+            averaged_loss = average_losses_across_data_parallel_group([loss])
+            return loss, {'lm loss': averaged_loss[0]}
 
     return logits, partial(loss_func, loss_mask)
 
