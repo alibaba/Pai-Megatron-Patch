@@ -23,7 +23,7 @@ from tqdm import tqdm
 
 from megatron_patch.tokenizer import get_tokenizer
 
-
+"""
 PROMPT_DICT = {
             'prompt_input':
             ('Below is an instruction that describes a task,'
@@ -37,19 +37,23 @@ PROMPT_DICT = {
              '### Instruction:\n{instruction}\n\n### Response:'),
         }
 
-"""
 PROMPT_DICT = {
     'prompt_input': ('[INST]{instruction} {input}[/INST]'),
     'prompt_no_input':('[INST]{instruction}[/INST]'),
 }
 """
 
+PROMPT_DICT = {
+    'prompt_input': '{input}'
+}
+
 class LLamaRawDataset(torch.utils.data.Dataset):
     """A class for processing a LLama text dataset"""
     def __init__(self, path, max_padding_length, split='train'):
         args = get_args()
         self.tokenizer = get_tokenizer()
-        self.IGNORE_INDEX = self.tokenizer.pad_token_id
+        # core/tensor_parallel/cross_entropy.py, target_mask = (target < vocab_start_index) | (target >= vocab_end_index)
+        self.IGNORE_INDEX = -100
         if "-Pretrain" in args.dataset:
             self.max_padding_length = max_padding_length + 1
         else:
@@ -65,11 +69,10 @@ class LLamaRawDataset(torch.utils.data.Dataset):
             self.preprocess,
             batched=True,
             batch_size=3000,
-            num_proc=32,
+            num_proc=16,
             remove_columns=list_data_dict.column_names,
-            load_from_cache_file=True, # not args.overwrite_cache
-            desc="Running Encoding",
-            fn_kwargs={"tokenizer": self.tokenizer}
+            load_from_cache_file=False,
+            desc="Running Encoding"
         )
 
         self.input_ids = np.array(train_dataset['input_ids'])
@@ -108,7 +111,7 @@ class LLamaRawDataset(torch.utils.data.Dataset):
         raw_sample = self.samples[idx]
         return self.gpt_convert_example_to_feature(raw_sample)
 
-    def preprocess(self, examples, tokenizer):
+    def preprocess(self, examples):
         """
         Preprocess the data by tokenizing.
         Args:
@@ -118,23 +121,33 @@ class LLamaRawDataset(torch.utils.data.Dataset):
         Returns:
             dict: a dictionary containing the input_ids and labels for the examples
         """
+        """
         prompt_input, prompt_no_input = PROMPT_DICT[
             'prompt_input'], PROMPT_DICT['prompt_no_input']
 
         if 'input' not in examples:
             examples ['input'] = [''] * len(examples['instruction'])
+        
         sources = [
             prompt_input.format_map({"instruction":instruction, "input":minput}) if minput
             else prompt_no_input.format_map({"instruction":instruction})
             for instruction, minput in zip(examples['instruction'], examples['input'])
         ]
+        """
+        prompt_input = PROMPT_DICT['prompt_input']
+
+        sources = [
+            prompt_input.format_map({"input": input})
+            for input in examples['input']
+        ]
+
         if 'output' in examples:
             key = 'output'
         elif 'content' in examples:
             key = 'content'
 
         targets = [
-            example + " " + self.tokenizer.eos_token
+            example + self.tokenizer.eos_token
             for example in examples[key]
         ]
 

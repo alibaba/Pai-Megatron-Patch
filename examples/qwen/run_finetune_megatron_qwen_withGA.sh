@@ -211,7 +211,8 @@ megatron_options="  \
         --untie-embeddings-and-output-weights \
         --norm-epsilon 1e-6 \
         --disable-bias-linear-fc \
-        --disable-bias-attn-fc
+        --disable-bias-attn-fc \
+        --eod-mask-loss
         "
 
 

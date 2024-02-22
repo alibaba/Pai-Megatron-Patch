@@ -176,8 +176,7 @@ def build_tokenizer(args):
         )
         if tokenizer.pad_token is None:
             tokenizer.add_special_tokens(special_tokens_dict=dict(pad_token="<|extra_0|>"))
-
-        tokenizer.eos_token_id = tokenizer.im_end_id
+        tokenizer.eos_token_id = tokenizer.eod_id
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'QwenVLTokenizer':
@@ -190,7 +189,10 @@ def build_tokenizer(args):
             trust_remote_code=False,
         )
 
-        tokenizer.pad_token_id = tokenizer.eod_id
+        if tokenizer.pad_token is None:
+            tokenizer.add_special_tokens(special_tokens_dict=dict(pad_token="<|extra_0|>"))
+        tokenizer.eos_token_id = tokenizer.eod_id
+
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'YiTokenizer':

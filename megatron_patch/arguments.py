@@ -365,6 +365,10 @@ def get_patch_args(parser):
                        help='Disable bias in the linear layers',
                        dest='add_bias_attn_fc')
 
+    group.add_argument('--disable-parallel-output', action='store_false',
+                       help='Disable parallel-output',
+                       dest='enable_parallel_output')
+
     group.add_argument('--task-list', type=str, default="all", help='Either "all" or comma separated list of tasks.')
 
     group.add_argument(

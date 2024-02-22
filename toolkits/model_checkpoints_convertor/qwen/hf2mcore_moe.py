@@ -645,11 +645,10 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     # pdb.set_trace()
 
     # Saving config and tokenzier files
-    config_path = '/'.join(args.load_path.split('/')[:-1])
-    os.system("cp -rf "+config_path+"/*.json " + args.save_path)
-    os.system("cp -rf " + config_path + "/*.py " + args.save_path)
-    os.system("cp -rf " + config_path + "/tokeniz* " + args.save_path)
-    os.system("cp -rf " + config_path + "/qwen.tiktoken " + args.save_path)
+    os.system("cp -rf "+args.load_path+"/*.json " + args.save_path)
+    os.system("cp -rf " + args.load_path + "/*.py " + args.save_path)
+    os.system("cp -rf " + args.load_path + "/tokeniz* " + args.save_path)
+    os.system("cp -rf " + args.load_path + "/qwen.tiktoken " + args.save_path)
 
     import glob
     if glob.glob(args.load_path+"/mp_rank*/distrib*"):
