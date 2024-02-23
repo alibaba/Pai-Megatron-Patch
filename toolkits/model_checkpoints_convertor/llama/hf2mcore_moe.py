@@ -119,6 +119,7 @@ def create_huggingface_model(args):
         config, tokenizer, model = build_huggingface_model(args.huggingface_model_path, args.params_dtype)
     else:
         copy_huggingface_tokenizer(args.huggingface_model_path, args.save_path, with_code=True)
+        copy_huggingface_tokenizer(args.huggingface_model_path, args.load_path, with_code=True)
         config, tokenizer, model = build_huggingface_model(args.save_path, args.params_dtype, random_init=True)
         model = replace_mlp_with_moe(args, model)
     print(config)
@@ -583,6 +584,9 @@ def check_mg_eg_forward(mgmodel, hgmodel, mgargs):
 def check_tokenizer_is_same(hgtokenizer, mgtokenizer):
     if transformers.__version__ <= '4.33.2':
         print('please update transformers')
+        return
+    
+    if mgtokenizer is None:
         return
         
     conversation = [
