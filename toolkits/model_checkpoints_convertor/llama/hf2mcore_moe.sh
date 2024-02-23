@@ -1,40 +1,40 @@
 #!/bin/bash
 # tp1_pp1_expert_0_ep0
-# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama7b /workdir/llama_mg/llama_7b_mcore_tp1_pp1 1 1 0 0 0 false
+# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama2_7b /workdir/llama_mg/llama2_7b_mcore_tp1_pp1 1 1 0 0 0 false
 # tp2_pp1_expert_0_ep0
-# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama7b /workdir/llama_mg/llama_7b_mcore_tp2_pp1 2 1 0 0 0 false
+# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama2_7b /workdir/llama_mg/llama2_7b_mcore_tp2_pp1 2 1 0 0 0 false
 # tp1_pp1_expert_1_ep1
-# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama7b /workdir/llama_mg/llama_7b_mcore_moe1_tp1_pp1_ep1 1 1 0 1 1 false
+# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama2_7b /workdir/llama_mg/llama2_7b_mcore_moe1_tp1_pp1_ep1 1 1 0 1 1 false
 # tp1_pp1_expert_2_ep2
-# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama7b /workdir/llama_mg/llama_7b_mcore_moe2_tp1_pp1_ep2 1 1 0 2 2 false
+# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama2_7b /workdir/llama_mg/llama2_7b_mcore_moe2_tp1_pp1_ep2 1 1 0 2 2 false
 # tp2_pp1_expert_2_ep2
-# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama7b /workdir/llama_mg/llama_7b_mcore_moe2_tp2_pp1_ep2 2 1 0 2 2 false
+# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama2_7b /workdir/llama_mg/llama2_7b_mcore_moe2_tp2_pp1_ep2 2 1 0 2 2 false
 # tp2_pp1_expert_4_ep4
-# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama7b /workdir/llama_mg/llama_7b_mcore_moe4_tp2_pp1_ep4 2 1 0 4 4 false
+# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama2_7b /workdir/llama_mg/llama2_7b_mcore_moe4_tp2_pp1_ep4 2 1 0 4 4 false
 # tp2_pp1_expert_8_ep4
-# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama7b /workdir/llama_mg/llama_7b_mcore_moe8_tp2_pp1_ep4 2 1 0 8 4 false
+# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama2_7b /workdir/llama_mg/llama2_7b_mcore_moe8_tp2_pp1_ep4 2 1 0 8 4 false
 # tp2_pp1_expert_8_ep8
-# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama7b /workdir/llama_mg/llama_7b_mcore_moe8_tp2_pp1_ep8 2 1 0 8 8 false
+# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama2_7b /workdir/llama_mg/llama2_7b_mcore_moe8_tp2_pp1_ep8 2 1 0 8 8 false
 # tp4_pp1_expert_8_ep4
-# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama7b /workdir/llama_mg/llama_7b_mcore_moe8_tp4_pp1_ep4 4 1 0 8 4 false
+# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama2_7b /workdir/llama_mg/llama2_7b_mcore_moe8_tp4_pp1_ep4 4 1 0 8 4 false
 # tp8_pp1_expert_8_ep2 not support
 
 # tp1_pp1
-# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama/llama_7b_mcore_tp1_pp1 /workdir/llama/hg_tp1_pp1 1 1 0 0 0 true
+# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama/llama2_7b_mcore_tp1_pp1 /workdir/llama/hf_tp1_pp1 1 1 0 0 0 true
 # tp2_pp1
-# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama/llama_7b_mcore_tp2_pp1 /workdir/llama/hg_tp2_pp1 2 1 0 0 0 true
+# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama/llama2_7b_mcore_tp2_pp1 /workdir/llama/hf_tp2_pp1 2 1 0 0 0 true
 # tp1_pp1_expert_1_ep1
-# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama/llama_7b_mcore_moe1_tp1_pp1_ep1 /workdir/llama/hg_moe1_tp1_pp1_ep1 1 1 0 1 1 true
+# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama/llama2_7b_mcore_moe1_tp1_pp1_ep1 /workdir/llama/hf_moe1_tp1_pp1_ep1 1 1 0 1 1 true
 # tp1_pp1_expert_2_ep2
-# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama/llama_7b_mcore_moe2_tp1_pp1_ep2 /workdir/llama/hg_moe2_tp1_pp1_ep2 1 1 0 2 2 true
+# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama/llama2_7b_mcore_moe2_tp1_pp1_ep2 /workdir/llama/hf_moe2_tp1_pp1_ep2 1 1 0 2 2 true
 # tp2_pp1_expert_4_ep4
-# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama/llama_7b_mcore_moe4_tp2_pp1_ep4 /workdir/llama/hg_moe4_tp2_pp1_ep4 2 1 0 4 4 true
+# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama/llama2_7b_mcore_moe4_tp2_pp1_ep4 /workdir/llama/hf_moe4_tp2_pp1_ep4 2 1 0 4 4 true
 # tp4_pp1_expert_8_ep4
-# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama/llama_7b_mcore_moe8_tp4_pp1_ep4 /workdir/llama/hg_moe8_tp4_pp1_ep4 4 1 0 8 4 true
+# sh hf2mcore_moe.sh /workdir/Pai-megatron /workdir/llama/llama2_7b_mcore_moe8_tp4_pp1_ep4 /workdir/llama/hf_moe8_tp4_pp1_ep4 4 1 0 8 4 true
 
 set -e
 START_TIME=$SECONDS
-HG_CKPT_PATH=/workdir/llama7b # ckpt from https://huggingface.co/huggyllama/llama-7b
+HG_CKPT_PATH=/workdir/llama2_7b # ckpt from https://huggingface.co/huggyllama/llama2-7b
 export CUDA_VISIBLE_DEVICES=0
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
