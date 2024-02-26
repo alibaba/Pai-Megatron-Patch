@@ -12,6 +12,9 @@ from megatron import initialize_megatron, get_args
 from megatron.utils import get_ltor_masks_and_position_ids
 from megatron.checkpointing import get_checkpoint_name, get_checkpoint_tracker_filename, read_metadata
 from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint, load_sharded_checkpoint
+import sys
+path_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
+sys.path.append(os.path.join(path_dir, "examples"))
 from llama2.pretrain_megatron_llama_moe import model_provider
 from llama2.evaluate_huggingface_llama_moe import build_huggingface_model, replace_mlp_with_moe
 
@@ -139,8 +142,10 @@ def copy_huggingface_tokenizer(src_path, dst_path, with_code=False):
     os.system("cp -rf " + src_path + "/config*.json " + dst_path)
     os.system("cp -rf " + src_path + "/tokenizer* " + dst_path) 
     if with_code:
-        os.system("cp -rf " + src_path + "/*.py " + dst_path) 
-    
+        cur_dir = os.path.dirname(os.path.abspath(__file__))
+        code_path = os.path.join(cur_dir, 'hf_llama_moe')
+        os.system("cp -rf " + code_path + "/*.py " + dst_path) 
+        os.system("cp -rf " + code_path + "/*.json " + dst_path) 
 
 def name_to_expert_rank(key):
     pattern = r'local_experts\.(\d+)\.'
