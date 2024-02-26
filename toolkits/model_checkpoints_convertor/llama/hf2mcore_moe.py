@@ -12,6 +12,9 @@ from megatron import initialize_megatron, get_args
 from megatron.utils import get_ltor_masks_and_position_ids
 from megatron.checkpointing import get_checkpoint_name, get_checkpoint_tracker_filename, read_metadata
 from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint, load_sharded_checkpoint
+import sys
+path_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
+sys.path.append(os.path.join(path_dir, "examples"))
 from llama2.pretrain_megatron_llama_moe import model_provider
 from llama2.evaluate_huggingface_llama_moe import build_huggingface_model, replace_mlp_with_moe
 
