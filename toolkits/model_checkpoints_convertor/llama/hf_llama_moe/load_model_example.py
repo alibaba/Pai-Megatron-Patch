@@ -3,7 +3,7 @@ from transformers import AutoConfig, AutoTokenizer, AutoModelForCausalLM
 
 # copy config.json and llama_moe.py to hugging face model_path 
 
-model_path = '/workdir/lxg/llama/llama2_7b_mcore_moe4_tp2_pp1_ep4_hf'
+model_path = '/workdir/llama/llama2_7b_mcore_moe4_tp2_pp1_ep4_hf'
 
 config = AutoConfig.from_pretrained(
     model_path,
