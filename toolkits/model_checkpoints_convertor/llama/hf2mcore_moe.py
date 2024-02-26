@@ -139,8 +139,10 @@ def copy_huggingface_tokenizer(src_path, dst_path, with_code=False):
     os.system("cp -rf " + src_path + "/config*.json " + dst_path)
     os.system("cp -rf " + src_path + "/tokenizer* " + dst_path) 
     if with_code:
-        os.system("cp -rf " + src_path + "/*.py " + dst_path) 
-    
+        cur_dir = os.path.dirname(os.path.abspath(__file__))
+        code_path = os.path.join(cur_dir, 'hf_llama_moe')
+        os.system("cp -rf " + code_path + "/*.py " + dst_path) 
+        os.system("cp -rf " + code_path + "/*.json " + dst_path) 
 
 def name_to_expert_rank(key):
     pattern = r'local_experts\.(\d+)\.'
