@@ -83,7 +83,7 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore_moe.py \
     --micro-batch-size 1 \
     --ffn-hidden-size 11008 \
     --num-attention-heads 32 \
-    --norm-epsilon 1e-6 \
+    --norm-epsilon 1e-5 \
     --hidden-dropout 0.0 \
     --attention-dropout 0.0 \
     --normalization RMSNorm \

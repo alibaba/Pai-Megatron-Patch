@@ -22,6 +22,6 @@ class LlamaMoeConfig(LlamaConfig):
         # create params used in MixtralSparseMoeBlock
         self.hidden_dim = self.hidden_size
         self.ffn_dim = self.intermediate_size
-        self.num_local_experts = kwargs.get('num_experts', 0)
+        self.num_local_experts = kwargs.get('num_local_experts', 0)
         self.top_k = kwargs.get('num_experts_per_tok', 2)
 
