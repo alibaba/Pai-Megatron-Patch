@@ -222,7 +222,6 @@ def get_megatron_sharded_states(args, tp_size, pp_size, ep_size, pp_rank):
     """
     tp_state_dicts = [{'model':{}} for i in range(tp_size)]
     global_ep_index = 0
-    nnodes = args.world_size // 8
     for tp_index, i in enumerate(range(tp_size)):
         for ep_index, j in enumerate(range(ep_size)):
             print(f"Loading mp_rank_{i:02d}_{j:03d}...")
@@ -230,13 +229,13 @@ def get_megatron_sharded_states(args, tp_size, pp_size, ep_size, pp_rank):
             checkpoint_name = os.listdir(os.path.join(args.load_path, sub_dir_name))[0]
             checkpoint_path = os.path.join(args.load_path, sub_dir_name, checkpoint_name)
             state_dict = torch.load(checkpoint_path, map_location="cpu")
-            ep_length = len([i for i in state_dict['model'] if 'linear_fc2.weight' in i])
+            ep_length = len([i for i in state_dict['model'] if 'linear_fc2.weight' in i and 'decoder.layers.0' in i])
             # combine experts within a tensor_parallel
             for key, value in list(state_dict['model'].items()):
                 if 'linear_fc' in key:
                     key_list = key.split('.')
                     local_ep_index = int(key_list[6])
-                    key_list[6] = str(ep_index * nnodes + local_ep_index)
+                    key_list[6] = str(ep_index * ep_length + local_ep_index)
                     del state_dict['model'][key]
                     state_dict['model']['.'.join(key_list)] = value
             tp_state_dicts[tp_index]['model'].update(state_dict['model'])

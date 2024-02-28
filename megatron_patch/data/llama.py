@@ -38,13 +38,19 @@ PROMPT_DICT = {
         }
 
 PROMPT_DICT = {
-    'prompt_input': ('[INST]{instruction} {input}[/INST]'),
-    'prompt_no_input':('[INST]{instruction}[/INST]'),
+    'prompt_input': ('[INST]{instruction} {input}\n[/INST]\n'),
+    'prompt_no_input':('[INST]{instruction}\n[/INST]\n'),
+}
+
+PROMPT_DICT = {
+    'prompt_input': '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n{instruction} {input}<|im_end|>\n<|im_start|>assistant\n',
+    'prompt_no_input':'<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n{instruction}<|im_end|>\n<|im_start|>assistant\n'
 }
 """
 
 PROMPT_DICT = {
-    'prompt_input': '{input}'
+    'prompt_input': ('{instruction} {input}'),
+    'prompt_no_input':('{instruction}'),
 }
 
 class LLamaRawDataset(torch.utils.data.Dataset):
@@ -53,7 +59,7 @@ class LLamaRawDataset(torch.utils.data.Dataset):
         args = get_args()
         self.tokenizer = get_tokenizer()
         # core/tensor_parallel/cross_entropy.py, target_mask = (target < vocab_start_index) | (target >= vocab_end_index)
-        self.IGNORE_INDEX = -100
+        self.IGNORE_INDEX = self.tokenizer.pad_token_id
         if "-Pretrain" in args.dataset:
             self.max_padding_length = max_padding_length + 1
         else:
@@ -122,6 +128,14 @@ class LLamaRawDataset(torch.utils.data.Dataset):
             dict: a dictionary containing the input_ids and labels for the examples
         """
         """
+        prompt_input = PROMPT_DICT['prompt_input']
+
+        sources = [
+            prompt_input.format_map({"instruction": input})
+            for input in examples['instruction']
+        ]
+        """
+        
         prompt_input, prompt_no_input = PROMPT_DICT[
             'prompt_input'], PROMPT_DICT['prompt_no_input']
 
@@ -132,13 +146,6 @@ class LLamaRawDataset(torch.utils.data.Dataset):
             prompt_input.format_map({"instruction":instruction, "input":minput}) if minput
             else prompt_no_input.format_map({"instruction":instruction})
             for instruction, minput in zip(examples['instruction'], examples['input'])
-        ]
-        """
-        prompt_input = PROMPT_DICT['prompt_input']
-
-        sources = [
-            prompt_input.format_map({"input": input})
-            for input in examples['input']
         ]
 
         if 'output' in examples:

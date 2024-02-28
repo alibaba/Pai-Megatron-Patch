@@ -629,7 +629,8 @@ class ParallelAttention(MegatronModule):
             self.rotary_emb = RotaryEmbedding(
                 rotary_dim,
                 args.max_position_embeddings,
-                args.rotary_base
+                args.rotary_base,
+                args.rotary_scale_factor
             )
         else:
             self.use_llama2_rotary_position_embeddings = False
