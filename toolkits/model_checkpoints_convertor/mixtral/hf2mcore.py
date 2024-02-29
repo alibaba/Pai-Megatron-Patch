@@ -662,6 +662,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     # Saving config and tokenzier files
     os.system("cp -rf "+args.load_path +"/*.json " + args.save_path)
     os.system("cp -rf " + args.load_path + "/tokenizer.model " + args.save_path)
+    args.load_path = os.path.join(args.load_path, 'release')
     import glob
     if glob.glob(args.load_path+"/mp_rank*/distrib*"):
     # if os.path.exists(args.load_path+"/mp_rank*/distrib*"):
