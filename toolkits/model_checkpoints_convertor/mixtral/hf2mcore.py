@@ -209,6 +209,11 @@ column_split_tensor_parallel_params_mg = [
     'self_attention.linear_proj'
     ]
 
+def get_checkpoint_sub_dir_name(tp_rank, pp_rank, pp_size, ep_rank, ep_size):
+    sub_dir_name = f"mp_rank_{tp_rank:02d}"
+    if pp_size > 1: sub_dir_name = f"{sub_dir_name}_{pp_rank:03d}"
+    if ep_size > 1: sub_dir_name = f"{sub_dir_name}_{ep_rank:03d}"
+    return sub_dir_name
 
 def get_megatron_sharded_states(args, tp_size, pp_size, ep_size, pp_rank):
     """
@@ -224,8 +229,8 @@ def get_megatron_sharded_states(args, tp_size, pp_size, ep_size, pp_rank):
     global_ep_index = 0
     for tp_index, i in enumerate(range(tp_size)):
         for ep_index, j in enumerate(range(ep_size)):
-            print(f"Loading mp_rank_{i:02d}_{j:03d}...")
-            sub_dir_name = f"mp_rank_{i:02d}" if ep_size == 1 else f"mp_rank_{i:02d}_{j:03d}"
+            sub_dir_name = get_checkpoint_sub_dir_name(i, pp_rank, pp_size, j, ep_size)
+            print(f"Loading {sub_dir_name}...")
             checkpoint_name = os.listdir(os.path.join(args.load_path, sub_dir_name))[0]
             checkpoint_path = os.path.join(args.load_path, sub_dir_name, checkpoint_name)
             state_dict = torch.load(checkpoint_path, map_location="cpu")
@@ -343,7 +348,7 @@ def get_element_from_dict_by_path(d, path):
 
 def convert_checkpoint_from_transformers_to_megatron(args):
 
-    assert args.world_size // args.target_expert_model_parallel_size == args.target_tensor_model_parallel_size
+    assert args.world_size == args.target_expert_model_parallel_size * args.target_tensor_model_parallel_size * args.target_pipeline_model_parallel_size
 
     os.makedirs(args.save_path, exist_ok=True)
 
@@ -602,7 +607,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 params_dict = get_element_from_dict_by_path(output_state_dict[i], "model")
                 params_dict["output_layer.weight"] = out_lm_head[i].clone()
 
-        num_ep_groups = args.world_size // args.target_tensor_model_parallel_size
+        num_ep_groups = args.world_size // args.target_tensor_model_parallel_size // args.target_pipeline_model_parallel_size
         experts_ids = [x for x in range(config.num_local_experts)]
         chunks = [experts_ids[x:x + config.num_local_experts//num_ep_groups] for x in range(0, len(experts_ids), config.num_local_experts//num_ep_groups)]
 
@@ -633,19 +638,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                     output_state_dict[tp_rank]['model'].pop(key)
 
             for ep_rank in range(args.target_expert_model_parallel_size):
-                if args.target_pipeline_model_parallel_size == 1:
-                    checkpoint_dir = (
-                        f"mp_rank_{tp_rank:02d}"
-                        if args.target_expert_model_parallel_size == 1
-                        else f"mp_rank_{tp_rank:02d}_{ep_rank:03d}"
-                    )
-                elif args.target_pipeline_model_parallel_size > 1:
-                    checkpoint_dir = (
-                        f"mp_rank_{tp_rank:02d}"
-                        if args.target_expert_model_parallel_size == 1
-                        else f"mp_rank_{tp_rank:02d}_{pp_rank:03d}_{ep_rank:03d}"
-                    )
-
+                checkpoint_dir = get_checkpoint_sub_dir_name(tp_rank, pp_rank, args.target_pipeline_model_parallel_size, ep_rank, args.target_expert_model_parallel_size)
                 save_dir = os.path.join(release_dir, checkpoint_dir)
                 os.makedirs(save_dir, exist_ok=True)
                 checkpoint_name = "model_optim_rng.pt"
@@ -669,6 +662,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     # Saving config and tokenzier files
     os.system("cp -rf "+args.load_path +"/*.json " + args.save_path)
     os.system("cp -rf " + args.load_path + "/tokenizer.model " + args.save_path)
+    args.load_path = os.path.join(args.load_path, 'release')
     import glob
     if glob.glob(args.load_path+"/mp_rank*/distrib*"):
     # if os.path.exists(args.load_path+"/mp_rank*/distrib*"):
@@ -738,9 +732,9 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     num_groups = config.num_key_value_heads
 
     for pp_rank in range(pp_size):
-        # if pp_size > 0:
-        #     print(f"Converting pipeline parallel rank {pp_rank}")
-        #     tp_state_dicts = get_megatron_sharded_states(args, tp_size, pp_size, ep_size, pp_rank)
+        if pp_size > 0:
+            print(f"Converting pipeline parallel rank {pp_rank}")
+            tp_state_dicts = get_megatron_sharded_states(args, tp_size, pp_size, ep_size, pp_rank)
 
         # The transformer.
 
@@ -754,7 +748,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
             if 'linear_fc' in key:
                 print(key)
                 key_list = key.split('.')
-                layer_id = key_list[2]
+                layer_id = int(key_list[2]) + pp_rank * num_layers
                 expert_id = key_list[-3]
                 dim = 1 if 'linear_fc2' in key else 0
                 params = torch.cat(

@@ -27,7 +27,7 @@ export PYTHONPATH=${MEGATRON_PATH}:$PYTHONPATH
 python hf2mcore.py \
 --load_path ${SOURCE_CKPT_PATH} \
 --save_path ${TARGET_CKPT_PATH} \
---target_params_dtype fp16 \
+--target_params_dtype bf16 \
 --target_tensor_model_parallel_size ${TP} \
 --target_pipeline_model_parallel_size ${PP} \
 --target_expert_model_parallel_size ${EP} \
