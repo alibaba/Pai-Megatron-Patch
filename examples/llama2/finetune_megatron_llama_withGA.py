@@ -24,6 +24,7 @@ from megatron import get_args
 from megatron.core import tensor_parallel
 from megatron.utils import average_losses_across_data_parallel_group
 
+from megatron_patch.data.utils import get_batch_on_this_tp_rank_original
 from megatron_patch.data import \
     build_pretrain_dataset_from_original, build_pretrain_dataset_from_idxmap
 from megatron_patch.model.llama2.gpt_model import GPTModel

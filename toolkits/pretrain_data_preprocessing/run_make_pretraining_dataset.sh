@@ -20,7 +20,6 @@ fi
 
 python preprocess_data.py \
   --input ${INPUT} \
-  --language zh \
   --output-prefix ${output_data_dir}/wudao_jiebabpe \
   --dataset-impl mmap \
   --vocab tokenizer.json \
@@ -33,7 +32,6 @@ elif [ $tokenizer = "bloombpe" ]; then
 
   python preprocess_data.py \
   --input ${INPUT} \
-  --language zh \
   --output-prefix ${output_data_dir}/wudao_bloombpe \
   --dataset-impl mmap \
   --patch-tokenizer-type BloomTokenizerFromHF \
@@ -45,7 +43,6 @@ elif [ $tokenizer = "glmchinesebpe" ]; then
 
   python preprocess_data.py \
   --input ${INPUT} \
-  --language zh \
   --output-prefix ${output_data_dir}/wudao_glmchinesebpe \
   --dataset-impl mmap \
   --patch-tokenizer-type GLM10BZHTokenizerFromHF \
@@ -57,7 +54,6 @@ elif [ $tokenizer = "glm130bbpe" ]; then
 
   python preprocess_data.py \
   --input ${INPUT} \
-  --language zh \
   --output-prefix ${output_data_dir}/wudao_glm130bbpe \
   --dataset-impl mmap \
   --patch-tokenizer-type IcetkGLM130BTokenizer \
@@ -69,8 +65,7 @@ elif [ $tokenizer = "llamabpe" ]; then
 
   python preprocess_data.py \
   --input ${INPUT} \
-  --language zh \
-  --output-prefix ${output_data_dir}/wudao_llamabpe \
+  --output-prefix ${output_data_dir}/SlimPajama_pad_llamabpe \
   --dataset-impl mmap \
   --patch-tokenizer-type LLamaTokenizer \
   --load ${load_dir} \
@@ -81,7 +76,6 @@ elif [ $tokenizer = "falconbpe" ]; then
 
   python preprocess_data.py \
   --input ${INPUT} \
-  --language zh \
   --output-prefix ${output_data_dir}/wudao_falconbpe \
   --dataset-impl mmap \
   --patch-tokenizer-type FalconTokenizer \
@@ -93,7 +87,6 @@ elif [ $tokenizer = "galacticabpe" ]; then
 
   python preprocess_data.py \
   --input ${INPUT} \
-  --language zh \
   --output-prefix ${output_data_dir}/wudao_galacticabpe \
   --dataset-impl mmap \
   --patch-tokenizer-type OPTTokenizer \
@@ -104,7 +97,6 @@ elif [ $tokenizer = "galacticabpe" ]; then
 elif [ $tokenizer = "starcoderbpe" ]; then
   python preprocess_data.py \
   --input ${INPUT} \
-  --language zh \
   --output-prefix ${output_data_dir}/wudao_starcoderbpe \
   --dataset-impl mmap \
   --patch-tokenizer-type StarcoderTokenizerFromHF \
@@ -115,7 +107,6 @@ elif [ $tokenizer = "starcoderbpe" ]; then
 elif [ $tokenizer = "qwenbpe" ]; then
   python preprocess_data.py \
   --input ${INPUT} \
-  --language zh \
   --output-prefix ${output_data_dir}/wudao_qwenbpe \
   --dataset-impl mmap \
   --patch-tokenizer-type QwenTokenizer \
@@ -126,7 +117,6 @@ elif [ $tokenizer = "qwenbpe" ]; then
 elif [ $tokenizer = "mistralbpe" ]; then
   python preprocess_data.py \
   --input ${INPUT} \
-  --language zh \
   --output-prefix ${output_data_dir}/SlimPajama_mistralbpe \
   --dataset-impl mmap \
   --patch-tokenizer-type MistralTokenizer \

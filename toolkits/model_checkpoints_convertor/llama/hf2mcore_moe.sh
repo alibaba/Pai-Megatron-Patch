@@ -34,12 +34,12 @@
 
 set -e
 START_TIME=$SECONDS
-HG_CKPT_PATH=/workdir/llama2_7b # ckpt from https://huggingface.co/huggyllama/llama2-7b
+HG_CKPT_PATH=/mnt/llama2-ckpts/Llama-2-7b-hf # ckpt from https://huggingface.co/huggyllama/llama2-7b
 export CUDA_VISIBLE_DEVICES=0
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 MEGATRON_PATH=$1
-export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-main
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-240126
 SOURCE_CKPT_PATH=$2
 TARGET_CKPT_PATH=$3
 TP=$4

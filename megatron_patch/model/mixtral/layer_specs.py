@@ -38,6 +38,19 @@ from .moe.moe_layer import MoELayer
 def get_gpt_layer_with_transformer_engine_spec(
     num_experts: int = None, moe_grouped_gemm: bool = False
 ) -> ModuleSpec:
+    """
+    Generates a spec for a GPT transformer layer using Transformer Engine modules.
+
+    Args:
+        num_experts: Optional; the number of experts to use in a Mixture of Experts (MoE) setup.
+                     If `None`, a dense multi-layer perceptron (MLP) is used instead of MoE.
+        moe_grouped_gemm: Optional; if `True`, enables grouped GEMM for MoE operations,
+                          which can be more efficient for certain configurations.
+
+    Returns:
+        A ModuleSpec object that specifies how to construct a GPT transformer layer with
+        the appropriate submodules for self-attention and MLP/MoE using Transformer Engine optimizations.
+    """
     mlp = _get_mlp_module_spec(
         use_te=True, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm
     )
@@ -63,6 +76,19 @@ def get_gpt_layer_with_transformer_engine_spec(
 
 # Use this spec for an implementation using only modules in megatron core
 def get_gpt_layer_local_spec(num_experts: int = None, moe_grouped_gemm: bool = False) -> ModuleSpec:
+    """
+    Generates a specification for a GPT transformer layer using only the core modules from Megatron.
+
+    Args:
+        num_experts: Optional; the number of experts to use in a Mixture of Experts (MoE) setup.
+                     If `None`, a dense multi-layer perceptron (MLP) is used instead of MoE.
+        moe_grouped_gemm: Optional; if `True`, enables grouped GEMM for MoE operations,
+                          which can be more efficient for certain configurations.
+
+    Returns:
+        A ModuleSpec object that specifies how to construct a GPT transformer layer with
+        standard Megatron core modules without the lower-level Transformer Engine optimizations.
+    """
     mlp = _get_mlp_module_spec(
         use_te=False, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm
     )
@@ -95,6 +121,18 @@ def get_gpt_layer_local_spec(num_experts: int = None, moe_grouped_gemm: bool = F
 def _get_mlp_module_spec(
     use_te: bool = True, num_experts: int = None, moe_grouped_gemm: bool = False
 ) -> ModuleSpec:
+    """
+    Helper function to create a module specification for an MLP or MoE layer.
+
+    Args:
+        use_te: Optional; if `True`, uses Transformer Engine (TE) modules for the MLP configuration.
+        num_experts: Optional; the number of experts in the MoE configuration. If `None`, a standard MLP is used.
+        moe_grouped_gemm: Optional; if `True`, uses grouped GEMM optimization for the MoE configuration.
+
+    Returns:
+        A ModuleSpec object that specifies the MLP or MoE layer configuration based on the presence of experts
+        and the use of Transformer Engine optimizations.
+    """
     if num_experts is None:
         # Dense MLP w/ or w/o TE modules.
         return ModuleSpec(

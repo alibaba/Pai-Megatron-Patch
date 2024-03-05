@@ -50,11 +50,13 @@ PROMPT_DICT = {
 
 PROMPT_DICT = {
     'prompt_input': ('{instruction} {input}'),
-    'prompt_no_input':('{instruction}'),
+    'prompt_no_input': ('{instruction}'),
 }
+
 
 class LLamaRawDataset(torch.utils.data.Dataset):
     """A class for processing a LLama text dataset"""
+
     def __init__(self, path, max_padding_length, split='train'):
         args = get_args()
         self.tokenizer = get_tokenizer()
@@ -84,7 +86,7 @@ class LLamaRawDataset(torch.utils.data.Dataset):
         self.input_ids = np.array(train_dataset['input_ids'])
         self.labels = np.array(train_dataset['labels'])
         self.samples = []
-        
+
         for inputs, labels in tqdm(zip(self.input_ids, self.labels)):
             if self.tokenizer.eos_token_id not in inputs: continue
             self.samples.append([inputs, labels])
@@ -135,23 +137,33 @@ class LLamaRawDataset(torch.utils.data.Dataset):
             for input in examples['instruction']
         ]
         """
-        
+
         prompt_input, prompt_no_input = PROMPT_DICT[
             'prompt_input'], PROMPT_DICT['prompt_no_input']
 
         if 'input' not in examples:
-            examples ['input'] = [''] * len(examples['instruction'])
-        
-        sources = [
-            prompt_input.format_map({"instruction":instruction, "input":minput}) if minput
-            else prompt_no_input.format_map({"instruction":instruction})
-            for instruction, minput in zip(examples['instruction'], examples['input'])
-        ]
+            if 'instruction' in examples:
+                examples['input'] = [''] * len(examples['instruction'])
+            elif 'text' in examples:
+                examples['input'] = [''] * len(examples['text'])
+
+        if 'text' in examples:
+            sources = [
+                '{input}'.format_map({"input": ""}) for _ in examples['text']
+            ]
+        else:
+            sources = [
+                prompt_input.format_map({"instruction": instruction, "input": minput}) if minput
+                else prompt_no_input.format_map({"instruction": instruction})
+                for instruction, minput in zip(examples['instruction'], examples['input'])
+            ]
 
         if 'output' in examples:
             key = 'output'
         elif 'content' in examples:
             key = 'content'
+        elif 'text' in examples:
+            key = 'text'
 
         targets = [
             example + self.tokenizer.eos_token

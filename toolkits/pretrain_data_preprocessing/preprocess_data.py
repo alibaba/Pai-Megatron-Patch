@@ -19,21 +19,16 @@ import os
 import sys
 import time
 from threading import Semaphore
-
 import torch
-
 import ftfy
 import lm_dataformat as lmd
 import tqdm
-try:
-    from megatron.data import indexed_dataset
-except:
-    from megatron.core.datasets import indexed_dataset
+
+from megatron.core.datasets import indexed_dataset
 from megatron_patch.tokenizer import build_tokenizer
 
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
-
 
 class Encoder(object):
     def __init__(self, args):
@@ -50,38 +45,24 @@ class Encoder(object):
         for key in self.args.jsonl_keys:
             doc_ids = []
             try:
-                if self.args.patch_tokenizer_type in ['BloomTokenizerFromHF', 'GLM10BZHTokenizerFromHF', 'FalconTokenizer', 'OPTTokenizer','StarcoderTokenizerFromHF', 'QwenTokenizer']:
-                    text_ids = Encoder.tokenizer(text)['input_ids']
-                elif self.args.patch_tokenizer_type in ['LLamaTokenizer', 'MistralTokenizer']:
-                    text_ids = Encoder.tokenizer(text, add_special_tokens=False)['input_ids']
-                else:
-                    text_ids = Encoder.tokenizer.tokenize(text)
+                text_ids = Encoder.tokenizer(text, add_special_tokens=False)['input_ids']
+                """
+                text_ids = Encoder.tokenizer(text, add_special_tokens=False, padding='max_length',
+                                             max_length=2047, truncation=True)['input_ids']
+                """
+                if max(text_ids) >= Encoder.tokenizer.vocab_size:
+                    print(text)
+                    print(max(text_ids))
+                    continue
             except:
                 continue
             if len(text_ids) > 0:
                 doc_ids.append(text_ids)
             if self.args.append_eod:
-                if self.args.patch_tokenizer_type ==\
-                        'GPT2BPETokenizer' or \
-                        self.args.patch_tokenizer_type ==\
-                        'JiebaBPETokenizer' or \
-                        self.args.patch_tokenizer_type ==\
-                        'BloomTokenizerFromHF':
-                    doc_ids[-1].append(Encoder.tokenizer.eod)
-                elif self.args.patch_tokenizer_type in \
-                        ['GLM10BZHTokenizerFromHF', 'LLamaTokenizer', 'FalconTokenizer', 'OPTTokenizer','StarcoderTokenizerFromHF', 'MistralTokenizer']:
-                    doc_ids[-1].append(Encoder.tokenizer.eos_token_id)
-                elif self.args.patch_tokenizer_type == \
-                        'IcetkGLM130BTokenizer':
-                    doc_ids[-1].append(Encoder.tokenizer.get_command('eod'))
-                elif self.args.patch_tokenizer_type == \
-                        'QwenTokenizer':
-                    doc_ids[-1].append(Encoder.tokenizer.eod_id)
-                else:
-                    raise ValueError('please setting correct tokenier')
+                doc_ids[-1].append(Encoder.tokenizer.eod)
+                #doc_ids[-1].append(Encoder.tokenizer.pad_token_id)
             ids[key] = doc_ids
         return ids, len(text)
-
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -107,7 +88,8 @@ def get_args():
             'JiebaBPETokenizer', 'BloomTokenizerFromHF',
             'ChatGLMTokenizerFromHF', 'GPT2BPETokenizer',
             'GLM10BZHTokenizerFromHF', 'IcetkGLM130BTokenizer',
-            'LLamaTokenizer', 'FalconTokenizer', 'OPTTokenizer','StarcoderTokenizerFromHF','QwenTokenizer', 'MistralTokenizer'
+            'LLamaTokenizer', 'FalconTokenizer', 'OPTTokenizer',
+            'StarcoderTokenizerFromHF', 'QwenTokenizer', 'MistralTokenizer'
         ],
         help='What type of tokenizer to use.',
     )
@@ -115,11 +97,7 @@ def get_args():
                        type=str,
                        default=None,
                        help='Path to the vocab file')
-    group.add_argument('--language',
-                       type=str,
-                       required=True,
-                       choices=['en', 'zh'],
-                       help='processing language')
+
     group.add_argument(
         '--merge-file',
         type=str,

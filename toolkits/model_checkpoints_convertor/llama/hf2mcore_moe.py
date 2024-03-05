@@ -15,7 +15,7 @@ from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_
 import sys
 path_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
 sys.path.append(os.path.join(path_dir, "examples"))
-from llama2.pretrain_megatron_llama_moe import model_provider
+from llama2.pretrain_mcore_llama import model_provider
 from llama2.evaluate_huggingface_llama_moe import build_huggingface_model, replace_mlp_with_moe
 
 

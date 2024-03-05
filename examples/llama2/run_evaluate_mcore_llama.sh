@@ -1,11 +1,9 @@
 #!/bin/bash
-#sh run_evaluate_megatron_llama.sh dsw ../.. 7B 1 80 80 0 bf16 2 1 sel true false true false /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mg-tp2-pp1/
-#sh run_evaluate_megatron_llama.sh dsw ../.. 13B 1 80 80 0 bf16 2 1 sel true false true false /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-13b-hf-to-mg-tp2-pp1/
-#sh run_evaluate_megatron_llama.sh dsw ../.. 7B 1 80 80 0 bf16 2 1 sel true false true true /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-te-tp2-pp1/
+#sh run_evaluate_mcore_llama.sh dsw ../.. 7B 1 80 80 0 bf16 1 1 sel true false true true /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf-to-mcore-tp1-pp1/
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
-MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-231007
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-240126
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
@@ -166,13 +164,14 @@ megatron_options=" \
         --dataset LLama-Pretrain-Raw \
         --swiglu \
         --normalization RMSNorm \
-        --use-llama2-rotary-position-embeddings \
+        --use-rotary-position-embeddings \
+        --no-rope-fusion \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_megatron_llama.py
+run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_mcore_llama.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}

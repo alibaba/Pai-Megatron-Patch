@@ -32,52 +32,18 @@ from megatron.core.datasets.blended_megatron_dataset_builder import BlendedMegat
 from megatron.training import pretrain
 from megatron.core.datasets.gpt_dataset import GPTDatasetConfig
 from megatron.core.datasets.gpt_dataset import GPTDataset
+from megatron.core.models.gpt import GPTModel
 
 from megatron_patch.data import build_pretrain_dataset_from_original
 from megatron_patch.data.utils import get_batch_on_this_tp_rank_original
 from megatron_patch.tokenizer import get_tokenizer, build_tokenizer
 from megatron_patch.arguments import get_patch_args
-from megatron.arguments import core_transformer_config_from_args
-from megatron.core.models.gpt import GPTModel
-
+from megatron_patch.arguments import core_transformer_config_from_args
+from megatron_patch.model.mixtral.transformer_config import TransformerConfig
 from megatron_patch.model.mixtral.layer_specs import get_gpt_layer_with_transformer_engine_spec
 
-
-def grouped_gemm_load_hook(module, state_dict, prefix, local_metadata, strict, 
-                missing_keys, unexpected_keys, error_msgs):
-    num_layer = len(module.decoder.layers)
-    num_local_experts = module.decoder.layers[0].mlp.num_local_experts
-    hidden_size = module.config.hidden_size
-    for l in range(num_layer):
-        up_projs, down_projs = [], []
-        for e in range(num_local_experts):
-            up_proj = state_dict.pop(f'decoder.layers.{l}.mlp.experts.local_experts.{e}.linear_fc1.weight', None)
-            down_proj = state_dict.pop(f'decoder.layers.{l}.mlp.experts.local_experts.{e}.linear_fc2.weight', None)
-            if up_proj is None: return
-            up_projs.append(up_proj.transpose(1, 0))
-            down_projs.append(down_proj.transpose(1, 0))
-        with torch.no_grad():
-            up_weight = torch.stack(up_projs).view(hidden_size, -1)
-            module.decoder.layers[l].mlp.experts.weight1.copy_(up_weight)
-            module.decoder.layers[l].mlp.experts.weight2.copy_(torch.cat(down_projs, dim=0))
-
-
-def grouped_gemm_save_hook(module, state_dict, prefix, local_metadata):
-    num_layer = len(module.decoder.layers)
-    num_local_experts = module.decoder.layers[0].mlp.num_local_experts
-    hidden_size = module.config.hidden_size
-    for l in range(num_layer):
-        up_proj = state_dict.pop(f'decoder.layers.{l}.mlp.experts.weight1', None)
-        down_proj = state_dict.pop(f'decoder.layers.{l}.mlp.experts.weight2', None)
-        if up_proj is None: return
-        up_proj = up_proj.view(num_local_experts, hidden_size, -1)
-        down_proj = down_proj.view(num_local_experts, -1, hidden_size)
-        for e in range(num_local_experts):
-            fc1 = up_proj[e].transpose(1, 0)
-            fc2 = down_proj[e].transpose(1, 0)
-            state_dict[f'decoder.layers.{l}.mlp.experts.local_experts.{e}.linear_fc1.weight'] = fc1
-            state_dict[f'decoder.layers.{l}.mlp.experts.local_experts.{e}.linear_fc2.weight'] = fc2
-
+import torch._dynamo
+torch._dynamo.config.suppress_errors = True
 
 def model_provider(
     pre_process=True, post_process=True
@@ -96,8 +62,7 @@ def model_provider(
     """
     args = get_args()
     build_tokenizer(args)
-    config = core_transformer_config_from_args(get_args())
-
+    config = core_transformer_config_from_args(get_args(), TransformerConfig)
     transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm)
     model = GPTModel(
         config=config,
@@ -113,9 +78,6 @@ def model_provider(
         rotary_percent=args.rotary_percent,
         rotary_base=args.rotary_base,
     )
-    if args.moe_grouped_gemm:
-        model._register_load_state_dict_pre_hook(grouped_gemm_load_hook, with_module=True)
-        model._register_state_dict_hook(grouped_gemm_save_hook)
 
     return model
 
@@ -200,6 +162,7 @@ def is_dataset_built_on_rank():
     return (mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()) and mpu.get_tensor_model_parallel_rank() == 0
 
 def core_gpt_dataset_config_from_args(args):
+    tokenizer = get_tokenizer()
     return GPTDatasetConfig(
         is_built_on_rank=is_dataset_built_on_rank,
         random_seed=args.seed,
@@ -207,6 +170,9 @@ def core_gpt_dataset_config_from_args(args):
         blend=args.data_path,
         split=args.split,
         path_to_cache=args.data_cache_path,
+        reset_attention_mask=args.reset_attention_mask,
+        eod_mask_loss=args.eod_mask_loss,
+        eod_id=tokenizer.eod
     )
 
 def train_valid_test_datasets_provider(train_val_test_num_samples):

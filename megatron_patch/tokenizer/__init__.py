@@ -83,7 +83,7 @@ def build_tokenizer(args):
 
     elif args.patch_tokenizer_type == 'LLamaTokenizer-ziya':
         from transformers import AutoTokenizer
-        tokenizer = AutoTokenizer.from_pretrained(args.load, use_fast=True)
+        tokenizer = AutoTokenizer.from_pretrained(args.load, use_fast=False)
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -93,25 +93,14 @@ def build_tokenizer(args):
             args.load,
             model_max_length=args.seq_length,
             padding_side="right",
-            use_fast=True,
+            use_fast=False,
             trust_remote_code=True
         )
-        DEFAULT_PAD_TOKEN = '[PAD]'
-        DEFAULT_EOS_TOKEN = '</s>'
-        DEFAULT_BOS_TOKEN = '<s>'
-        DEFAULT_UNK_TOKEN = '<unk>'
 
-        special_tokens_dict = dict()
-        if not tokenizer.pad_token:
-            special_tokens_dict['pad_token'] = DEFAULT_PAD_TOKEN
-        if not tokenizer.eos_token:
-            special_tokens_dict['eos_token'] = DEFAULT_EOS_TOKEN
-        if not tokenizer.bos_token:
-            special_tokens_dict['bos_token'] = DEFAULT_BOS_TOKEN
-        if not tokenizer.unk_token:
-            special_tokens_dict['unk_token'] = DEFAULT_UNK_TOKEN
+        if tokenizer.pad_token is None:
+            tokenizer.add_special_tokens(special_tokens_dict=dict(pad_token="<unk>"))
 
-        tokenizer.add_special_tokens(special_tokens_dict)
+        tokenizer.eod = tokenizer.eos_token_id
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'FalconTokenizer':
@@ -171,7 +160,7 @@ def build_tokenizer(args):
             args.load,
             model_max_length=args.seq_length,
             padding_side="right",
-            use_fast=True,
+            use_fast=False,
             trust_remote_code=True
         )
         if tokenizer.pad_token is None:

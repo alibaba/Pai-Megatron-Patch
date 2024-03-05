@@ -20,7 +20,6 @@ import torch.nn.functional as F
 from megatron.core.model_parallel_config import ModelParallelConfig
 from megatron.core.utils import init_method_normal, scaled_init_method_normal
 
-
 @dataclass
 class TransformerConfig(ModelParallelConfig):
     """Configuration object for megatron-core transformers.
@@ -85,13 +84,11 @@ class TransformerConfig(ModelParallelConfig):
     hidden_dropout: float = 0.1
     attention_dropout: float = 0.1
     fp32_residual_connection: bool = False
-    # @jcasper should we keep this option?
+    
     apply_residual_connection_post_layernorm: bool = False
     layernorm_epsilon: float = 1e-5
     layernorm_zero_centered_gamma: bool = False
     add_bias_linear: bool = True
-    add_bias_linear_fc: bool = True
-    add_bias_attn_fc: bool = True
     gated_linear_unit: bool = False
     activation_func: Callable = F.gelu
     num_moe_experts: int = None
@@ -106,13 +103,11 @@ class TransformerConfig(ModelParallelConfig):
     apply_query_key_layer_scaling: bool = False
     attention_softmax_in_fp32: bool = True
 
-    # communication
-
     # fusion
     bias_activation_fusion: bool = False
     masked_softmax_fusion: bool = False
     persist_layer_norm: bool = False
-    bias_dropout_fusion: bool = False  # TODO: this should be bias_dropout_add_fusion?
+    bias_dropout_fusion: bool = False  
     apply_rope_fusion: bool = False
 
     # activation recomputation
@@ -132,7 +127,7 @@ class TransformerConfig(ModelParallelConfig):
     # miscellaneous
     clone_scatter_output_in_embedding: bool = True
 
-    # experimental section (TODO: move to apt. section above once stable)
+    # experimental section 
     normalization: bool = "LayerNorm"  # alt value supported by TE: "RMSNorm"
 
     # MoE related
@@ -142,7 +137,7 @@ class TransformerConfig(ModelParallelConfig):
     moe_aux_loss_coeff: float = 0  # 1e-2 would be a good start value for load balance loss.
     moe_z_loss_coeff: float = None  # 1e-3 would be a good start value for z-loss
     moe_input_jitter_eps: float = None
-    moe_token_dropping: bool = False  # TODO: Support token dropping.
+    moe_token_dropping: bool = False  # 
 
     def __post_init__(self):
         """ Python dataclass method that is used to modify attributes after initialization.
