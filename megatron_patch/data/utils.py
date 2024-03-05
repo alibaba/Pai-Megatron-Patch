@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from copy import deepcopy
 import torch
 from megatron.core import mpu
 from megatron import get_args
 from megatron.utils import get_ltor_masks_and_position_ids
 
 from megatron_patch.tokenizer import get_tokenizer
+
 
 def get_batch_on_this_tp_rank_original(data_iterator):
     args = get_args()

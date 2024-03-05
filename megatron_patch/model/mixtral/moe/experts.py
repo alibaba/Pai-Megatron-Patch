@@ -141,6 +141,20 @@ class GroupedMLP(MegatronModule):
         setattr(self.weight2, 'allreduce', not self.expert_parallel)
 
     def forward(self, permuted_local_hidden_states, tokens_per_expert):
+        """
+        Forward pass for the GroupedMLP module.
+
+        Args:
+            permuted_local_hidden_states (torch.Tensor): The input hidden states with dimensions suited
+                for expert parallelism. It's typically a result of permuting the original hidden states
+                to align tokens with their corresponding experts.
+            tokens_per_expert (list of int): Number of tokens assigned to each expert. This is used to
+                manage the distribution of tokens across the experts in the grouped GEMM operation.
+
+        Returns:
+            torch.Tensor: The output of the MLP after processing by the local experts.
+            None: Placeholder for any additional output, for compatibility with other modules.
+        """
         # Reshape the weights for the grouped GEMMs.
         w1 = self.weight1.view(self.num_local_experts, self.config.hidden_size, -1)
         w2 = self.weight2.view(self.num_local_experts, -1, self.config.hidden_size)
@@ -163,7 +177,6 @@ class SequentialMLP(MegatronModule):
     def __init__(self, num_local_experts, config: TransformerConfig, submodules: MLPSubmodules):
         super().__init__(config=config)
         self.add_bias = config.add_bias_linear
-        self.add_bias_fc = config.add_bias_linear_fc
         self.num_local_experts = num_local_experts
         self.local_experts = torch.nn.ModuleList()
         for _ in range(self.num_local_experts):
@@ -171,6 +184,22 @@ class SequentialMLP(MegatronModule):
             self.local_experts.append(expert)
 
     def forward(self, permuted_local_hidden_states, tokens_per_expert):
+        """
+        Forward pass for the SequentialMLP module. It processes the input hidden states
+        using a sequence of MLP experts. Each expert operates on a contiguous slice
+        of the input corresponding to the tokens it is responsible for.
+
+        Args:
+            permuted_local_hidden_states (torch.Tensor): Tensor containing hidden states
+                that have been permuted so that tokens processed by the same expert are contiguous.
+            tokens_per_expert (torch.Tensor): Tensor indicating the number of tokens that
+                each expert is responsible for processing.
+
+        Returns:
+            Tupletorch.Tensor, torch.Tensor: A tuple containing two tensors. The first tensor
+                is the output from the experts after processing the hidden states. The second tensor
+                is the output bias from the experts if `add_bias` is True; otherwise, it is None.
+    """
         output_local = torch.zeros_like(permuted_local_hidden_states)
         output_bias_local = None
         if self.add_bias:

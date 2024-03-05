@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from abc import abstractmethod
 from typing import List
 
@@ -21,7 +20,6 @@ import torch
 from megatron.core import parallel_state, tensor_parallel
 from megatron.core.parallel_state import get_tensor_and_expert_parallel_group
 from ..transformer_config import TransformerConfig
-
 
 class MoETokenDispatcher:
     """
@@ -76,6 +74,18 @@ class MoEDroplessTokenDispatcher(MoETokenDispatcher):
     ) -> None:
         """
         Initialize the zero token dropping router.
+
+        Args:
+            num_local_experts (int): The number of experts in the local process/group.
+            local_expert_indices (List[int]): The indices of the experts that are local
+                to the current process. These indices identify the experts within the 
+                larger, global set of experts in a distributed setup.
+            config (TransformerConfig): An instance of TransformerConfig that contains
+            various configuration settings for the model such as the number of 
+            experts, model parallelism settings, and other relevant parameters.
+
+        Returns:
+            None
         """
         super().__init__(config=config)
         self.num_local_experts = num_local_experts
@@ -84,7 +94,15 @@ class MoEDroplessTokenDispatcher(MoETokenDispatcher):
         self.add_bias = config.add_bias_linear
 
     def gather_indices(self, local_indices: torch.Tensor):
-        """ Gather tensors and concatenate along the first dimension."""
+        """ 
+        Gather tensors and concatenate along the first dimension.
+        
+        Args:
+            local_indices (torch.Tensor): Tensor of indices on the local device.
+
+        Returns:
+            torch.Tensor: Tensor containing the concatenated indices from all devices.
+        """
         group = get_tensor_and_expert_parallel_group()
         world_size = torch.distributed.get_world_size(group=group)
         # Bypass the function if we are using only 1 GPU.

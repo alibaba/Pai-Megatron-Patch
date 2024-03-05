@@ -14,7 +14,6 @@
 
 import torch
 
-
 def switch_load_balancing_loss_func(gates, mask, moe_aux_loss_coeff):
     """Calculate the auxiliary loss for better load balacing. 
     Please refer to the Switch Transformer paper (https://arxiv.org/abs/2101.03961) for details.
@@ -50,7 +49,15 @@ def z_loss_func(logits, z_loss_coeff):
 
 
 def sinkhorn(cost: torch.Tensor, tol: float = 0.0001):
-    """Sinkhorn based MoE routing function"""
+    """Sinkhorn based MoE routing function
+    
+        Args:
+            cost: A 2D tensor representing the cost matrix to be normalized.
+            tol: A float value specifying the tolerance for convergence. Default is 0.0001.
+        
+        Returns:
+            A 2D tensor representing the doubly stochastic matrix after Sinkhorn normalization.
+        """
     cost = torch.exp(cost)
     d0 = torch.ones(cost.size(0), device=cost.device, dtype=cost.dtype)
     d1 = torch.ones(cost.size(1), device=cost.device, dtype=cost.dtype)
@@ -64,7 +71,6 @@ def sinkhorn(cost: torch.Tensor, tol: float = 0.0001):
         error = torch.mean(torch.abs(d1_old - d1))
         d1_old = d1
     return d1 * cost * d0.unsqueeze(1)
-
 
 class MoEAuxLossAutoScaler(torch.autograd.Function):
     """An AutoScaler that compute and scales the grad for auxiliary loss.

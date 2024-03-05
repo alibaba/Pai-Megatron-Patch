@@ -1,5 +1,5 @@
 #!/bin/bash
-# sh run_evaluate_huggingface_llama.sh dsw /workspace/Pai-Megatron-Patch 7B 1 80 80 0 bf16 /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf/
+# sh run_evaluate_huggingface_llama.sh dsw ../.. 7B 1 80 80 0 bf16 /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf/
 
 set -e
 ENV=$1

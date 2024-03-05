@@ -152,6 +152,20 @@ class GPTModel(LanguageModule):
         processing layer (optional).
 
         It either returns the Loss values if labels are given  or the final hidden units
+
+        Args:
+            input_ids (Tensor): Batch of input token IDs.
+            position_ids (Tensor): Batch of positional encodings corresponding to `input_ids`.
+            attention_mask (Tensor): Mask to avoid attention on padding token indices in `input_ids`.
+            decoder_input (Tensor, optional): Optional pre-calculated embeddings passed directly to the decoder.
+            labels (Tensor, optional): Target output token IDs for supervised training.
+            inference_params (InferenceParams, optional): Parameters for controlling inference behavior.
+            packed_seq_params (PackedSeqParams, optional): Parameters for processing packed sequences.
+            extra_block_kwargs (dict, optional): Additional keyword arguments to pass to the transformer blocks.
+
+        Returns:
+            Tensor: If `labels` is not provided, the method returns the logits tensor of shape [batch_size, seq_length, vocab_size].
+                    If `labels` is provided, it returns the loss value as a tensor.
         """
         # If decoder_input is provided (not None), then input_ids and position_ids are ignored.
         # Otherwise, apply embedding layer on input_ids and position_ids to get decoder_input.
@@ -202,6 +216,24 @@ class GPTModel(LanguageModule):
         return loss
 
     def sharded_state_dict(self, prefix: str = '', sharded_offsets: tuple = ()) -> ShardedStateDict:
+        """
+        Returns a sharded state dictionary for distributed training, where model parameters
+        are partitioned across different devices or processes.
+
+        Args:
+            prefix (str, optional): A prefix to prepend to each key in the state dictionary.
+                                    This can be used to distinguish parameters of different
+                                    model components when combining state dictionaries.
+            sharded_offsets (tuple, optional): Offsets for sharding the state dictionary. It
+                                                typically contains the start index for each shard
+                                                and the overall size of the model parameter. It
+                                                should be empty for this model as offsets are not
+                                                expected.
+
+        Returns:
+            ShardedStateDict: A dictionary containing model parameters with keys prepended by `prefix`.
+                              The parameters are sharded according to the tensor parallelism configuration.
+        """
         assert not sharded_offsets, "Unexpected sharded offsets"
         sharded_state_dict = {}
 
