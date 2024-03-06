@@ -8,12 +8,12 @@ export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export HF_DATASETS_CACHE=/mnt/llama2-datasets
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=1
+GPUS_PER_NODE=8
 
 elif [ $ENV = dlc ]; then
 
@@ -169,7 +169,7 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
-        --split 98,2,0 \
+        --split 99,1,0 \
         --train-data-path ${DATASET_PATH} \
         --valid-data-path ${VALID_DATASET_PATH} \
         --test-data-path ${VALID_DATASET_PATH} \
@@ -221,7 +221,6 @@ megatron_options="  \
         --disable-bias-linear \
         --eod-mask-loss
         "
-
 
 run_cmd="torchrun $DISTRIBUTED_ARGS finetune_mcore_llama_withGA.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${rope_options}"

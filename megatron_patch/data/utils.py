@@ -39,8 +39,8 @@ def get_batch_on_this_tp_rank_original(data_iterator):
 
         tokens = tokens_[:, :-1].contiguous()
         labels = labels_[:, 1:].contiguous()
-        #cp_labels = deepcopy(labels)
-        #cp_labels[cp_labels == tokenizer.pad_token_id] = -100
+        # core/tensor_parallel/cross_entropy.py, target_mask = (target < vocab_start_index) | (target >= vocab_end_index)
+        labels[labels == tokenizer.eos_token_id] = -100
         labels[labels == tokenizer.pad_token_id] = -100
         attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
             labels,
