@@ -7,6 +7,6 @@
 [submodule "Megatron-LM-240126"]
 	path = Megatron-LM-240126
 	url = https://github.com/NVIDIA/Megatron-LM.git
-[submodule "LM-Evaluation-Harness-240202"]
-	path = LM-Evaluation-Harness-240202
+[submodule "LM-Evaluation-Harness-240307"]
+	path = LM-Evaluation-Harness-240307
 	url = https://github.com/jerryli1981/lm-evaluation-harness.git
