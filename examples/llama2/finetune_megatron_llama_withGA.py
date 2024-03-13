@@ -29,7 +29,7 @@ from megatron_patch.data import \
     build_pretrain_dataset_from_original, build_pretrain_dataset_from_idxmap
 from megatron_patch.model.llama2.gpt_model import GPTModel
 from megatron_patch.tokenizer import get_tokenizer, build_tokenizer
-from megatron_patch.training import pretrain
+from megatron.training import pretrain
 from megatron_patch.arguments import get_patch_args
 
 def model_provider(pre_process=True, post_process=True):

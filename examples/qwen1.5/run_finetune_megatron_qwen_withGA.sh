@@ -107,7 +107,7 @@ fi
 
 if [ $PR = fp16 ]; then
     pr_options=" \
-		    --fp16"
+		--fp16"
 elif [ $PR = bf16 ]; then
     pr_options=" \
         --bf16"
@@ -163,7 +163,7 @@ fi
 
 LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
 
-NAME="${ENV}-pretrain-megatron-gpt3-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
+NAME="${ENV}-pretrain-megatron-gpt3-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
 mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
 mkdir -p "${OUTPUT_BASEPATH}/log/"

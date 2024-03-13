@@ -1,0 +1,8 @@
+{
+    "python.autoComplete.extraPaths": [
+        "./Megatron-LM-240126"        
+    ],
+    "python.analysis.extraPaths": [
+        "./Megatron-LM-240126"
+    ],
+}

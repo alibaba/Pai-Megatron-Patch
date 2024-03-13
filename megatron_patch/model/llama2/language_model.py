@@ -23,7 +23,7 @@ from megatron.model.module import MegatronModule
 from megatron.model.utils import get_linear_layer
 from megatron.model.utils import init_method_normal
 from megatron.model.utils import scaled_init_method_normal
-from megatron.core.models.common.rotary_pos_embedding import RotaryEmbedding
+from megatron.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
 
 from .transformer import ParallelTransformer
 
