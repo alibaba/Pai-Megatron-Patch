@@ -379,7 +379,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
             num_checkpoints = len(sub_dirs) - 1
             state_dict = merge_transformers_sharded_states_7b(args.load_path, num_checkpoints)
 
-    config = GPT2Config.from_pretrained(args.load_path)
+    config = MistralConfig.from_pretrained(args.load_path)
 
     internal_state_dict = {}
     for layer_id in range(config.num_hidden_layers):
