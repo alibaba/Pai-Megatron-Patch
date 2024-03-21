@@ -27,7 +27,11 @@ np.random.seed(seed)
 torch.manual_seed(seed)
 
 from safetensors.torch import load_file
-from transformers import AutoTokenizer, GPT2Config, LlamaConfig, Qwen2Config
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+)
 from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint
 
 
@@ -391,7 +395,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
     # import pdb
     # pdb.set_trace()
 
-    config = LlamaConfig.from_pretrained(args.load_path)
+    config = AutoConfig.from_pretrained(args.load_path, trust_remote_code=True)
 
     internal_state_dict = {}
 

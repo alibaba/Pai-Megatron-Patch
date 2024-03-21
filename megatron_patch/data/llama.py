@@ -78,7 +78,7 @@ class LLamaRawDataset(torch.utils.data.Dataset):
             batch_size=3000,
             num_proc=16,
             remove_columns=list_data_dict.column_names,
-            load_from_cache_file=True,
+            load_from_cache_file=False,
             desc="Running Encoding"
         )
 
@@ -115,6 +115,7 @@ class LLamaRawDataset(torch.utils.data.Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
+        idx = 0
         raw_sample = self.samples[idx]
         return self.gpt_convert_example_to_feature(raw_sample)
 
