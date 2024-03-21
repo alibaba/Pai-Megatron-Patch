@@ -21,8 +21,13 @@ import types
 import numpy as np
 import torch
 import json
-from transformers import AutoTokenizer, GPT2Config, LlamaConfig
-from configuration_qwen import QWenConfig, QWenConfig_14b
+
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+)
+
 from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint
 seed = 1234
 random.seed(seed)
@@ -377,13 +382,12 @@ def convert_checkpoint_from_transformers_to_megatron(args):
         hf_state_dict = torch.load(os.path.join(args.load_path, checkpoint_name), map_location="cpu")
     else:
         if args.model_name == "qwen-7b" or args.model_name == "qwen-14b" or args.model_name == "qwen-72b":
-            from transformers import AutoModelForCausalLM
             hf_state_dict = AutoModelForCausalLM.from_pretrained(args.load_path, trust_remote_code=True).state_dict()
         else:
             print("Unrecognized model name, choose from qwen-7b, qwen-14b, qwen-72b!")
             exit(1)
 
-    config = GPT2Config.from_pretrained(args.load_path)
+    config = AutoConfig.from_pretrained(args.load_path, trust_remote_code=True)
 
     internal_state_dict = {}
 

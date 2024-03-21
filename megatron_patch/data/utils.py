@@ -29,19 +29,19 @@ def get_batch_on_this_tp_rank_original(data_iterator):
 
     if mpu.get_tensor_model_parallel_rank() == 0:
 
-        if data_iterator is not None:
-            data = next(data_iterator)
+        if isinstance(data_iterator, dict):
+            data = data_iterator
         else:
-            data = None
+            data = next(data_iterator)
 
         tokens_ = data['input_ids'].long()
         labels_ = data['labels'].long()
-
         tokens = tokens_[:, :-1].contiguous()
         labels = labels_[:, 1:].contiguous()
         # core/tensor_parallel/cross_entropy.py, target_mask = (target < vocab_start_index) | (target >= vocab_end_index)
         labels[labels == tokenizer.eos_token_id] = -100
         labels[labels == tokenizer.pad_token_id] = -100
+
         attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
             labels,
             -100,

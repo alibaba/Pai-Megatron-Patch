@@ -6,30 +6,38 @@ import transformers
 import torch.nn as nn
 from functools import partial
 from collections import defaultdict
-from megatron_patch.tokenizer import build_tokenizer
-from megatron_patch.arguments import get_patch_args
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+)
+from transformers.models.mixtral.modeling_mixtral import MixtralSparseMoeBlock
+from transformers.models.mixtral.configuration_mixtral import MixtralConfig
+from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint, load_sharded_checkpoint
+
 from megatron import initialize_megatron, get_args
 from megatron.utils import get_ltor_masks_and_position_ids
 from megatron.checkpointing import get_checkpoint_name, get_checkpoint_tracker_filename, read_metadata
-from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint, load_sharded_checkpoint
+
 import sys
 path_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
 sys.path.append(os.path.join(path_dir, "examples"))
-from llama2.pretrain_mcore_llama import model_provider
-from llama2.evaluate_huggingface_llama_moe import build_huggingface_model, replace_mlp_with_moe
-
+from qwen1_5.finetune_mcore_qwen_withGA import model_provider
+from megatron_patch.arguments import get_patch_args
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False    
 torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
 
-
 def add_checkpointing_args(parser):
+
     parser.add_argument('--megatron-path',
                         type=str,
                         default=None,
                         help='Base directory of Megatron repository')
+
+
     parser.add_argument(
         '--convert_checkpoint_from_megatron_to_transformers',
         action='store_true',
@@ -38,28 +46,33 @@ def add_checkpointing_args(parser):
          'If False, convert a Transformers checkpoint to a Megatron checkpoint.'
          ),
     )
+
     parser.add_argument(
         '--load_path',
         type=str,
         required=True,
         help='Path to the checkpoint to convert.',
     )
+
     parser.add_argument(
         '--save_path',
         type=str,
         required=True,
         help='Path to the converted checkpoint.',
     )
+
     parser.add_argument(
         '--huggingface_model_path',
         type=str,
-        required=True,
+        required=
+        True,
     )
-    parser.add_argument('--print-checkpoint-structure', action='store_true')
+
     return parser
 
 
 def add_megatron_checkpoint_args(parser):
+
     parser.add_argument(
         "--target_tensor_model_parallel_size",
         type=int,
@@ -69,6 +82,7 @@ def add_megatron_checkpoint_args(parser):
             "Only used when converting a Transformers checkpoint to a Megatron checkpoint."
         ),
     )
+
     parser.add_argument(
         "--target_pipeline_model_parallel_size",
         type=int,
@@ -78,22 +92,13 @@ def add_megatron_checkpoint_args(parser):
             "Only used when converting a Transformers checkpoint to a Megatron checkpoint."
         ),
     )
+
     parser.add_argument(
         "--target_expert_model_parallel_size",
         type=int,
         default=1,
         help=(
             "The data parallel size of the converted checkpoint. "
-            "Only used when converting a Transformers checkpoint to a Megatron checkpoint."
-        ),
-    )
-    parser.add_argument(
-        "--make_vocab_size_divisible_by",
-        type=int,
-        default=128,
-        help=(
-            "Pad the vocab size to be divisible by this value. "
-            "This is added for computational efficieny reasons. "
             "Only used when converting a Transformers checkpoint to a Megatron checkpoint."
         ),
     )
@@ -116,31 +121,89 @@ def add_transformers_checkpoint_args(parser):
     return parser
 
 
+def build_huggingface_model(model_to_load, compute_dtype, random_init=False):
+
+    config = AutoConfig.from_pretrained(
+        model_to_load,
+        trust_remote_code=True,
+    )
+
+    if random_init:
+        model = AutoModelForCausalLM.from_config(
+            config=config,
+            torch_dtype=compute_dtype,
+            trust_remote_code=True
+        )
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_to_load,
+            torch_dtype=compute_dtype,
+            trust_remote_code=True
+        )
+
+    return config, model.eval()
+
+def replace_mlp_with_moe(args, model):
+
+    if args.group_query_attention:
+        num_key_value_heads = args.num_attention_heads // args.num_query_groups
+    else:
+        num_key_value_heads = args.num_query_groups
+
+    config = MixtralConfig(
+        intermediate_size=args.ffn_hidden_size,
+        hidden_size=args.hidden_size,
+        num_attention_heads=args.num_attention_heads,
+        num_local_experts=args.num_experts,
+        num_key_value_heads=num_key_value_heads,
+        rope_theta=args.rotary_base,
+        rms_norm_eps=args.norm_epsilon,
+        num_experts_per_tok=1,
+    )
+
+    def get_hidden_output(module, args, output):
+        return output[0]
+
+    for layer in model.model.layers:
+        mlp = MixtralSparseMoeBlock(config).to(args.params_dtype)
+        mlp.register_forward_hook(get_hidden_output)
+        layer.mlp = mlp
+
+    return model
+
+
+
 def create_huggingface_model(args):
     if not args.convert_checkpoint_from_megatron_to_transformers or args.num_experts is None:
         copy_huggingface_tokenizer(args.huggingface_model_path, args.save_path)
-        config, tokenizer, model = build_huggingface_model(args.huggingface_model_path, args.params_dtype)
+        config, model = build_huggingface_model(args.huggingface_model_path, args.params_dtype)
     else:
         copy_huggingface_tokenizer(args.huggingface_model_path, args.save_path, with_code=True)
         copy_huggingface_tokenizer(args.huggingface_model_path, args.load_path, with_code=True)
         config, tokenizer, model = build_huggingface_model(args.save_path, args.params_dtype, random_init=True)
         model = replace_mlp_with_moe(args, model)
-    print(config)
-    print(model)
-    return config, tokenizer, model.eval()
+
+    return config, model.eval()
 
 
-def create_megatron_model(args):
+def create_megatron_model(args, hf_config):
+    args.hidden_size = hf_config.hidden_size
+    args.num_layers = hf_config.num_hidden_layers
+    args.num_attention_heads = hf_config.num_attention_heads
+    args.kv_channels = args.hidden_size // args.num_attention_heads
+    args.ffn_hidden_size = hf_config.intermediate_size
+    args.num_query_groups = hf_config.num_key_value_heads
     model = model_provider()
-    tokenizer = build_tokenizer(args)
-    return tokenizer, model.eval()
+    return model.eval()
 
 
 def copy_huggingface_tokenizer(src_path, dst_path, with_code=False):
     assert os.path.exists(src_path)
     os.makedirs(dst_path, exist_ok=True)
     os.system("cp -rf " + src_path + "/config*.json " + dst_path)
-    os.system("cp -rf " + src_path + "/tokenizer* " + dst_path) 
+    os.system("cp -rf " + src_path + "/tokenizer* " + dst_path)
+    os.system("cp -rf " + src_path + "/vocab.json " + dst_path)
+    os.system("cp -rf " + src_path + "/merges.txt " + dst_path)
     if with_code:
         cur_dir = os.path.dirname(os.path.abspath(__file__))
         code_path = os.path.join(cur_dir, 'hf_llama_moe')
@@ -255,19 +318,6 @@ def load_megatron_model(args, model):
     return model
 
 
-def save_model_info(mgmodel, hgmodel, config):
-    with open('model_spec.txt', 'w') as f:
-        f.write(f'{config}\n\n')
-        f.write(f'{mgmodel}\n\n')
-        f.write(f'{hgmodel}\n\n')
-
-        for k, v in mgmodel.named_parameters():
-            f.write(f'{k}, {v.shape}\n')
-        f.write('\n\n')
-        for k, v in hgmodel.named_parameters():
-            f.write(f'{k}, {v.shape}\n')
-
-
 def convert_checkpoint_from_megatron_to_transformers(mgmodel, hgmodel, args):
     query_group = args.num_query_groups
     hidden_size = args.hidden_size
@@ -302,20 +352,29 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hgmodel, args):
         hgmodel.lm_head.weight.copy_(mgmodel.output_layer.weight)
 
 
-def convert_checkpoint_from_transformers_to_megatron(mgmodel, hgmodel, args):
-    query_group = args.num_query_groups
-    hidden_dim = args.hidden_size
-    head_dim = hidden_dim // args.num_attention_heads
+def convert_checkpoint_from_transformers_to_megatron(mgmodel, hgmodel, args, hf_config):
+    num_query_groups = hf_config.num_key_value_heads
+    hidden_dim = hf_config.hidden_size
+    head_dim = hidden_dim // hf_config.num_attention_heads
     num_experts = args.num_experts
     with torch.no_grad():
         mgmodel.embedding.word_embeddings.weight.copy_(hgmodel.model.embed_tokens.weight)
         for mglayer, hglayer in zip(mgmodel.decoder.layers, hgmodel.model.layers):
             mglayer.self_attention.linear_qkv.layer_norm_weight.copy_(hglayer.input_layernorm.weight)
-            q = hglayer.self_attn.q_proj.weight.view([query_group, -1, head_dim, hidden_dim])
-            k = hglayer.self_attn.k_proj.weight.view([query_group, -1, head_dim, hidden_dim])
-            v = hglayer.self_attn.v_proj.weight.view([query_group, -1, head_dim, hidden_dim])
+
+            q = hglayer.self_attn.q_proj.weight.view([num_query_groups, -1, head_dim, hidden_dim])
+            k = hglayer.self_attn.k_proj.weight.view([num_query_groups, -1, head_dim, hidden_dim])
+            v = hglayer.self_attn.v_proj.weight.view([num_query_groups, -1, head_dim, hidden_dim])
             qkv = torch.cat([q, k, v], dim=1).view(-1, hidden_dim).contiguous()
+
+            q_bias = hglayer.self_attn.q_proj.bias.view([num_query_groups, -1])
+            k_bias = hglayer.self_attn.k_proj.bias.view([num_query_groups, -1])
+            v_bias = hglayer.self_attn.v_proj.bias.view([num_query_groups, -1])
+            qkv_bias = torch.cat([q_bias, k_bias, v_bias], dim=1).view(-1).contiguous()
+
             mglayer.self_attention.linear_qkv.weight.copy_(qkv)
+            mglayer.self_attention.linear_qkv.bias.copy_(qkv_bias)
+
             mglayer.self_attention.linear_proj.weight.copy_(hglayer.self_attn.o_proj.weight)
             fc1_weight = torch.cat([hglayer.mlp.gate_proj.weight, hglayer.mlp.up_proj.weight])
             if num_experts is None:
@@ -356,7 +415,7 @@ def save_mgmodel(args, mgmodel, load_path, save_path):
     group_per_split = args.num_query_groups // args.target_tensor_model_parallel_size
     full_model = mgmodel.state_dict_for_save_checkpoint()
     for k in list(full_model.keys()):
-        if full_model[k] is None:
+        if full_model[k] is None or "_extra_state" in k:
             full_model.pop(k)
     pattern = r'local_experts\.(\d+)\.'
     num_local_experts = args.num_experts // args.target_expert_model_parallel_size if args.num_experts else 0
@@ -612,54 +671,21 @@ def add_ckpt_args(parser):
     return parser
 
 
-def check_args_is_valid(args, config):
-    assert args.target_pipeline_model_parallel_size == 1, 'not support pipeline yet'
-    assert args.ffn_hidden_size == config.intermediate_size
-    assert args.hidden_size == config.hidden_size
-    assert args.num_layers == config.num_hidden_layers
-    assert args.norm_epsilon == config.rms_norm_eps
-    if args.group_query_attention:
-        assert args.num_query_groups % args.target_tensor_model_parallel_size == 0, 'num_query_groups'
-        assert args.num_query_groups == config.num_key_value_heads
-    else:
-        args.num_query_groups = config.num_key_value_heads
-        assert args.num_attention_heads % args.target_tensor_model_parallel_size == 0    
-    if args.num_experts:
-        assert args.num_experts % args.target_expert_model_parallel_size == 0
-
-
-def check_exists(args):
-    assert os.path.exists(args.huggingface_model_path)
-    if args.convert_checkpoint_from_megatron_to_transformers:
-        assert os.path.exists(os.path.join(args.load, 'latest_checkpointed_iteration.txt'))
-    else:
-        pass
-
-
 def main():
     initialize_megatron(extra_args_provider=add_ckpt_args)
-    print('initialize megatron')
     args = get_args()
-    check_exists(args)
-    print('create huggingface model, load ckpt or random init')
-    config, hgtokenizer, hgmodel = create_huggingface_model(args)
-    check_args_is_valid(args, config)
-    print('create megatron model, random init')
-    mgtokenizer, mgmodel = create_megatron_model(args)
-    check_tokenizer_is_same(hgtokenizer, mgtokenizer)
-    save_model_info(mgmodel, hgmodel, config)
-
+    hf_config, hf_model = create_huggingface_model(args)
+    mg_model = create_megatron_model(args, hf_config)
     if args.convert_checkpoint_from_megatron_to_transformers:
-        load_megatron_model(args, mgmodel)
-        convert_checkpoint_from_megatron_to_transformers(mgmodel, hgmodel, args)
-        check_mg_eg_forward(mgmodel, hgmodel, args)
-        save_hgmodel(args, hgmodel)
+        load_megatron_model(args, mg_model)
+        convert_checkpoint_from_megatron_to_transformers(mg_model, hf_model, args)
+        check_mg_eg_forward(mg_model, hf_model, args)
+        save_hgmodel(args, hf_model)
     else:
-        hgmodel.from_pretrained(args.load_path)
-        convert_checkpoint_from_transformers_to_megatron(mgmodel, hgmodel, args)
-        check_mg_eg_forward(mgmodel, hgmodel, args)
-        save_mgmodel(args, mgmodel, args.load_path, args.save_path)
-
+        hf_model.from_pretrained(args.load_path)
+        convert_checkpoint_from_transformers_to_megatron(mg_model, hf_model, args, hf_config)
+        check_mg_eg_forward(mg_model, hf_model, args)
+        save_mgmodel(args, mg_model, args.load_path, args.save_path)
 
 if __name__ == "__main__":
     main()

@@ -367,8 +367,26 @@ def convert_checkpoint_from_transformers_to_megatron(args):
     # create `release` dir in args.load_path
     release_dir = os.path.join(args.save_path, "release")
     os.makedirs(release_dir, exist_ok=True)
-
     config = AutoConfig.from_pretrained(args.load_path)
+    # megatron args
+    megatron_args = {
+        "orig_vocab_size": config.vocab_size,
+        "hidden_size": config.hidden_size,
+        "num_layers": config.num_hidden_layers,
+        "num_attention_heads": config.num_attention_heads,
+        "tensor_model_parallel_size": args.target_tensor_model_parallel_size,
+        "pipeline_model_parallel_size": args.target_pipeline_model_parallel_size,
+        "data_parallel_size": args.target_data_parallel_size,
+        "make_vocab_size_divisible_by": args.make_vocab_size_divisible_by,
+        "rank": 0,
+        "tokenizer_type": "GPT2BPETokenizer",
+    }
+
+    margs = types.SimpleNamespace()
+    for k, v in megatron_args.items():
+        setattr(margs, k, v)
+
+
 
     if args.model_name == "mixtral-8x7b":
         state_dict = AutoModelForCausalLM.from_pretrained(args.load_path).state_dict()

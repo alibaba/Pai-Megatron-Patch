@@ -168,6 +168,20 @@ def build_tokenizer(args):
         tokenizer.eos_token_id = tokenizer.eod_id
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
+    elif args.patch_tokenizer_type == 'Qwen2Tokenizer':
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.load,
+            model_max_length=args.seq_length,
+            padding_side="right",
+            use_fast=False,
+            trust_remote_code=True
+        )
+
+        tokenizer.add_special_tokens(special_tokens_dict=dict(pad_token="<|extra_0|>"))
+        args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
+
+
     elif args.patch_tokenizer_type == 'QwenVLTokenizer':
         from .tokenization_qwen_vl import QWenTokenizer
         tokenizer = QWenTokenizer.from_pretrained(

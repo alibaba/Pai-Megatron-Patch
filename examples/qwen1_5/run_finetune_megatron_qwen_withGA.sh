@@ -7,12 +7,12 @@ MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-231007
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=7
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=4
+GPUS_PER_NODE=1
 
 elif [ $ENV = dlc ]; then
 
@@ -221,11 +221,9 @@ megatron_options="  \
         --patch-tokenizer-type LLamaTokenizer \
         --swiglu \
         --normalization RMSNorm \
-        --use-llama2-rotary-position-embeddings \
+        --use-rotary-position-embeddings \
         --position-embedding-type rope \
-        --untie-embeddings-and-output-weights \
-        --rotary-base 1000000 \
-        --rotary-scale-factor 1 \
+        --untie-embeddings-and-output-weights
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS ../llama2/finetune_megatron_llama_withGA.py

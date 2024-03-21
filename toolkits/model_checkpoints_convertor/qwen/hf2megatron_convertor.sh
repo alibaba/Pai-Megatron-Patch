@@ -26,7 +26,7 @@ export PYTHONPATH=${MEGATRON_PATH}:$PYTHONPATH
 
 if [[ "$MN" == *"qwen1.5"* ]]; then
 
-python checkpoint_reshaping_and_interoperability_qwen1.5.py \
+python hf2megatron_1.5.py \
 --load_path ${SOURCE_CKPT_PATH} \
 --save_path ${TARGET_CKPT_PATH} \
 --target_params_dtype fp16 \
@@ -39,7 +39,7 @@ ${do_options}
 
 else
     
-python checkpoint_reshaping_and_interoperability.py \
+python hf2megatron_1.0.py \
 --load_path ${SOURCE_CKPT_PATH} \
 --save_path ${TARGET_CKPT_PATH} \
 --target_params_dtype fp16 \

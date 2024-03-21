@@ -344,7 +344,6 @@ def get_element_from_dict_by_path(d, path):
     return d
 
 def convert_checkpoint_from_transformers_to_megatron(args):
-
     assert args.world_size // args.target_expert_model_parallel_size == args.target_tensor_model_parallel_size
 
     os.makedirs(args.save_path, exist_ok=True)
