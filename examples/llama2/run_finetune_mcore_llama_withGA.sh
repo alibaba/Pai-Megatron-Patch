@@ -1,5 +1,5 @@
 #!/bin/bash
-# sh run_finetune_mcore_llama_withGA.sh dsw ../.. 7B 1 8 1e-5 1e-5 512 512 0 bf16 1 1 sel true false true false 100 /mnt/mistral-datasets/DKYoon-SlimPajama-6B.jsonl /mnt/mistral-datasets/slim_small_valid.json /mnt/llama2-ckpts/Llama-2-7b-hf 2000 0 debug
+# sh run_finetune_mcore_llama_withGA.sh dsw ../.. 7B 1 8 1e-5 1e-5 512 512 0 bf16 1 1 sel true false true false true 100 /mnt/mistral-datasets/DKYoon-SlimPajama-6B.jsonl /mnt/mistral-datasets/slim_small_valid.json /mnt/llama2-ckpts/Llama-2-7b-hf 2000 0 debug
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
