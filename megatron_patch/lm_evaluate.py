@@ -32,6 +32,7 @@ from megatron.arguments import core_transformer_config_from_args
 
 from lm_eval import utils
 from lm_eval.api.instance import Instance
+from lm_eval.models.utils import chunks
 from lm_eval.models.huggingface import HFLM, eval_logger
 
 from megatron_patch.training import get_model
@@ -153,7 +154,7 @@ class EvalHarnessAdaptor(HFLM):
                 return (-len(toks), tuple(toks))
 
             reord = utils.Reorderer(requests, _collate)
-            for chunk in utils.chunks(tqdm(reord.get_reordered(), disable=disable_tqdm), self.batch_size):
+            for chunk in chunks(tqdm(reord.get_reordered(), disable=disable_tqdm), self.batch_size):
                 inps, contlens, inplens, padding_length = [], [], [], None
                 for _, context_enc, continuation_enc in chunk:
                     # when too long to fit in context, truncate from the left
