@@ -40,7 +40,7 @@ try:
     from megatron.core import DistributedDataParallel as DDP
 except:
     from megatron.model import DistributedDataParallel as DDP
-
+from megatron_patch.model.mixtral.moe.moe_layer import apply_load_balance
 from megatron.model.vision.knn_monitor import compute_feature_bank
 from megatron.checkpointing import load_checkpoint, save_checkpoint
 
@@ -619,6 +619,10 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
                        optimizer,
                        opt_param_scheduler,
                        config)
+
+        if args.load_balance_interval and iteration % args.load_balance_interval == 0 and iteration != 0:
+            apply_load_balance(model, optimizer)
+
         iteration += 1
         args.consumed_train_samples += mpu.get_data_parallel_world_size() * \
                                        args.micro_batch_size * \

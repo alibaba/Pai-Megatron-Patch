@@ -357,6 +357,9 @@ def get_patch_args(parser):
     group.add_argument('--moe-input-feature-slicing', action='store_true',
                        help='Enable moe all2all performance optimization.')
 
+    group.add_argument('--load-balance-interval', type=int, default=None,
+                       help='Update interval for expert placement in MOE load balancing.')
+
     group.add_argument('--disable-bias-linear-fc', action='store_false',
                        help='Disable bias in the linear layers',
                        dest='add_bias_linear_fc')

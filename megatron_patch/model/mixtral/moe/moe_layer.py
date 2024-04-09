@@ -14,7 +14,11 @@
 
 from abc import ABC, abstractmethod
 import torch
+from torch.nn.modules.module import Module
+from typing import Any, Optional, Tuple
+import torch.nn as nn
 
+from megatron import get_args
 from megatron.core import parallel_state
 from megatron.core.transformer.module import MegatronModule
 
@@ -22,6 +26,7 @@ from .experts import GroupedMLP, SequentialMLP
 from .router import TopKRouter
 from .token_dispatcher import MoEDroplessTokenDispatcher
 from ..transformer_config import TransformerConfig
+from ..load_balance import LoadBalancer
 from ..transformer.mlp import MLPSubmodules
 
 class BaseMoELayer(MegatronModule, ABC):
@@ -73,6 +78,10 @@ class MoELayer(BaseMoELayer):
         self.token_dispatcher = MoEDroplessTokenDispatcher(
             self.num_local_experts, self.local_expert_indices, config=self.config
         )
+        args = get_args()
+        self.enable_moe_load_balance = args.load_balance_interval is not None
+        self.load_balancer = LoadBalancer(self.experts, self.router)
+
 
     def forward(self, hidden_states: torch.Tensor):
         """
@@ -103,8 +112,42 @@ class MoELayer(BaseMoELayer):
             indices,
             global_local_map,
         ) = self.token_dispatcher.token_permutation(hidden_states, scores, indices)
+
+        # MoE expert load balance
+        if self.enable_moe_load_balance:
+            with torch.no_grad():
+                self.load_balancer.update_load(tokens_per_expert)
         expert_output, mlp_bias = self.experts(dispatched_input, tokens_per_expert)
         output, mlp_bias = self.token_dispatcher.token_unpermutation(
             expert_output, scores, indices, global_local_map, mlp_bias
         )
         return output, mlp_bias
+
+def apply_load_balance(model: nn.Module, optim: Any) -> None:
+    """
+    apply load balance to every experts in the model
+    """
+
+    def _apply_recursive(module: nn.Module):
+        for _, sub_module in module.named_children():
+            if isinstance(sub_module, MoELayer):
+                # if sub_module.enable_load_balance == True:
+                sub_module.load_balancer.balance_load(optim)
+            _apply_recursive(sub_module)
+
+    torch.cuda.empty_cache()
+    _apply_recursive(model[0])
+    torch.cuda.empty_cache()
+
+
+def print_token_dist(model: nn.Module, step) -> None:
+    """
+    apply load balance to every experts in the model
+    """
+
+    def _apply_recursive(module: nn.Module):
+        for _, sub_module in module.named_children():
+            if isinstance(sub_module, MoELayer):
+                sub_module.load_balancer.print_token_dist(step)
+            _apply_recursive(sub_module)
+    _apply_recursive(model[0])
