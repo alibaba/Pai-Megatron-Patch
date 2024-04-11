@@ -26,7 +26,7 @@ data_dir=/mnt/workspace/qwen-datasets/wudao_200g
 #开始数据清洗流程
 dataset_dir=$(dirname $data_dir)
 mkdir -p ${dataset_dir}/cleaned_wudao_dataset
-cd ${WORK_DIR}/PAI-Megatron-Patch/toolkits/pretrain_data_preprocessing
+cd ${WORK_DIR}/Pai-Megatron-Patch/toolkits/pretrain_data_preprocessing
 python preprocess_wudao2.py -i ${data_dir} -o ${dataset_dir}/cleaned_wudao_dataset -p 32
 
 # 合并清洗后的数据，移除过程数据
@@ -58,7 +58,7 @@ split -l $TRAIN_NUM --numeric-suffixes --additional-suffix=.json ${dataset_dir}/
 mv ${dataset_dir}/wudao/00.json ${dataset_dir}/wudao_train.json
 mv ${dataset_dir}/wudao/01.json ${dataset_dir}/wudao_valid.json
 rm ${dataset_dir}/wudao/merged_wudao_cleaned.json
-cd ${WORK_DIR}/PAI-Megatron-Patch/toolkits/pretrain_data_preprocessing
+cd ${WORK_DIR}/Pai-Megatron-Patch/toolkits/pretrain_data_preprocessing
 python convert_json_to_list.py
 ```
 
@@ -87,7 +87,7 @@ data_dir=/mnt/workspace/qwen-datasets/wudao_200g
 #开始数据清洗流程
 dataset_dir=$(dirname $data_dir)
 mkdir -p ${dataset_dir}/cleaned_wudao_dataset
-cd ${WORK_DIR}/PAI-Megatron-Patch/toolkits/pretrain_data_preprocessing
+cd ${WORK_DIR}/Pai-Megatron-Patch/toolkits/pretrain_data_preprocessing
 # 此处与上一节不同，增加了key参数设为text
 python preprocess_wudao2.py -i ${data_dir} -o ${dataset_dir}/cleaned_wudao_dataset -k text -p 32
 
@@ -154,7 +154,7 @@ qwen-datasets
 
 3. 制作MMAP格式预训练数据集。
 
-在DSW的Terminal中进入代码目录：/mnt/workspace/PAI-Megatron-Patch/toolkits/pretrain_data_preprocessing。查看run_make_pretraining_dataset.sh脚本内容。里面有6个启动参数需要在运行时输入，具体参数列表如下：
+在DSW的Terminal中进入代码目录：/mnt/workspace/Pai-Megatron-Patch/toolkits/pretrain_data_preprocessing。查看run_make_pretraining_dataset.sh脚本内容。里面有6个启动参数需要在运行时输入，具体参数列表如下：
 
 ```plain
 MEGATRON_PATH=$1                   # 设置开源Megatron的代码路径
@@ -173,10 +173,10 @@ export dataset_dir=/mnt/workspace/qwen-datasets
 export WORK_DIR=/mnt/workspace
 
 # 分别为训练集、验证集生成mmap格式预训练数据集
-cd ${WORK_DIR}/PAI-Megatron-Patch/toolkits/pretrain_data_preprocessing
+cd ${WORK_DIR}/Pai-Megatron-Patch/toolkits/pretrain_data_preprocessing
 bash run_make_pretraining_dataset.sh \
 /root/Megatron-LM-23.04 \
-${WORK_DIR}/PAI-Megatron-Patch/ \
+${WORK_DIR}/Pai-Megatron-Patch/ \
 ${dataset_dir}/cleaned_zst/ \
 qwenbpe \
 ${dataset_dir}/wudao/ \
