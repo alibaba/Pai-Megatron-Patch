@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_pretrain_megatron_mistral.sh dsw /workspace/Pai-Megatron-Patch 7B 2 16 1e-5 1e-6 2048 2048 0 bf16 8 1 sel true false true false 100000  /mnt/llama2-datasets/alpaca_data.json /mnt/mistral-ckpts/Mistral-7B-v0.1-to-mg-tp8-pp1 10000000000 100000000 /mnt/output_patch_test
+#sh run_pretrain_megatron_mistral.sh dsw ../.. 7B 1 8 1e-5  1e-6 128 128 0 bf16 4 1 sel true false false false 10000 wudao_mistralbpe_content_document_small /mnt/mistral-ckpts/Mistral-7B-v0.1-hf-to-megatron-tp4-pp1/ 100000000 10000 /mnt/output_megatron_mistral
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -185,7 +185,7 @@ megatron_options="  \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type MistralTokenizer \
-        --dataset LLama-Pretrain-Raw \
+        --dataset LLama-Pretrain-Idxmap \
         --sliding-window ${SLW} \
         --swiglu \
         --normalization RMSNorm \
