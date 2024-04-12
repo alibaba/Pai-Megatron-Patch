@@ -135,3 +135,37 @@ wudao_valid.json   \
 2   \
 /mnt/output_megatron_llama2/
 ```
+
+### 带Global BS和Gradient Accumulation的有监督微调
+
+```bash
+cd /workspace/PAI-Megatron-Patch/examples/llama2
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/alpaca_zh-llama2-train.json
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/alpaca_zh-llama2-valid.json
+sh run_finetune_megatron_llama_withGA.sh  \
+dsw  \
+../../ \
+13B     \
+1      \
+32     \
+1e-5   \
+1e-6   \
+128   \
+128     \
+0      \
+bf16   \
+4      \
+1      \
+sel    \
+true   \
+false  \
+false  \
+false \
+100 \
+alpaca_zh-llama2-train.json   \
+alpaca_zh-llama2-valid.json   \
+/mnt/llama2-ckpts/Llama-2-13b-hf-to-megatron-tp4-pp1   \
+1000 \
+10 \
+/mnt/output_megatron_llama2/
+```
