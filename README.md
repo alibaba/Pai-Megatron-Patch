@@ -61,7 +61,7 @@ dsw-registry.cn-wulanchabu.cr.aliyuncs.com/pai/pytorch-training:23.12-gpu-py310-
 
 [Megatron LLama2_Training](examples/llama2/README.md)
 
-[Megatron Mistral_Training](examples/llama2/README.md)
+[Megatron Mistral_Training](examples/mistral/README.md)
 
 [RLHF](rlhf/README.md)
 
