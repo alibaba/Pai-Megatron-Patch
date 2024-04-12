@@ -51,6 +51,6 @@ python hf2megatron_1.0.py \
 ${do_options}
 
 fi
-
+cp "$SOURCE_CKPT_PATH/merges.txt" "$TARGET_CKPT_PATH/"
 ELAPSED_TIME=$(($SECONDS - $START_TIME))
 echo "$(($ELAPSED_TIME/60)) min $(($ELAPSED_TIME%60)) sec"
