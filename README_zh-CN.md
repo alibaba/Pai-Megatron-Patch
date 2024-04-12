@@ -68,13 +68,17 @@ $ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.g
 
 ## 快速开始
 
+[镜像地址] 
+
+dsw-registry.cn-wulanchabu.cr.aliyuncs.com/pai/pytorch-training:23.12-gpu-py310-cu123-ubuntu22.04-megatron-patch-llm
+
 [环境准备](https://help.aliyun.com/document_detail/2505831.html?spm=5176.28352543.J_9l_YP1wy4J7aEdtojTyUD.1.347850adeLHhmP&tab=onestop)
 
 [数据准备](toolkits/pretrain_data_preprocessing/README.md)
 
-[HFDS有监督微调&继续预训练](examples/hfds.md)
+[Megatron版LLama2有监督微调&继续预训练](examples/llama2/README.md)
 
-[Megatron有监督微调&继续预训练](examples/megatron.md)
+[Megatron版Mistral有监督微调&继续预训练](examples/llama2/README.md)
 
 [人类反馈强化学习](rlhf/README.md)
 

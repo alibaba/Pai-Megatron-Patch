@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_finetune_megatron_mistral.sh dsw ../.. 7B 2 1e-5 1e-6 80 80 0 bf16 8 1 sel true false true false  /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-datasets/alpaca_data.json /mnt/mistral-ckpts/Mistral-7B-v0.1-to-mg-tp8-pp1/ 2 /mnt/output_patch_test
+#sh run_finetune_megatron_mistral.sh dsw ../.. 7B 1 1e-5 1e-6 128 128 0 bf16 4 1 sel true false false false alpaca_zh-mistral-train.json alpaca_zh-mistral-valid.json /mnt/mistral-ckpts/Mistral-7B-v0.1-hf-to-megatron-tp4-pp1 2 /mnt/output_megatron_mistral/
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
