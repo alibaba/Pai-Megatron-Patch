@@ -78,7 +78,7 @@ dsw-registry.cn-wulanchabu.cr.aliyuncs.com/pai/pytorch-training:23.12-gpu-py310-
 
 [Megatron版LLama2有监督微调&继续预训练](examples/llama2/README.md)
 
-[Megatron版Mistral有监督微调&继续预训练](examples/llama2/README.md)
+[Megatron版Mistral有监督微调&继续预训练](examples/mistral/README.md)
 
 [人类反馈强化学习](rlhf/README.md)
 
