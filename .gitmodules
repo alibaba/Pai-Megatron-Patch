@@ -1,6 +1,3 @@
-[submodule "Megatron-LM-230512"]
-	path = Megatron-LM-230512
-	url = https://github.com/NVIDIA/Megatron-LM.git
 [submodule "Megatron-LM-231007"]
 	path = Megatron-LM-231007
 	url = https://github.com/NVIDIA/Megatron-LM.git
@@ -10,6 +7,12 @@
 [submodule "LM-Evaluation-Harness-240310"]
 	path = LM-Evaluation-Harness-240310
 	url = https://github.com/jerryli1981/lm-evaluation-harness.git
-[submodule "Megatron-LM-240322"]
-	path = Megatron-LM-240322
-	url = https://github.com/NVIDIA/Megatron-LM.git
+[submodule "Megatron-LM-240405"]
+	path = Megatron-LM-240405
+	url = https://github.com/jerryli1981/Megatron-LM-240405
+[submodule "Megatron-LM-MegaBlocks"]
+	path = Megatron-LM-MegaBlocks
+	url = https://github.com/jerryli1981/Megatron-LM-MegaBlocks
+[submodule "Bigcode-Evaluation-Harness-240327"]
+	path = Bigcode-Evaluation-Harness-240327
+	url = https://github.com/jerryli1981/bigcode-evaluation-harness

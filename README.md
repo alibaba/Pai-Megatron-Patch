@@ -1,3 +1,12 @@
+## Quick Start
+
+|  | Megatron-LM-Dense | Megatron-Core-Dense | Megatron-Core-MoE | MegaBlocks-MoE |
+| --- | --- | --- | --- | --- |
+| LLama2 |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama2/#Megatron-LM-Dense模型训练流程) | TBD | TBD |  TBD |
+| Mistral |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/mistral/#Megatron-LM-Dense模型训练流程) | TBD | TBD |  TBD |
+| Qwen1.5 |  TBD | TBD | TBD |  TBD |
+
+
 ## Introduction
 English | [简体中文](./README_zh-CN.md)
 
@@ -14,6 +23,7 @@ What's New:
 - **Support training Mistral-7B, Yi-6B and Codellama-34B** [🔥🔥 2023.11.16]
 - **Upgrade Megatron-LM for Llama2, qwen and baichuan2 to use transformer engine and fp8.** [🔥🔥 2023.10.19]
 - **Support training qwen-14B and baichuan2-13B model by using Megatron-LM.** [🔥🔥 2023.10.08]
+
 ## Highlights
 Pai-Megatron-Patch is developed by the Alibaba Cloud Machine Learning Platform (PAI) algorithm team.  The tool aims to assist developers in quickly getting started with Lingjun products and completing the entire development pipeline for LLM, including efficient distributed training, supervised fine-tuning, and offline model inference or verification. It has several merits as follows:
 
@@ -21,6 +31,7 @@ Pai-Megatron-Patch is developed by the Alibaba Cloud Machine Learning Platform (
 - Support for model weight conversion: Mapping operator namespaces between Huggingface, Megatron, and Transformer Engine.
 - Support for FP8 training acceleration in Flash Attention 2.0 and Transformer Engine modes, ensuring training convergence.
 - Rich and user-friendly usage examples, offering best practices for the entire workflow of LLM pre-training, fine-tuning, evaluation, and inference, as well as reinforcement learning.
+
 ## Framework
 The design philosophy of Pai-Megatron-Patch is to avoid invasive modifications to the source code of Megatron-LM. In other words, it does not add new modules directly to Megatron-LM. Instead, the functions that need expansion and improvement are presented in the form of patch. This decoupling ensures that users can continue to embrace the best practices of LLM without being affected by upgrades of Megatron-LM.
 
@@ -32,11 +43,6 @@ In the reinforcement learning section, the patch offers PPO training workflows, 
 <img src=patch.png width=600 height=400 />
 </div>
 
-## Installation
-
-```bash
-$ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
-```
 
 ## Technical Reports
 - [基于Megatron-Core的稀疏大模型训练工具：阿里云MoE大模型最佳实践](https://mp.weixin.qq.com/s/DkrWEEJ7IxirwWd3qB9Bng)
@@ -48,24 +54,6 @@ $ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.g
 - [预训练知识度量比赛夺冠！阿里云PAI发布知识预训练工具](https://zhuanlan.zhihu.com/p/449487792)
 - [阿里云PAI获得FewCLUE基于大模型的小样本学习双料冠军](https://developer.aliyun.com/article/788081?spm=a2c6h.12873639.article-detail.17.11c5383cHpFZks&tlog=yuekan_8)
 
-
-## Quick Start
-
-[Image] 
-
-dsw-registry.cn-wulanchabu.cr.aliyuncs.com/pai/pytorch-training:23.12-gpu-py310-cu123-ubuntu22.04-megatron-patch-llm
-
-[Environment Preparation](https://help.aliyun.com/document_detail/2505831.html?spm=5176.28352543.J_9l_YP1wy4J7aEdtojTyUD.1.347850adeLHhmP&tab=onestop)
-
-[Data Preparation](toolkits/pretrain_data_preprocessing/README.md)
-
-[Megatron LLama2_Training](examples/llama2/README.md)
-
-[Megatron Mistral_Training](examples/mistral/README.md)
-
-[RLHF](rlhf/README.md)
-
-[Inference](megatron_patch/generation/megatron.md)
 
 ## Contact
 Use [Dingtalk](https://www.dingtalk.com/en) to scan blow QR code

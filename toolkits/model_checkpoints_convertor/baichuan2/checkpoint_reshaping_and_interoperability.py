@@ -789,8 +789,6 @@ def convert_checkpoint_from_megatron_to_transformers(args):
             if op_name + "." + weight_or_bias not in tensor_parallel_params_mg:
                 params = val.to(dtype)
             else:
-                # import pdb
-                # pdb.set_trace()
                 dim = 1 if op_name in ["self_attention.dense", "mlp.dense_4h_to_h"] else 0
                 params = torch.cat(
                     [val]

@@ -18,7 +18,10 @@ import torch
 from torch.utils.data import Dataset
 import transformers
 from transformers.trainer_pt_utils import LabelSmoother
-from megatron import get_args
+try:
+    from megatron import get_args
+except:
+    from megatron.training import get_args
 
 from megatron_patch.tokenizer import get_tokenizer
 

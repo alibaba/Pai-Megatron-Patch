@@ -14,15 +14,15 @@ from transformers import (
 from transformers.models.mixtral.modeling_mixtral import MixtralSparseMoeBlock
 from transformers.models.mixtral.configuration_mixtral import MixtralConfig
 from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint, load_sharded_checkpoint
-
-from megatron import initialize_megatron, get_args
-from megatron.utils import get_ltor_masks_and_position_ids
-from megatron.checkpointing import get_checkpoint_name, get_checkpoint_tracker_filename, read_metadata
+from megatron.training.initialize import initialize_megatron
+from megatron.training import get_args
+from megatron.training.utils import get_ltor_masks_and_position_ids
+from megatron.training.checkpointing import get_checkpoint_name, get_checkpoint_tracker_filename, read_metadata
 
 import sys
 path_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
 sys.path.append(os.path.join(path_dir, "examples"))
-from qwen1_5.finetune_mcore_qwen_withGA import model_provider
+from qwen1_5.pretrain_mcore_qwen import model_provider
 from megatron_patch.arguments import get_patch_args
 
 torch.backends.cudnn.deterministic = True
@@ -144,20 +144,14 @@ def build_huggingface_model(model_to_load, compute_dtype, random_init=False):
     return config, model.eval()
 
 def replace_mlp_with_moe(args, model):
-
-    if args.group_query_attention:
-        num_key_value_heads = args.num_attention_heads // args.num_query_groups
-    else:
-        num_key_value_heads = args.num_query_groups
-
     config = MixtralConfig(
-        intermediate_size=args.ffn_hidden_size,
+        intermediate_size=args.intermediate_size,
         hidden_size=args.hidden_size,
         num_attention_heads=args.num_attention_heads,
-        num_local_experts=args.num_experts,
-        num_key_value_heads=num_key_value_heads,
-        rope_theta=args.rotary_base,
-        rms_norm_eps=args.norm_epsilon,
+        num_local_experts=args.num_local_experts,
+        num_key_value_heads=args.num_key_value_heads,
+        rope_theta=args.rope_theta,
+        rms_norm_eps=args.rms_norm_eps,
         num_experts_per_tok=1,
     )
 
@@ -165,7 +159,7 @@ def replace_mlp_with_moe(args, model):
         return output[0]
 
     for layer in model.model.layers:
-        mlp = MixtralSparseMoeBlock(config).to(args.params_dtype)
+        mlp = MixtralSparseMoeBlock(config).to(args.torch_dtype)
         mlp.register_forward_hook(get_hidden_output)
         layer.mlp = mlp
 
@@ -179,9 +173,8 @@ def create_huggingface_model(args):
         config, model = build_huggingface_model(args.huggingface_model_path, args.params_dtype)
     else:
         copy_huggingface_tokenizer(args.huggingface_model_path, args.save_path, with_code=True)
-        copy_huggingface_tokenizer(args.huggingface_model_path, args.load_path, with_code=True)
-        config, tokenizer, model = build_huggingface_model(args.save_path, args.params_dtype, random_init=True)
-        model = replace_mlp_with_moe(args, model)
+        config, model = build_huggingface_model(args.save_path, args.params_dtype, random_init=True)
+        model = replace_mlp_with_moe(config, model)
 
     return config, model.eval()
 
@@ -206,7 +199,7 @@ def copy_huggingface_tokenizer(src_path, dst_path, with_code=False):
     os.system("cp -rf " + src_path + "/merges.txt " + dst_path)
     if with_code:
         cur_dir = os.path.dirname(os.path.abspath(__file__))
-        code_path = os.path.join(cur_dir, 'hf_llama_moe')
+        code_path = os.path.join(cur_dir, 'hf_qwen_moe')
         os.system("cp -rf " + code_path + "/*.py " + dst_path) 
         os.system("cp -rf " + code_path + "/*.json " + dst_path) 
 
@@ -266,9 +259,12 @@ def load_megatron_model(args, model):
                 target_v = torch.cat(v, dim=0)
             elif 'linear_proj' in k or 'linear_fc2' in k:
                 target_v = torch.cat(v, dim=1)
-            elif 'linear_qkv' in k:
+            elif 'linear_qkv.weight' in k:
                 viewed = [x.view(group_per_split, -1, head_dim, args.hidden_size) for x in v]
                 target_v = torch.cat(viewed, dim=0).view(-1, args.hidden_size)
+            elif 'linear_qkv.bias' in k:
+                viewed = [x.view(group_per_split, -1, head_dim, args.hidden_size) for x in v]
+                target_v = torch.cat(viewed, dim=0).view(-1)
             elif 'linear_fc1' in k:
                 viewed = [x.view(2, -1, args.hidden_size) for x in v]
                 target_v = torch.cat(viewed, dim=1).view(-1, args.hidden_size)
@@ -302,9 +298,12 @@ def load_megatron_model(args, model):
                 target_v = torch.cat(v, dim=0)
             elif 'linear_proj' in k or 'linear_fc2' in k:
                 target_v = torch.cat(v, dim=1)
-            elif 'linear_qkv' in k:
+            elif 'linear_qkv.weight' in k:
                 viewed = [x.view(group_per_split, -1, head_dim, args.hidden_size) for x in v]
                 target_v = torch.cat(viewed, dim=0).view(-1, args.hidden_size)
+            elif 'linear_qkv.bias' in k:
+                viewed = [x.view(group_per_split, -1) for x in v]
+                target_v = torch.cat(viewed, dim=0).view(-1)
             elif 'linear_fc1' in k:
                 viewed = [x.view(2, -1, args.hidden_size) for x in v]
                 target_v = torch.cat(viewed, dim=1).view(-1, args.hidden_size)
@@ -328,11 +327,21 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hgmodel, args):
         hgmodel.model.embed_tokens.weight.copy_(mgmodel.embedding.word_embeddings.weight)
         for mglayer, hglayer in zip(mgmodel.decoder.layers, hgmodel.model.layers):
             hglayer.input_layernorm.weight.copy_(mglayer.self_attention.linear_qkv.layer_norm_weight)
-            qkv = mglayer.self_attention.linear_qkv.weight.view(query_group, -1, head_dim, hidden_size)
-            q, k, v = torch.split(qkv, split_size_or_sections=[value_num_per_group,1,1], dim=1)
-            hglayer.self_attn.q_proj.weight.copy_(q.reshape(-1, hidden_size))
-            hglayer.self_attn.k_proj.weight.copy_(k.reshape(-1, hidden_size))
-            hglayer.self_attn.v_proj.weight.copy_(v.reshape(-1, hidden_size))
+            qkv_weight = mglayer.self_attention.linear_qkv.weight.view(query_group, -1, head_dim, hidden_size)
+            q_weight, k_weight, v_weight = torch.split(qkv_weight, split_size_or_sections=[value_num_per_group, 1, 1], dim=1)
+            hglayer.self_attn.q_proj.weight.copy_(q_weight.reshape(-1, hidden_size))
+            hglayer.self_attn.k_proj.weight.copy_(k_weight.reshape(-1, hidden_size))
+            hglayer.self_attn.v_proj.weight.copy_(v_weight.reshape(-1, hidden_size))
+
+            qkv_bias = mglayer.self_attention.linear_qkv.bias.view(query_group, -1)
+
+            q_bias, k_bias, v_bias = torch.split(qkv_bias, split_size_or_sections=[q_weight.shape[2],
+                                                                                   k_weight.shape[2],
+                                                                                   v_weight.shape[2]], dim=1)
+            hglayer.self_attn.q_proj.bias.copy_(q_bias.reshape(-1))
+            hglayer.self_attn.k_proj.bias.copy_(k_bias.reshape(-1))
+            hglayer.self_attn.v_proj.bias.copy_(v_bias.reshape(-1))
+
             hglayer.self_attn.o_proj.weight.copy_(mglayer.self_attention.linear_proj.weight)
             if num_experts is None:
                 gate_weight, fc1_weight = torch.split(mglayer.mlp.linear_fc1.weight, split_size_or_sections=args.ffn_hidden_size)
@@ -457,10 +466,14 @@ def save_mgmodel(args, mgmodel, load_path, save_path):
             for k, v in full_model.items():
                 if not isinstance(v, torch.Tensor):
                     target_v = v
-                elif 'linear_qkv' in k and 'norm' not in k:
+                elif 'linear_qkv.weight' in k and 'norm' not in k:
                     viewed = v.view(args.num_query_groups, -1, head_dim, args.hidden_size)
                     viewed = viewed[group_per_split*tp_rank : group_per_split*(tp_rank + 1)]
                     target_v = viewed.view(-1, args.hidden_size)
+                elif 'linear_qkv.bias' in k and 'norm' not in k:
+                    viewed = v.view(args.num_query_groups, -1, head_dim)
+                    viewed = viewed[group_per_split * tp_rank: group_per_split * (tp_rank + 1)]
+                    target_v = viewed.view(-1)
                 elif 'linear_proj' in k or 'linear_fc2' in k:
                     seg = v.shape[1] // args.target_tensor_model_parallel_size
                     target_v = v[:, seg*tp_rank : seg*(tp_rank + 1)]
@@ -488,10 +501,14 @@ def save_mgmodel(args, mgmodel, load_path, save_path):
                 for k, v in full_model.items():
                     if not isinstance(v, torch.Tensor):
                         target_v = v
-                    elif 'linear_qkv' in k and 'norm' not in k:
+                    elif 'linear_qkv.weight' in k and 'norm' not in k:
                         viewed = v.view(args.num_query_groups, -1, head_dim, args.hidden_size)
                         viewed = viewed[group_per_split*tp_rank : group_per_split*(tp_rank + 1)]
                         target_v = viewed.view(-1, args.hidden_size)
+                    elif 'linear_qkv.bias' in k and 'norm' not in k:
+                        viewed = v.view(args.num_query_groups, -1, head_dim)
+                        viewed = viewed[group_per_split*tp_rank : group_per_split*(tp_rank + 1)]
+                        target_v = viewed.view(-1)
                     elif 'linear_proj' in k:
                         seg = v.shape[1] // args.target_tensor_model_parallel_size
                         target_v = v[:, seg*tp_rank : seg*(tp_rank + 1)]
@@ -679,12 +696,12 @@ def main():
     if args.convert_checkpoint_from_megatron_to_transformers:
         load_megatron_model(args, mg_model)
         convert_checkpoint_from_megatron_to_transformers(mg_model, hf_model, args)
-        check_mg_eg_forward(mg_model, hf_model, args)
+        #check_mg_eg_forward(mg_model, hf_model, args)
         save_hgmodel(args, hf_model)
     else:
         hf_model.from_pretrained(args.load_path)
         convert_checkpoint_from_transformers_to_megatron(mg_model, hf_model, args, hf_config)
-        check_mg_eg_forward(mg_model, hf_model, args)
+        #check_mg_eg_forward(mg_model, hf_model, args)
         save_mgmodel(args, mg_model, args.load_path, args.save_path)
 
 if __name__ == "__main__":

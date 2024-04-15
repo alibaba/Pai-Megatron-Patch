@@ -17,7 +17,10 @@ import io
 import copy
 import json
 import torch
-from megatron import get_args
+try:
+    from megatron import get_args
+except:
+    from megatron.training import get_args
 from datasets import load_dataset
 from tqdm import tqdm
 

@@ -1,3 +1,11 @@
+## 快速开始
+
+|  | Megatron-LM-Dense | Megatron-Core-Dense | Megatron-Core-MoE | MegaBlocks-MoE |
+| --- | --- | --- | --- | --- |
+| LLama2 |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama2/#Megatron-LM-Dense模型训练流程) | TBD | TBD |  TBD |
+| Mistral |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/mistral/#Megatron-LM-Dense模型训练流程) | TBD | TBD |  TBD |
+| Qwen1.5 |  TBD | TBD | TBD |  TBD |
+
 ## Pai-Megatron-Patch是什么
 [English](./README.md) | 简体中文
 
@@ -59,31 +67,6 @@ Pai-Megatron-Patch中包含模型库，分词器，模型转换，强化学习�
 <div align=center>
 <img src=patch.png width=600 height=400 />
 </div>
-
-## 安装
-
-```bash
-$ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
-```
-
-## 快速开始
-
-[镜像地址] 
-
-dsw-registry.cn-wulanchabu.cr.aliyuncs.com/pai/pytorch-training:23.12-gpu-py310-cu123-ubuntu22.04-megatron-patch-llm
-
-[环境准备](https://help.aliyun.com/document_detail/2505831.html?spm=5176.28352543.J_9l_YP1wy4J7aEdtojTyUD.1.347850adeLHhmP&tab=onestop)
-
-[数据准备](toolkits/pretrain_data_preprocessing/README.md)
-
-[Megatron版LLama2有监督微调&继续预训练](examples/llama2/README.md)
-
-[Megatron版Mistral有监督微调&继续预训练](examples/mistral/README.md)
-
-[人类反馈强化学习](rlhf/README.md)
-
-[模型离线推理](megatron_patch/generation/megatron.md)
-
 
 
 ## 技术交流群
