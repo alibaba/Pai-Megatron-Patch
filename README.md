@@ -2,8 +2,8 @@
 
 |  | Megatron-LM-Dense | Megatron-Core-Dense | Megatron-Core-MoE | MegaBlocks-MoE |
 | --- | --- | --- | --- | --- |
-| LLama2 |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama2/#Megatron-LM-Dense模型训练流程) | TBD | TBD |  TBD |
-| Mistral |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/mistral/#Megatron-LM-Dense模型训练流程) | TBD | TBD |  TBD |
+| LLama2 |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama2/README.md#Megatron-LM-Dense模型训练流程) | TBD | TBD |  TBD |
+| Mistral |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/mistral/README.md#Megatron-LM-Dense模型训练流程) | TBD | TBD |  TBD |
 | Qwen1.5 |  TBD | TBD | TBD |  TBD |
 
 
