@@ -263,7 +263,7 @@ def load_megatron_model(args, model):
                 viewed = [x.view(group_per_split, -1, head_dim, args.hidden_size) for x in v]
                 target_v = torch.cat(viewed, dim=0).view(-1, args.hidden_size)
             elif 'linear_qkv.bias' in k:
-                viewed = [x.view(group_per_split, -1, head_dim, args.hidden_size) for x in v]
+                viewed = [x.view(group_per_split, -1) for x in v]
                 target_v = torch.cat(viewed, dim=0).view(-1)
             elif 'linear_fc1' in k:
                 viewed = [x.view(2, -1, args.hidden_size) for x in v]
