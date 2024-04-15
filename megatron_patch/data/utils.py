@@ -14,8 +14,14 @@
 
 import torch
 from megatron.core import mpu
-from megatron import get_args
-from megatron.utils import get_ltor_masks_and_position_ids
+try:
+    from megatron import get_args
+except:
+    from megatron.training import get_args
+try:
+    from megatron.utils import get_ltor_masks_and_position_ids
+except:
+    from megatron.training.utils import get_ltor_masks_and_position_ids
 
 from megatron_patch.tokenizer import get_tokenizer
 

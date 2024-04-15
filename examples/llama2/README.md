@@ -1,6 +1,33 @@
-## Megatron训练流程
-### 模型格式转换
-使用我们提供的模型转换脚本，将huggingface格式的模型文件转换为megatron格式：
+# Table of Contents
+   * [安装](#安装)
+   * [数据集&模型下载](#数据集&模型下载)
+   * [Megatron-LM-Dense模型训练流程](#Megatron-LM-Dense模型训练流程)
+      * [模型格式转换](#Megatron-LM-Dense模型格式转换)
+      * [继续预训练](#Megatron-LM-Dense继续预训练)
+      * [指令微调](#Megatron-LM-Dense指令微调)
+   * [Megatron-Core-Dense模型训练流程](#Megatron-Core-Dense模型训练流程)
+      * [模型格式转换](#Megatron-Core-Dense模型格式转换)
+      * [继续预训练](#Megatron-Core-Dense继续预训练)
+      * [指令微调](#Megatron-Core-Dense指令微调)
+   * [Megatron-Core-MoE模型训练流程](#Megatron-Core-MoE模型训练流程)
+      * [模型格式转换](#Megatron-Core-MoE模型格式转换)
+      * [继续预训练](#Megatron-Core-MoE继续预训练)
+      * [指令微调](#Megatron-Core-MoE指令微调)
+   * [下游任务评估](#下游任务评估)
+      * [Megatron-LM模型格式转换](#Megatron-LM-Dense模型转成Huggingface格式)
+      * [Megatron-Core模型格式转换](#Megatron-Core-Dense模型转成Huggingface格式)
+      * [运行评估工具](#运行评估工具)
+
+# 安装
+推荐使用英伟达提供的官方镜像 nvcr.io/nvidia/pytorch:23.12-py3 来创建容器
+
+```bash
+git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
+cd Pai-Megatron-Patch
+pip install -e .
+```
+
+# 数据集&模型下载
 ```bash
 cd /mnt
 mkdir llama2-ckpts
@@ -8,6 +35,20 @@ cd llama2-ckpts
 wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-ckpts/Llama-2-13b-hf.tgz
 tar -zxf Llama-2-13b-hf.tgz
 
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/wudao_llamabpe_text_document.bin
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/wudao_llamabpe_text_document.idx
+
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/wudao_train.json
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/wudao_valid.json
+
+
+```
+
+# Megatron-LM-Dense模型训练流程
+
+## Megatron-LM-Dense模型格式转换
+使用我们提供的模型转换脚本，将huggingface格式的模型文件转换为megatron格式：
+```bash
 cd /workspace/PAI-Megatron-Patch/toolkits/model_checkpoints_convertor/llama
 sh model_convertor.sh \
 ../../../     \
@@ -20,7 +61,7 @@ llama2-13b \
 false
 ```
 
-### 继续预训练
+## Megatron-LM-Dense继续预训练
 运行run_pretrain_megatron_llama.sh脚本，需要传入的参数列表如下
 ```
 ENV=$1                          # 运行环境: dlc, dsw
@@ -51,8 +92,6 @@ OUTPUT_BASEPATH=${24}           # 训练输出文件路径
 单机运行示例如下：
 ```bash
 cd /workspace/PAI-Megatron-Patch/examples/llama2
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/wudao_llamabpe_text_document.bin
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/wudao_llamabpe_text_document.idx
 sh run_pretrain_megatron_llama.sh  \
 dsw  \
 ../../ \
@@ -80,7 +119,7 @@ wudao_llamabpe_text_document   \
 /mnt/output_megatron_llama2
 ```
 
-### 有监督微调
+## Megatron-LM-Dense继续预训练
 运行run_finetune_megatron_llama.sh脚本，需要传入的参数列表如下
 ```
 ENV=$1                          # 运行环境: dlc, dsw
@@ -109,8 +148,6 @@ OUTPUT_BASEPATH=${22}           # 训练输出文件路径
 DSW单机运行示例如下：
 ```bash
 cd /workspace/PAI-Megatron-Patch/examples/llama2
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/wudao_train.json
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/wudao_valid.json
 sh run_finetune_megatron_llama.sh  \
 dsw  \
 ../../ \
@@ -136,12 +173,10 @@ wudao_valid.json   \
 /mnt/output_megatron_llama2/
 ```
 
-### 带Global BS和Gradient Accumulation的有监督微调
+## Megatron-LM-Dense指令微调
 
 ```bash
 cd /workspace/PAI-Megatron-Patch/examples/llama2
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/alpaca_zh-llama2-train.json
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/alpaca_zh-llama2-valid.json
 sh run_finetune_megatron_llama_withGA.sh  \
 dsw  \
 ../../ \
@@ -169,3 +204,27 @@ alpaca_zh-llama2-valid.json   \
 10 \
 /mnt/output_megatron_llama2/
 ```
+
+# Megatron-Core-Dense模型训练流程
+
+## Megatron-Core-Dense模型格式转换
+
+## Megatron-Core-Dense继续预训练
+
+## Megatron-Core-Dense指令微调
+
+# Megatron-Core-MoE模型训练流程
+
+## Megatron-Core-MoE模型格式转换
+
+## Megatron-Core-MoE继续预训练
+
+## Megatron-Core-MoE指令微调
+
+# 下游任务评估
+
+## Megatron-LM-Dense模型转成Huggingface格式
+
+## Megatron-Core-Dense模型转成Huggingface格式
+
+## 运行评估工具

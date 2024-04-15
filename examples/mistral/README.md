@@ -1,12 +1,47 @@
-## Megatron训练流程
-### 模型格式转换
-使用我们提供的模型转换脚本，将huggingface格式的模型文件转换为megatron格式：
+# Table of Contents
+   * [安装](#安装)
+   * [数据集&模型下载](#数据集&模型下载)
+   * [Megatron-LM-Dense模型训练流程](#Megatron-LM-Dense模型训练流程)
+      * [模型格式转换](#Megatron-LM-Dense模型格式转换)
+      * [继续预训练](#Megatron-LM-Dense继续预训练)
+      * [指令微调](#Megatron-LM-Dense指令微调)
+   * [下游任务评估](#下游任务评估)
+      * [Megatron-LM模型格式转换](#Megatron-LM-Dense模型转成Huggingface格式)
+      * [Megatron-Core模型格式转换](#Megatron-Core-Dense模型转成Huggingface格式)
+      * [运行评估工具](#运行评估工具)
+
+# 安装
+推荐使用英伟达提供的官方镜像 nvcr.io/nvidia/pytorch:23.12-py3 来创建容器
+
+```bash
+git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
+cd Pai-Megatron-Patch
+pip install -e .
+```
+
+# 数据集&模型下载
 ```bash
 cd /mnt
 mkdir mistral-ckpts
 cd mistral-ckpts
 wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-ckpts/Mistral-7B-v0.1.tgz
 tar -zxf Mistral-7B-v0.1.tgz
+
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-datasets/wudao_mistralbpe_content_document_small.bin
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-datasets/wudao_mistralbpe_content_document_small.idx
+
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-datasets/alpaca_zh-mistral-train.json
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-datasets/alpaca_zh-mistral-valid.json
+
+
+```
+
+# Megatron-LM-Dense模型训练流程
+
+## Megatron-LM-Dense模型格式转换
+使用我们提供的模型转换脚本，将huggingface格式的模型文件转换为megatron格式：
+```bash
+
 
 cd /workspace/PAI-Megatron-Patch/toolkits/model_checkpoints_convertor/mistral
 sh model_convertor.sh \
@@ -20,7 +55,7 @@ mistral-7b \
 false
 ```
 
-### 继续预训练
+## Megatron-LM-Dense继续预训练
 运行run_pretrain_megatron_mistral.sh脚本，需要传入的参数列表如下
 ```
 ENV=$1                          # 运行环境: dlc, dsw
@@ -51,9 +86,6 @@ OUTPUT_BASEPATH=${24}           # 训练输出文件路径
 单机运行示例如下：
 ```bash
 cd /workspace/PAI-Megatron-Patch/examples/mistral
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-datasets/wudao_mistralbpe_content_document_small.bin
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-datasets/wudao_mistralbpe_content_document_small.idx
-
 sh run_pretrain_megatron_mistral.sh  \
 dsw  \
 ../../ \
@@ -81,7 +113,7 @@ wudao_mistralbpe_content_document_small   \
 /mnt/output_megatron_mistral
 ```
 
-### 有监督微调
+## Megatron-LM-Dense指令微调
 运行run_finetune_megatron_mistral.sh脚本，需要传入的参数列表如下
 ```
 ENV=$1                          # 运行环境: dlc, dsw
@@ -110,9 +142,6 @@ OUTPUT_BASEPATH=${22}           # 训练输出文件路径
 DSW单机运行示例如下：
 ```bash
 cd /workspace/PAI-Megatron-Patch/examples/mistral
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-datasets/alpaca_zh-mistral-train.json
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-datasets/alpaca_zh-mistral-valid.json
-
 sh run_finetune_megatron_mistral.sh  \
 dsw  \
 ../../ \
@@ -137,3 +166,11 @@ alpaca_zh-mistral-valid.json   \
 2   \
 /mnt/output_megatron_mistral/
 ```
+
+# 下游任务评估
+
+## Megatron-LM-Dense模型转成Huggingface格式
+
+## Megatron-Core-Dense模型转成Huggingface格式
+
+## 运行评估工具

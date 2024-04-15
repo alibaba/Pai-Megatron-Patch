@@ -13,10 +13,10 @@
 # limitations under the License.
 
 import numpy as np
-
-from megatron.data.dataset_utils import get_datasets_weights_and_num_samples
-from megatron import print_rank_0
-from megatron import get_args
+try:
+    from megatron import get_args
+except:
+    from megatron.training import get_args
 
 from megatron_patch.tokenizer import build_tokenizer
 from .llama import LLamaRawDataset
@@ -143,6 +143,7 @@ def build_pretrain_dataset_from_idxmap(data_prefix,
 
     # Blending dataset.
     # Parse the values.
+    from megatron.data.dataset_utils import get_datasets_weights_and_num_samples
     output = get_datasets_weights_and_num_samples(data_prefix,
                                                   train_valid_test_num_samples)
     prefixes, weights, datasets_train_valid_test_num_samples = output
@@ -201,17 +202,6 @@ def _build_train_valid_test_datasets(data_prefix, max_padding_length, dataset_ty
         total_num_of_documents = indexed_dataset.document_indices.shape[0] - 1
     splits = get_train_valid_test_split_(splits_string, total_num_of_documents)
     # Print stats about the splits.
-    print_rank_0(' > dataset split:')
-
-    def print_split_stats(name, index):
-        print_rank_0('    {}:'.format(name))
-        print_rank_0('     document indices in [{}, {}) total of {} '
-                     'documents'.format(splits[index], splits[index + 1],
-                                        splits[index + 1] - splits[index]))
-
-    print_split_stats('train', 0)
-    print_split_stats('validation', 1)
-    print_split_stats('test', 2)
 
     def build_dataset(index, name):
         dataset = None
