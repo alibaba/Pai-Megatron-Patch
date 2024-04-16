@@ -13,8 +13,6 @@
 # limitations under the License.
 
 from transformers import AutoTokenizer
-from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
-
 
 def _vocab_size_with_padding(orig_vocab_size, args):
     """Pad vocab size so it is divisible by model parallel size and
@@ -55,12 +53,10 @@ def build_tokenizer(args):
             tokenizer = BloomTokenizer.from_pretrained(args.load)
         args.padded_vocab_size = 250880
     elif args.patch_tokenizer_type == 'ChatGLMTokenizerFromHF':
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained('THUDM/chatglm-6b',
                                                   trust_remote_code=True)
         args.padded_vocab_size = 130528
     elif args.patch_tokenizer_type == 'GLM10BZHTokenizerFromHF':
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained('THUDM/glm-10b-chinese',
                                                   trust_remote_code=True)
         args.padded_vocab_size = 50048
@@ -69,7 +65,6 @@ def build_tokenizer(args):
         tokenizer = _IceTokenizer()
         args.padded_vocab_size = 150528
     elif args.patch_tokenizer_type == 'OPTTokenizer':
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(
             args.load,
             model_max_length=args.seq_length,
@@ -94,7 +89,6 @@ def build_tokenizer(args):
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'LLamaTokenizer':
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(
             args.load,
             model_max_length=args.seq_length,
@@ -110,7 +104,6 @@ def build_tokenizer(args):
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'FalconTokenizer':
-        from transformers import AutoTokenizer
         if args.load is None:
             tokenizer = AutoTokenizer.from_pretrained(
                 'tiiuae/falcon-7b',
@@ -161,7 +154,6 @@ def build_tokenizer(args):
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'QwenTokenizer':
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(
             args.load,
             model_max_length=args.seq_length,
@@ -175,6 +167,40 @@ def build_tokenizer(args):
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'Qwen2Tokenizer':
+        from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
+        class _Qwen2Tokenizer(MegatronTokenizer):
+            def __init__(self, tokenizer_path, extra_vocab_size):
+                super().__init__(tokenizer_path)
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    tokenizer_path,
+                    padding_side="right",
+                    use_fast=False,
+                    trust_remote_code=True
+                )
+                self.extra_vocab_size = extra_vocab_size
+                self.tokenizer.add_special_tokens(special_tokens_dict=dict(pad_token="<|extra_0|>"))
+
+            @property
+            def vocab_size(self):
+                return len(self.tokenizer.encoder) + self.extra_vocab_size
+
+            @property
+            def vocab(self):
+                return self.tokenizer.encoder
+
+            @property
+            def inv_vocab(self):
+                return self.tokenizer.decoder
+
+            def tokenize(self, text):
+                return self.tokenizer.encode(text)
+
+            def detokenize(self, token_ids):
+                return self.tokenizer.decode(token_ids)
+
+            @property
+            def eod(self):
+                return self.tokenizer.eos_token_id
         tokenizer = _Qwen2Tokenizer(args.load, + args.extra_vocab_size)
         args.padded_vocab_size = tokenizer.vocab_size
 
@@ -215,7 +241,6 @@ def build_tokenizer(args):
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'MistralTokenizer':
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(args.load,
                                                   padding_side='right',
                                                   use_fast=False,)
@@ -231,7 +256,6 @@ def build_tokenizer(args):
             args.padded_vocab_size = _vocab_size_with_padding(
                 tokenizer.vocab_size, args)
     elif args.patch_tokenizer_type == 'StarcoderTokenizerFromHF':
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(args.load)
         tokenizer.pad_token = tokenizer.eos_token
         args.padded_vocab_size = 49152
@@ -241,7 +265,6 @@ def build_tokenizer(args):
         tokenizer = get_tokenizer()
 
     elif args.patch_tokenizer_type == 'VicunaTokenizerFromHF':
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(args.load,
                                                   model_max_length=args.seq_length,
                                                   padding_side="right",
@@ -260,36 +283,4 @@ def build_tokenizer(args):
     return _GLOBAL_TOKENIZER
 
 
-class _Qwen2Tokenizer(MegatronTokenizer):
-    def __init__(self, tokenizer_path, extra_vocab_size):
-        super().__init__(tokenizer_path)
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            tokenizer_path,
-            padding_side="right",
-            use_fast=False,
-            trust_remote_code=True
-        )
-        self.extra_vocab_size = extra_vocab_size
-        self.tokenizer.add_special_tokens(special_tokens_dict=dict(pad_token="<|extra_0|>"))
 
-    @property
-    def vocab_size(self):
-        return len(self.tokenizer.encoder) + self.extra_vocab_size
-
-    @property
-    def vocab(self):
-        return self.tokenizer.encoder
-
-    @property
-    def inv_vocab(self):
-        return self.tokenizer.decoder
-
-    def tokenize(self, text):
-        return self.tokenizer.encode(text)
-
-    def detokenize(self, token_ids):
-        return self.tokenizer.decode(token_ids)
-
-    @property
-    def eod(self):
-        return self.tokenizer.eos_token_id
