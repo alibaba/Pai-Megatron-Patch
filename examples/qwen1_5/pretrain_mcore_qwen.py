@@ -29,7 +29,7 @@ from megatron_patch.model.qwen1_5.layer_specs import get_gpt_layer_with_transfor
 from megatron_patch.model.qwen1_5.model import GPTModel
 from megatron_patch.arguments import get_patch_args
 from megatron_patch.tokenizer import get_tokenizer, build_tokenizer
-
+os.environ['NVTE_APPLY_QK_LAYER_SCALING'] = '1'
 import torch._dynamo
 torch._dynamo.config.suppress_errors = True
 
@@ -51,7 +51,6 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megat
     print_rank_0('building GPT model ...')
     # Experimental loading arguments from yaml
     config = core_transformer_config_from_args(args)
-
     if args.use_mcore_models:
         if args.spec is not None:
             transformer_layer_spec = import_module(args.spec)

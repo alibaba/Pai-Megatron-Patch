@@ -242,6 +242,7 @@ megatron_options="  \
         --use-mcore-models \
         --rotary-percent 1.0 \
         --rotary-base 1000000 \
+        --apply-query-key-layer-scaling \
         --rotary-seq-len-interpolation-factor 1
         "
 
