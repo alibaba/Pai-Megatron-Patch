@@ -1,6 +1,6 @@
 # Table of Contents
    * [安装](#安装)
-   * [数据集&模型下载](#数据集&模型下载)
+   * [数据集&模型下载](#数据集和模型下载)
    * [Megatron-LM-Dense模型训练流程](#Megatron-LM-Dense模型训练流程)
       * [模型格式转换](#Megatron-LM-Dense模型格式转换)
       * [继续预训练](#Megatron-LM-Dense继续预训练)
@@ -16,10 +16,10 @@
 ```bash
 git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 cd Pai-Megatron-Patch
-pip install -e .
+pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 ```
 
-# 数据集&模型下载
+# 数据集和模型下载
 ```bash
 cd /mnt
 mkdir mistral-ckpts
@@ -27,8 +27,9 @@ cd mistral-ckpts
 wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-ckpts/Mistral-7B-v0.1.tgz
 tar -zxf Mistral-7B-v0.1.tgz
 
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-datasets/wudao_mistralbpe_content_document_small.bin
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-datasets/wudao_mistralbpe_content_document_small.idx
+mkdir mistral-datasets
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-datasets/wudao_mistralbpe_content_document.bin
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-datasets/wudao_mistralbpe_content_document.idx
 
 wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-datasets/alpaca_zh-mistral-train.json
 wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/mistral-datasets/alpaca_zh-mistral-valid.json
@@ -106,7 +107,7 @@ false  \
 false   \
 false   \
 100000  \
-wudao_mistralbpe_content_document_small   \
+/mnt/mistral-datasts/wudao_mistralbpe_content_document   \
 /mnt/mistral-ckpts/Mistral-7B-v0.1-hf-to-megatron-tp4-pp1  \
 100000000   \
 10000   \
@@ -160,8 +161,8 @@ true   \
 false  \
 false  \
 false \
-alpaca_zh-mistral-train.json   \
-alpaca_zh-mistral-valid.json   \
+/mnt/mistral-datasts/alpaca_zh-mistral-train.json   \
+/mnt/mistral-datasts/alpaca_zh-mistral-valid.json   \
 /mnt/mistral-ckpts/Mistral-7B-v0.1-hf-to-megatron-tp4-pp1   \
 2   \
 /mnt/output_megatron_mistral/
