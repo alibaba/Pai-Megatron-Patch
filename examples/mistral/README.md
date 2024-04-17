@@ -107,7 +107,7 @@ false  \
 false   \
 false   \
 100000  \
-/mnt/mistral-datasts/wudao_mistralbpe_content_document   \
+/mnt/mistral-datasets/wudao_mistralbpe_content_document   \
 /mnt/mistral-ckpts/Mistral-7B-v0.1-hf-to-megatron-tp4-pp1  \
 100000000   \
 10000   \
