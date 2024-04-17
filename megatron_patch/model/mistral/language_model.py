@@ -511,14 +511,14 @@ class TransformerLanguageModel(MegatronModule):
 
         batch_size = enc_input_ids.shape[0]
         seq_length = enc_input_ids.shape[1]
-        enc_attn_mask = _prepare_4d_causal_attention_mask(
-            enc_attn_mask,
-            (batch_size, seq_length),
-            encoder_input,
-            0,
-            sliding_window=self.sliding_window,
-        )
-
+        if self.pre_process:
+            enc_attn_mask = _prepare_4d_causal_attention_mask(
+                enc_attn_mask,
+                (batch_size, seq_length),
+                encoder_input,
+                0,
+                sliding_window=self.sliding_window,
+            )
         # Run encoder.
         if enc_hidden_states is None:
             if self.encoder is not None:
