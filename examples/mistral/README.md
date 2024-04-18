@@ -167,11 +167,3 @@ false \
 2   \
 /mnt/output_megatron_mistral/
 ```
-
-# 下游任务评估
-
-## Megatron-LM-Dense模型转成Huggingface格式
-
-## Megatron-Core-Dense模型转成Huggingface格式
-
-## 运行评估工具

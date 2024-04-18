@@ -1175,7 +1175,8 @@ class ParallelTransformerLayer(MegatronModule):
                             self.layer_type.name)
 
         # MLP.
-        mlp_output, mlp_bias = self.mlp(norm_output)
+        mlp_output = self.mlp(norm_output)
+        mlp_bias = None
 
         # Second residual connection.
         if self.apply_residual_connection_post_norm:

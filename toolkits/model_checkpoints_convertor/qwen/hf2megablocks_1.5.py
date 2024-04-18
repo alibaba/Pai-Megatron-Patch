@@ -400,7 +400,7 @@ def convert_checkpoint_from_transformers_to_megatron(mgmodel, hgmodel, args, hf_
     hidden_dim = hf_config.hidden_size
     head_dim = hidden_dim // hf_config.num_attention_heads
     num_experts = args.moe_num_experts
-
+    num_local_experts = args.moe_num_experts // args.target_expert_model_parallel_size if args.moe_num_experts else 0
     with torch.no_grad():
         mgmodel.language_model.embedding.word_embeddings.weight.copy_(hgmodel.model.embed_tokens.weight)
         for mglayer, hglayer in zip(mgmodel.language_model.encoder.layers, hgmodel.model.layers):
@@ -422,11 +422,21 @@ def convert_checkpoint_from_transformers_to_megatron(mgmodel, hgmodel, args, hf_
             mglayer.self_attention.dense.weight.copy_(hglayer.self_attn.o_proj.weight)
             fc1_weight = torch.cat([hglayer.mlp.gate_proj.weight, hglayer.mlp.up_proj.weight])
             """
+            mlp
             layers.23.mlp.moe.router.layer.weight',
              'layers.23.mlp.moe.experts.bias',
               'layers.23.mlp.moe.experts.mlp.w1',
                'layers.23.mlp.moe.experts.mlp.w2
+               
+            glu
+            'layers.0.mlp.moe.router.layer.weight', : torch.Size([8, 1024])
+             'layers.0.mlp.moe.experts.bias', : torch.Size([1024])
+              'layers.0.mlp.moe.experts.mlp.w1',: torch.Size([2816, 1024])
+               'layers.0.mlp.moe.experts.mlp.w2', : torch.Size([2816, 1024])
+               'layers.0.mlp.moe.experts.mlp.v1', : torch.Size([2816, 1024])
             """
+            #self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+            #down->w2 , gate->v1, up->w1
             if num_experts is None:
                 mglayer.mlp.linear_fc1.weight.copy_(fc1_weight)
                 mglayer.mlp.linear_fc2.weight.copy_(hglayer.mlp.down_proj.weight)
@@ -434,8 +444,9 @@ def convert_checkpoint_from_transformers_to_megatron(mgmodel, hgmodel, args, hf_
             else:
                 mglayer.post_attention_norm.weight.copy_(hglayer.post_attention_layernorm.weight)
                 nn.init.normal_(mglayer.mlp.moe.router.layer.weight, mean=0, std=0.02)
-                mglayer.mlp.moe.experts.mlp.w1.copy_(hglayer.mlp.gate_proj.weight)
-                mglayer.mlp.moe.experts.mlp.w2.copy_(hglayer.mlp.down_proj.weight.transpose(0,1))
+                mglayer.mlp.moe.experts.mlp.w1.copy_(torch.cat([hglayer.mlp.up_proj.weight] * num_local_experts))
+                mglayer.mlp.moe.experts.mlp.w2.copy_(torch.cat([hglayer.mlp.down_proj.weight.transpose(0,1)] * num_local_experts))
+                mglayer.mlp.moe.experts.mlp.v1.copy_(torch.cat([hglayer.mlp.gate_proj.weight] * num_local_experts))
         mgmodel.language_model.encoder.final_norm.weight.copy_(hgmodel.model.norm.weight)
         mgmodel.language_model.output_layer.weight.copy_(hgmodel.lm_head.weight)
 
@@ -481,23 +492,8 @@ def save_mgmodel(args, mgmodel, load_path, save_path):
         and args.moe_num_experts
         and args.moe_num_experts % args.target_expert_model_parallel_size == 0
     ):
-        checkpoint_name = get_checkpoint_names(save_path, 0, False)[0]
+        checkpoint_name = get_checkpoint_names(save_path, 0, False, True)[0]
         save_state_dict(args, full_model, checkpoint_name)
-        """
-        for ep_rank in range(args.target_expert_model_parallel_size):
-            model_split = {}
-            checkpoint_name = get_checkpoint_names(save_path, 0, True, None, None, None, True, ep_rank)
-            print(f'save ep_rank {ep_rank} model to {checkpoint_name}')
-            for k, v in full_model.items():
-                if 'local_experts' in k:
-                    expert_rank = int(re.findall(pattern, k)[0])
-                    if expert_rank // num_local_experts != ep_rank:
-                        continue
-                    expert_local_rank = expert_rank % args.target_expert_model_parallel_size
-                    k = k.replace(f'local_experts.{expert_rank}', f'local_experts.{expert_local_rank}')
-                model_split[k] = v
-            save_state_dict(args, model_split, checkpoint_name)
-        """
     elif (
         args.target_tensor_model_parallel_size > 1
         and args.target_pipeline_model_parallel_size == 1
