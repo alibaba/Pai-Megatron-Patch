@@ -46,9 +46,8 @@ class Router(ABC, MegatronModule):
         self.moe_aux_loss_func = None
 
         # Initialize the gate weights.
-        params_dtype = torch.get_default_dtype() if config.params_dtype is None else config.params_dtype
         self.weight = torch.nn.Parameter(
-            torch.empty((self.config.num_moe_experts, self.config.hidden_size), dtype=params_dtype)
+            torch.empty((self.config.num_moe_experts, self.config.hidden_size))
         )
         with get_cuda_rng_tracker().fork(get_data_parallel_rng_tracker_name()):
             config.init_method(self.weight)
