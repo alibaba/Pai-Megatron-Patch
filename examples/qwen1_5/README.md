@@ -37,10 +37,8 @@ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 cd Pai-Megatron-Patch
 pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 
-git clone https://github.com/databricks/megablocks
-cd megablocks
+cd Pai-Megatron-Patch/Megatron-LM-MegaBlocks/megablocks
 pip install -e .
-pip install transformers==4.38.2
 ```
 
 # 数据集和模型下载
@@ -158,15 +156,17 @@ DSW单机运行示例如下：
 ```bash
 cd /workspace/PAI-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen
 sh hf2megablocks_convertor_1.5.sh \
+0.5B  \
 /mnt/qwen-ckpts/Qwen1.5-0.5B \
 ../../.. \
 /mnt/qwen-ckpts/Qwen1.5-0.5B \
 /mnt/qwen-ckpts/Qwen1.5-0.5B_megablocks_tp1_pp1_ep8_exp8 \
-2  \
+1  \
 1  \
 293  \
 8  \
-4  \
+2 \
+8 \
 false
 ```
 
@@ -213,7 +213,7 @@ dsw  \
 2048  \
 32768  \
 293  \
-fp16  \
+bf16  \
 1  \
 1  \
 sel  \
@@ -224,7 +224,7 @@ false  \
 true  \
 100  \
 /mnt/qwen-datasets/wudao_qwenbpe_text_document  \
-/mnt/qwen-ckpts/Qwen1.5-0.5B  \
+/mnt/qwen-ckpts/Qwen1.5-0.5B_megablocks_tp1_pp1_ep8_exp8   \
 10000000000  \
 100000  \
 /mnt/qwen-ckpts/debug
@@ -232,10 +232,33 @@ true  \
 
 ## MegaBlocks-MoE指令微调
 
-# 下游任务评估
-
-## Megatron-LM-Dense模型转成Huggingface格式
-
-## Megatron-Core-Dense模型转成Huggingface格式
-
-## 运行评估工具
+```bash
+cd /workspace/PAI-Megatron-Patch/examples/qwen1.5
+sh run_finetune_megablocks_qwen.sh  \
+dsw  \
+../../ \
+0.5B     \
+1      \
+32     \
+1e-5   \
+1e-6   \
+128   \
+128     \
+0      \
+bf16   \
+1      \
+1      \
+sel  \
+false  \
+false  \
+true  \
+false  \
+true  \
+100 \
+/mnt/qwen-datasets/alpaca_zh-qwen-train.json   \
+/mnt/qwen-datasets/alpaca_zh-qwen-train.json   \
+/mnt/qwen-ckpts/Qwen1.5-0.5B_megablocks_tp1_pp1_ep8_exp8   \
+1000 \
+10 \
+/mnt/output_megablocks_qwen/
+```

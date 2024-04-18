@@ -152,27 +152,3 @@ false \
 10 \
 /mnt/output_megatron_llama2/
 ```
-
-# Megatron-Core-Dense模型训练流程
-
-## Megatron-Core-Dense模型格式转换
-
-## Megatron-Core-Dense继续预训练
-
-## Megatron-Core-Dense指令微调
-
-# Megatron-Core-MoE模型训练流程
-
-## Megatron-Core-MoE模型格式转换
-
-## Megatron-Core-MoE继续预训练
-
-## Megatron-Core-MoE指令微调
-
-# 下游任务评估
-
-## Megatron-LM-Dense模型转成Huggingface格式
-
-## Megatron-Core-Dense模型转成Huggingface格式
-
-## 运行评估工具
