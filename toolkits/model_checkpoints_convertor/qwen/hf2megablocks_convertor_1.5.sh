@@ -1,35 +1,22 @@
 #!/bin/bash
-# hf2mg: tp1_pp1
-# sh hf2mcore_convertor_1.5_v2.sh 0.5B /mnt/qwen-ckpts/Qwen1.5-0.5B ../../../ /mnt/qwen-ckpts/Qwen1.5-0.5B /mnt/qwen-ckpts/qwen1.5_0.5b_mcore_tp1_pp1_v2 1 1 293 0 0 0 false
 
-# hf2mg: tp1_pp1_ep1_exp8
-# sh hf2mcore_convertor_1.5_v2.sh 0.5B /mnt/qwen-ckpts/Qwen1.5-1.8B ../../../ /mnt/qwen-ckpts/Qwen1.5-1.8B /mnt/qwen-ckpts/Qwen1.5-1.8B_mcore_tp1_pp1_ep1_exp8_v2 1 1 293 8 1 2 false
+# hf2megablocks: tp1_pp1_ep8_exp8_top2
 
-# hf2mg: tp1_pp1_ep2_exp8
-# sh hf2mcore_convertor_1.5_v2.sh 0.5B /mnt/qwen-ckpts/Qwen1.5-1.8B ../../../ /mnt/qwen-ckpts/Qwen1.5-1.8B /mnt/qwen-ckpts/Qwen1.5-1.8B_mcore_tp1_pp1_ep2_exp8_v2 1 1 293 8 2 false
-
-# hf2mg: tp2_pp1_ep4_exp8
-#sh hf2mcore_convertor_1.5_v2.sh 0.5B /mnt/qwen-ckpts/Qwen1.5-1.8B ../../../ /mnt/qwen-ckpts/Qwen1.5-1.8B /mnt/qwen-ckpts/Qwen1.5-1.8B_mcore_tp2_pp1_ep4_exp8_v2 2 1 293 8 2 4 false
-
-# hf2mg: tp2_pp1_ep4_exp32
-#sh hf2mcore_convertor_1.5_v2.sh 0.5B /mnt/qwen-ckpts/Qwen1.5-1.8B ../../../ /mnt/qwen-ckpts/Qwen1.5-1.8B /mnt/qwen-ckpts/Qwen1.5-1.8B_mcore_tp2_pp1_ep4_exp32_v2 2 1 293 32 4 4 false
-
-# mg2hf: tp1_pp1_ep1_exp8
-#sh hf2mcore_convertor_1.5_v2.sh 0.5B /mnt/qwen-ckpts/Qwen1.5-0.5B ../../../ /mnt/qwen-ckpts/Qwen1.5-0.5B_mcore_tp1_pp1_ep1_exp8_v2 /mnt/qwen-ckpts/mg2hf 1 1 293 8 1 true
-
-# mg2hf: tp2_pp1_ep4_exp32
-#sh hf2mcore_convertor_1.5_v2.sh 1.8B /mnt/qwen-ckpts/Qwen1.5-1.8B ../../../ /mnt/qwen-ckpts/test_qwen1_8B_32experts/ /mnt/qwen-ckpts/mg_test_qwen1_8B_32experts_auxloss 2 1 293 32 4 4 true
+# sh hf2megablocks_convertor_1.5.sh 0.5B /mnt/qwen-ckpts/Qwen1.5-0.5B ../../../ /mnt/qwen-ckpts/Qwen1.5-0.5B /mnt/qwen-ckpts/Qwen1.5-0.5B_megablocks_tp1_pp1_ep8_exp8 1 1 293 8 8 2 false
 
 set -e
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=4,5,6,7
 START_TIME=$SECONDS
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
+NNODES=1
+NODE_RANK=0
+GPUS_PER_NODE=4
 
 MODEL_SIZE=$1
 HG_CKPT_PATH=$2
 MEGATRON_PATH=$3
-export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-240405
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-MegaBlocks
 SOURCE_CKPT_PATH=$4
 TARGET_CKPT_PATH=$5
 TP=$6
@@ -73,9 +60,9 @@ fi
 
 if [ $NUM_EXPERTS -gt 0 ]; then
     expert_options="
-                --moe-router-topk ${EXPERTS_TOPK} \
-                --num-experts ${NUM_EXPERTS} \
-                --expert-model-parallel-size 1 \
+                --moe-top-k ${EXPERTS_TOPK} \
+                --moe-num-experts ${NUM_EXPERTS} \
+                --moe-expert-model-parallelism \
                 --target_expert_model_parallel_size ${EP}
     "
 fi
@@ -99,9 +86,8 @@ sed "s/CONFIG_HIDDEN_SIZE/${HIDDEN_SIZE}/" ${template_json} \
     | sed "s/CONFIG_KV_HEADS/${NUM_ATTN_HEADS}/" \
 	  > ${config_json}
 
-DISTRIBUTED_ARGS="--nproc_per_node 1 --nnodes 1 --node_rank 0 --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
-
-torchrun ${DISTRIBUTED_ARGS} hf2mcore_1.5_v2.py \
+DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
+torchrun ${DISTRIBUTED_ARGS} hf2megablocks_1.5.py \
     --load_path ${SOURCE_CKPT_PATH} \
     --save_path ${TARGET_CKPT_PATH} \
     --load ${HG_CKPT_PATH} \
@@ -123,13 +109,10 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore_1.5_v2.py \
     --patch-tokenizer-type Qwen2Tokenizer \
     --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
     --untie-embeddings-and-output-weights \
-    --no-rope-fusion \
-    --use-rotary-position-embeddings \
-    --transformer-impl transformer_engine \
+    --use-llama2-rotary-position-embeddings \
     --disable-bias-linear \
     --normalization RMSNorm \
     --add-qkv-bias \
-    --use-mcore-models \
     --attention-dropout 0.0 \
     --hidden-dropout 0.0 \
     ${expert_options} \

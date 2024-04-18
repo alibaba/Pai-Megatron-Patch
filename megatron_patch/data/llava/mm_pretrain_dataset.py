@@ -21,7 +21,10 @@ import numpy as np
 import torch
 from PIL import Image
 import transformers
-from megatron import get_args
+try:
+    from megatron import get_args
+except:
+    from megatron.training import get_args
 
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.data.llava import conversation as conversation_lib

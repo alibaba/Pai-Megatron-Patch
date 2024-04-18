@@ -17,11 +17,14 @@ import torch
 
 from megatron.core import parallel_state
 from megatron.core.transformer.module import MegatronModule
+from megatron.core.transformer.transformer_config import TransformerConfig
 
 from .experts import GroupedMLP, SequentialMLP
 from .router import TopKRouter
-from .token_dispatcher import MoEDroplessTokenDispatcher
-from ..transformer_config import TransformerConfig
+from .token_dispatcher import (
+    MoEAllGatherTokenDispatcher,
+    MoEAlltoAllTokenDispatcher,
+)
 from ..transformer.mlp import MLPSubmodules
 
 class BaseMoELayer(MegatronModule, ABC):
@@ -31,10 +34,11 @@ class BaseMoELayer(MegatronModule, ABC):
         config (TransformerConfig): Configuration object for the transformer model.
     """
 
-    def __init__(self, config: TransformerConfig):
+    def __init__(self, config: TransformerConfig, layer_number: int = None):
         super(BaseMoELayer, self).__init__(config)
         self.config = config
         self.expert_parallel_size = parallel_state.get_expert_model_parallel_world_size()
+        assert self.expert_parallel_size > 0, "Expected non-negative expert parallel size"
         assert self.config.num_moe_experts % self.expert_parallel_size == 0
         self.num_local_experts = self.config.num_moe_experts // self.expert_parallel_size
         local_expert_indices_offset = (
@@ -43,13 +47,19 @@ class BaseMoELayer(MegatronModule, ABC):
         self.local_expert_indices = [
             local_expert_indices_offset + i for i in range(self.num_local_experts)
         ]
+        assert all(map(lambda x: x < self.config.num_moe_experts, self.local_expert_indices))
         self.router = None
         self.experts = None
         self.token_dispatcher = None
+        self.layer_number = layer_number
 
     @abstractmethod
     def forward(self, hidden_states):
         pass
+
+    def set_layer_number(self, layer_number: int):
+        self.layer_number = layer_number
+        self.router.set_layer_number(layer_number)
 
 
 class MoELayer(BaseMoELayer):
@@ -59,52 +69,36 @@ class MoELayer(BaseMoELayer):
         BaseMoELayer (MegatronModule): Base class for MoE layers
     """
 
-    def __init__(self, config: TransformerConfig, submodules: MLPSubmodules = None):
+    def __init__(
+        self, config: TransformerConfig, submodules: MLPSubmodules = None, layer_number: int = None
+    ):
         self.submodules = submodules
-        super(MoELayer, self).__init__(config=config)
-        self.router = TopKRouter(
-            self.num_local_experts, self.local_expert_indices, config=self.config
-        )
+        super(MoELayer, self).__init__(config=config, layer_number=layer_number)
+        self.router = TopKRouter(config=self.config)
         if self.config.moe_grouped_gemm:
             self.experts = GroupedMLP(self.num_local_experts, self.config)
         else:
             assert isinstance(self.submodules, MLPSubmodules)
             self.experts = SequentialMLP(self.num_local_experts, self.config, self.submodules)
-        self.token_dispatcher = MoEDroplessTokenDispatcher(
-            self.num_local_experts, self.local_expert_indices, config=self.config
-        )
+        if config.moe_token_dispatcher_type == "allgather":
+            self.token_dispatcher = MoEAllGatherTokenDispatcher(
+                self.num_local_experts, self.local_expert_indices, config=self.config
+            )
+        elif config.moe_token_dispatcher_type == "alltoall":
+            self.token_dispatcher = MoEAlltoAllTokenDispatcher(
+                self.num_local_experts, self.local_expert_indices, config=self.config
+            )
+        else:
+            raise ValueError(
+                f"Unsupported token dispatcher type: {config.moe_token_dispatcher_type}"
+            )
 
     def forward(self, hidden_states: torch.Tensor):
-        """
-        Forward pass for the MoE layer.
-
-        The method routes input tokens to the appropriate expert networks,
-        processes the tokens with the experts, and then combines the outputs.
-
-        Args:
-            hidden_states (torch.Tensor): The input tensor containing the hidden states
-            from the previous layer of the transformer model.This tensor is expected to 
-            have a shape compatible with the expectations of the MoE layer, typically
-            [batch_size, sequence_length, hidden_size].
-
-        Returns:
-            Tupletorch.Tensor, torch.Tensor: A tuple containing two elements:
-                - The first element is the output tensor after processing by the MoE layer.
-                  It has the same shape as the input hidden_states.
-                - The second element is the bias introduced by the MLP experts, which may
-                need to be accounted for in subsequent layers or loss calculations.
-        """
         # process MoE
         scores, indices = self.router(hidden_states)
-        (
-            dispatched_input,
-            tokens_per_expert,
-            scores,
-            indices,
-            global_local_map,
-        ) = self.token_dispatcher.token_permutation(hidden_states, scores, indices)
-        expert_output, mlp_bias = self.experts(dispatched_input, tokens_per_expert)
-        output, mlp_bias = self.token_dispatcher.token_unpermutation(
-            expert_output, scores, indices, global_local_map, mlp_bias
+        (dispatched_input, tokens_per_expert) = self.token_dispatcher.token_permutation(
+            hidden_states, scores, indices
         )
+        expert_output, mlp_bias = self.experts(dispatched_input, tokens_per_expert)
+        output, mlp_bias = self.token_dispatcher.token_unpermutation(expert_output, mlp_bias)
         return output, mlp_bias

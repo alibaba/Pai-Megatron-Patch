@@ -1,5 +1,5 @@
 #!/bin/bash
-#sh run_pretrain_megatron_llama.sh dsw ../.. 7B 1 8 1e-5 1e-6 2048 2048 0 bf16 1 1 sel true false true false 100000 /mnt/llama2-datasets/alpaca_data.json /mnt/llama2-ckpts/Llama-2-7b-hf/ 10000000000 100000000 /mnt/output_patch_test
+# sh run_pretrain_megatron_llama.sh dsw ../.. 13B 1 8 1e-5 1e-6 128 128 0 bf16 4 1 sel true false false false 100000 wudao_llamabpe_text_document /mnt/llama2-ckpts/Llama-2-13b-hf-to-megatron-tp4-pp1/ 100000000 10000 /mnt/output_megatron_llama2
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -201,7 +201,7 @@ megatron_options="  \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type LLamaTokenizer \
-        --dataset LLama-Pretrain-Raw \
+        --dataset LLama-Pretrain-Idxmap \
         --swiglu \
         --normalization RMSNorm \
         --use-llama2-rotary-position-embeddings \

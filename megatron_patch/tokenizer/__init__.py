@@ -12,21 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-from megatron import print_rank_0
-from megatron.tokenizer.tokenizer import _vocab_size_with_padding
+from transformers import AutoTokenizer
+
+def _vocab_size_with_padding(orig_vocab_size, args):
+    """Pad vocab size so it is divisible by model parallel size and
+    still having GPU friendly size."""
+
+    after = orig_vocab_size
+    multiple = args.make_vocab_size_divisible_by * \
+        args.tensor_model_parallel_size
+    while (after % multiple) != 0:
+        after += 1
+    if args.rank == 0:
+        print(' > padded vocab (size: {}) with {} dummy tokens '
+              '(new size: {})'.format(
+                  orig_vocab_size, after - orig_vocab_size, after), flush=True)
+    return after
 
 _GLOBAL_TOKENIZER = None
 
-def build_tokenizer(args):
-    """
-    Initialize tokenizer.
-    Args:
-        args (argparse.Namespace): Arguments containing the type of tokenizer to be used.
+def get_tokenizer():
+    """Return tokenizer."""
+    return _GLOBAL_TOKENIZER
 
-    Returns:
-        tokenizer object: Initialized tokenizer object based on the provided arguments.
-    """
+def build_tokenizer(args):
+
     if args.rank == 0:
         print('> building {} tokenizer ...'.format(args.patch_tokenizer_type))
     # Select and instantiate the tokenizer.
@@ -43,12 +53,10 @@ def build_tokenizer(args):
             tokenizer = BloomTokenizer.from_pretrained(args.load)
         args.padded_vocab_size = 250880
     elif args.patch_tokenizer_type == 'ChatGLMTokenizerFromHF':
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained('THUDM/chatglm-6b',
                                                   trust_remote_code=True)
         args.padded_vocab_size = 130528
     elif args.patch_tokenizer_type == 'GLM10BZHTokenizerFromHF':
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained('THUDM/glm-10b-chinese',
                                                   trust_remote_code=True)
         args.padded_vocab_size = 50048
@@ -57,7 +65,6 @@ def build_tokenizer(args):
         tokenizer = _IceTokenizer()
         args.padded_vocab_size = 150528
     elif args.patch_tokenizer_type == 'OPTTokenizer':
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(
             args.load,
             model_max_length=args.seq_length,
@@ -81,14 +88,7 @@ def build_tokenizer(args):
         tokenizer.add_special_tokens(special_tokens_dict)
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
-    elif args.patch_tokenizer_type == 'LLamaTokenizer-ziya':
-        from transformers import AutoTokenizer
-        tokenizer = AutoTokenizer.from_pretrained(args.load, use_fast=False)
-        args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
-        tokenizer.pad_token = tokenizer.eos_token
-
     elif args.patch_tokenizer_type == 'LLamaTokenizer':
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(
             args.load,
             model_max_length=args.seq_length,
@@ -104,7 +104,6 @@ def build_tokenizer(args):
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'FalconTokenizer':
-        from transformers import AutoTokenizer
         if args.load is None:
             tokenizer = AutoTokenizer.from_pretrained(
                 'tiiuae/falcon-7b',
@@ -155,7 +154,6 @@ def build_tokenizer(args):
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'QwenTokenizer':
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(
             args.load,
             model_max_length=args.seq_length,
@@ -169,18 +167,42 @@ def build_tokenizer(args):
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'Qwen2Tokenizer':
-        from transformers import AutoTokenizer
-        tokenizer = AutoTokenizer.from_pretrained(
-            args.load,
-            model_max_length=args.seq_length,
-            padding_side="right",
-            use_fast=False,
-            trust_remote_code=True
-        )
+        from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
+        class _Qwen2Tokenizer(MegatronTokenizer):
+            def __init__(self, tokenizer_path, extra_vocab_size):
+                super().__init__(tokenizer_path)
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    tokenizer_path,
+                    padding_side="right",
+                    use_fast=False,
+                    trust_remote_code=True
+                )
+                self.extra_vocab_size = extra_vocab_size
+                self.tokenizer.add_special_tokens(special_tokens_dict=dict(pad_token="<|extra_0|>"))
 
-        tokenizer.add_special_tokens(special_tokens_dict=dict(pad_token="<|extra_0|>"))
-        args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
+            @property
+            def vocab_size(self):
+                return len(self.tokenizer.encoder) + self.extra_vocab_size
 
+            @property
+            def vocab(self):
+                return self.tokenizer.encoder
+
+            @property
+            def inv_vocab(self):
+                return self.tokenizer.decoder
+
+            def tokenize(self, text):
+                return self.tokenizer.encode(text)
+
+            def detokenize(self, token_ids):
+                return self.tokenizer.decode(token_ids)
+
+            @property
+            def eod(self):
+                return self.tokenizer.eos_token_id
+        tokenizer = _Qwen2Tokenizer(args.load, + args.extra_vocab_size)
+        args.padded_vocab_size = tokenizer.vocab_size
 
     elif args.patch_tokenizer_type == 'QwenVLTokenizer':
         from .tokenization_qwen_vl import QWenTokenizer
@@ -219,8 +241,6 @@ def build_tokenizer(args):
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'MistralTokenizer':
-        print_rank_0('Using Mistral tokenizer.')
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(args.load,
                                                   padding_side='right',
                                                   use_fast=False,)
@@ -228,7 +248,6 @@ def build_tokenizer(args):
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'BloomTokenizerFromCustom':
-        print_rank_0('Using Customized Bloom tokenizer.')
         from transformers import BloomTokenizerFast as BloomTokenizer
         tokenizer = BloomTokenizer.from_pretrained(args.load)
         if 'mg' not in args.load:
@@ -237,17 +256,15 @@ def build_tokenizer(args):
             args.padded_vocab_size = _vocab_size_with_padding(
                 tokenizer.vocab_size, args)
     elif args.patch_tokenizer_type == 'StarcoderTokenizerFromHF':
-        print_rank_0('Using Starcoder tokenizer.')
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(args.load)
         tokenizer.pad_token = tokenizer.eos_token
         args.padded_vocab_size = 49152
+
     elif args.patch_tokenizer_type == 'GPT2BPETokenizer':
         from megatron import get_tokenizer
         tokenizer = get_tokenizer()
 
     elif args.patch_tokenizer_type == 'VicunaTokenizerFromHF':
-        from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained(args.load,
                                                   model_max_length=args.seq_length,
                                                   padding_side="right",
@@ -260,16 +277,10 @@ def build_tokenizer(args):
                                   'implemented.'.format(
                                       args.patch_tokenizer_type))
 
-    if args.patch_tokenizer_type != 'IcetkGLM130BTokenizer' and\
-            args.patch_tokenizer_type != 'GPT2BPETokenizer' and\
-            args.patch_tokenizer_type != 'MistralTokenizer':
-        tokenizer.eod = tokenizer.eos_token_id
 
     global _GLOBAL_TOKENIZER
     _GLOBAL_TOKENIZER = tokenizer
     return _GLOBAL_TOKENIZER
 
 
-def get_tokenizer():
-    """Return tokenizer."""
-    return _GLOBAL_TOKENIZER
+

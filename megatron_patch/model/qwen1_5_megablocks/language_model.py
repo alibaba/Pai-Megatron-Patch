@@ -23,10 +23,8 @@ from megatron.model.module import MegatronModule
 from megatron.model.utils import get_linear_layer
 from megatron.model.utils import init_method_normal
 from megatron.model.utils import scaled_init_method_normal
-from megatron.core.models.common.rotary_pos_embedding import RotaryEmbedding
 
 from .transformer import ParallelTransformer
-from .modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 
 def parallel_lm_logits(input_, word_embeddings_weight, parallel_output,
                        bias=None):
@@ -358,7 +356,6 @@ class TransformerLanguageModel(MegatronModule):
         self.encoder_hidden_state = None
         self.add_retriever = args.retro_add_retriever
         self.untie_embeddings_and_output_weights = args.untie_embeddings_and_output_weights
-        self.sliding_window = args.sliding_window
 
         # Embeddings.
         if self.pre_process:
@@ -371,8 +368,8 @@ class TransformerLanguageModel(MegatronModule):
             self._embedding_key = 'embedding'
 
         # Rotary positional embeddings
+        self.seq_length = args.seq_length
         if args.use_rotary_position_embeddings:
-            self.seq_length = args.seq_length
             rotary_dim = args.hidden_size // args.num_attention_heads \
                 if args.kv_channels is None else args.kv_channels
 
@@ -387,7 +384,7 @@ class TransformerLanguageModel(MegatronModule):
                 seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
             )
             self.use_rotary_position_embeddings = True
-        elif args.use_mistral_rotary_position_embeddings:
+        elif args.use_llama2_rotary_position_embeddings:
             self.use_rotary_position_embeddings = False
 
 
@@ -509,16 +506,6 @@ class TransformerLanguageModel(MegatronModule):
                                         device=device)
             enc_position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
 
-        batch_size = enc_input_ids.shape[0]
-        seq_length = enc_input_ids.shape[1]
-        if self.pre_process:
-            enc_attn_mask = _prepare_4d_causal_attention_mask(
-                enc_attn_mask,
-                (batch_size, seq_length),
-                encoder_input,
-                0,
-                sliding_window=self.sliding_window,
-            )
         # Run encoder.
         if enc_hidden_states is None:
             if self.encoder is not None:

@@ -15,7 +15,6 @@
 from PIL import Image
 from io import BytesIO
 import base64
-from megatron import get_args
 import torch
 from transformers import StoppingCriteria
 from megatron_patch.data.llava.constants import IMAGE_TOKEN_INDEX

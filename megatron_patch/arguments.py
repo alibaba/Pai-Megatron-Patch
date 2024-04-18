@@ -12,47 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
 import argparse
-import dataclasses
-import torch.nn.functional as F
-
-
-def core_transformer_config_from_args(args, TransformerConfig):
-
-    # Translate args to core transformer configuration
-    kw_args = {}
-    for f in dataclasses.fields(TransformerConfig):
-        if hasattr(args, f.name):
-            kw_args[f.name] = getattr(args, f.name)
-    kw_args['persist_layer_norm'] = not args.no_persist_layer_norm
-    kw_args['layernorm_zero_centered_gamma'] = args.apply_layernorm_1p
-    kw_args['layernorm_epsilon'] = args.norm_epsilon
-    kw_args['deallocate_pipeline_outputs'] = True
-    kw_args['pipeline_dtype'] = args.params_dtype
-    kw_args['batch_p2p_comm'] = not args.overlap_p2p_comm
-    kw_args['num_moe_experts'] = args.num_experts
-    if args.swiglu:
-        kw_args['activation_func'] = F.silu
-        kw_args['gated_linear_unit'] = True
-        kw_args['bias_activation_fusion'] = args.bias_swiglu_fusion
-    else:
-        kw_args['bias_activation_fusion'] = args.bias_gelu_fusion
-    if args.squared_relu:
-        assert not args.swiglu
-        def squared_relu(x):
-            return torch.pow(F.relu(x), 2)
-        kw_args['activation_func'] = squared_relu
-    if args.init_method_xavier_uniform:
-        kw_args['init_method'] = torch.nn.init.xavier_uniform_
-        kw_args['scaled_init_method'] = torch.nn.init.xavier_uniform_
-    if args.group_query_attention:
-        kw_args['num_query_groups'] = args.num_query_groups
-    else:
-        kw_args['num_query_groups'] = None
-
-    # Return Transformer config.
-    return TransformerConfig(**kw_args)
 
 def get_patch_args(parser):
     group = parser.add_argument_group(title='patch')
@@ -96,11 +56,6 @@ def get_patch_args(parser):
                        type=str,
                        default=None,
                        help='dataset')
-
-    group.add_argument('--pretrained-checkpoint',
-                       type=str,
-                       default=None,
-                       help='Pretrained checkpoint used for finetunning.')
 
     group.add_argument('--epochs',
                        type=int,
@@ -248,10 +203,6 @@ def get_patch_args(parser):
                        type=float,
                        default=0.0,
                        help='the max-z weight for baichuan2')
-
-    group.add_argument('--data-impl', type=str, default='mmap',
-                       choices=['mmap', 'infer'],
-                       help='Implementation of indexed datasets.')
 
     group.add_argument('--use-llama2-rotary-position-embeddings', action='store_true',
                        help='Use llama2 rotary positional embeddings or not. '
