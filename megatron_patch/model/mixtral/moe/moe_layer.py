@@ -80,7 +80,8 @@ class MoELayer(BaseMoELayer):
         )
         args = get_args()
         self.enable_moe_load_balance = args.load_balance_interval is not None
-        self.load_balancer = LoadBalancer(self.experts, self.router)
+        if self.enable_moe_load_balance:
+            self.load_balancer = LoadBalancer(self.experts, self.router)
 
 
     def forward(self, hidden_states: torch.Tensor):
