@@ -301,7 +301,7 @@ false \
 /mnt/output_mcore_qwen
 ```
 
-# Megatron-MoE模型训练流程
+# Megatron-Core-MoE模型训练流程
 
 ## Megatron-Core-MoE模型格式转换
 ```bash
