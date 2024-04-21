@@ -57,7 +57,7 @@ EXTRA_VOCAB_SIZE=$7                # 词表扩充大小
 mg2hf=$8                           # 是否执行mg2hf转换
 ```
 
-运行run_pretrain_megatron_mistral.sh和run_finetune_megatron_mistral_withGA.sh脚本，需要传入的参数列表如下
+运行run_pretrain_megatron_mistral.sh脚本，需要传入的参数列表如下
 
 ```
 ENV=$1                          # 运行环境: dlc, dsw
@@ -86,9 +86,39 @@ WARMUP_TOKENS=${23}             # 预热token数
 OUTPUT_BASEPATH=${24}           # 训练输出文件路径
 ```
 
+运行run_finetune_megatron_mistral_withGA.sh脚本，需要传入的参数列表如下
+
+```
+ENV=$1                          # 运行环境: dlc, dsw
+MEGATRON_PATCH_PATH=$2          # 设置Megatron Patch的代码路径
+MODEL_SIZE=$3                   # 模型结构参数量级：7B, 13B
+BATCH_SIZE=$4                   # 每卡训练一次迭代样本数: 4, 8
+GLOBAL_BATCH_SIZE=$5            # 全局batch size
+LR=$6                           # 学习率: 1e-5, 5e-5
+MIN_LR=$7                       # 最小学习率: 1e-6, 5e-6
+SEQ_LEN=$8                      # 序列长度
+PAD_LEN=$9                      # Padding长度：100
+EXTRA_VOCAB_SIZE=${10}          # 词表扩充大小
+PR=${11}                        # 训练精度: fp16, bf16
+TP=${12}                        # 模型并行度
+PP=${13}                        # 流水并行度
+AC=${14}                        # 激活检查点模式: sel, full
+DO=${15}                        # 是否使用Megatron版Zero-1降显存优化器: true, false
+FL=${16}                        # 是否使用Flash Attention: true, false
+SP=${17}                        # 是否使用序列并行: true, false
+TE=${18}                        # 是否使用Transformer Engine: true, false
+SAVE_INTERVAL=${19}             # 保存ckpt的间隔
+DATASET_PATH=${20}              # 训练数据集路径
+VALID_DATASET_PATH=${21}        # 验证数据集路径
+PRETRAIN_CHECKPOINT_PATH=${22}  # 预训练模型路径
+TRAIN_ITERS=${23}               # 训练step数
+WARMUP_ITERS=${24}              # 预热step数
+OUTPUT_BASEPATH=${25}           # 训练输出文件路径
+```
+
 ## Megatron-LM-Dense模型格式转换
 ```bash
-cd /workspace/PAI-Megatron-Patch/toolkits/model_checkpoints_convertor/mistral
+cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/mistral
 sh hf2megatron_convertor.sh \
 ../../../     \
 /mnt/mistral-ckpts/Mistral-7B-v0.1    \
@@ -102,7 +132,7 @@ false
 
 ## Megatron-LM-Dense继续预训练
 ```bash
-cd /workspace/PAI-Megatron-Patch/examples/mistral
+cd /workspace/Pai-Megatron-Patch/examples/mistral
 sh run_pretrain_megatron_mistral.sh  \
 dsw  \
 ../../ \
@@ -132,7 +162,7 @@ false   \
 
 ## Megatron-LM-Dense指令微调
 ```bash
-cd /workspace/PAI-Megatron-Patch/examples/mistral
+cd /workspace/Pai-Megatron-Patch/examples/mistral
 sh run_finetune_megatron_mistral_withGA.sh  \
 dsw  \
 ../../ \
@@ -178,7 +208,7 @@ EP=${11}                       # 专家并行度
 mg2hf=${12}                    # 是否执行mcore2hf转换
 ```
 
-运行run_pretrain_mcore_mistral.sh和run_finetune_mcore_mistral_withGA.sh脚本，需要传入的参数列表如下
+运行run_pretrain_mcore_mistral.sh脚本，需要传入的参数列表如下
 ```
 ENV=$1                          # 运行环境: dlc, dsw
 MEGATRON_PATCH_PATH=$2          # 设置Megatron Patch的代码路径
@@ -207,9 +237,39 @@ WARMUP_TOKENS=${24}             # 预热token数
 OUTPUT_BASEPATH=${25}           # 训练输出文件路径
 ```
 
+运行run_finetune_mcore_mistral_withGA.sh脚本，需要传入的参数列表如下
+```
+ENV=$1                          # 运行环境: dlc, dsw
+MEGATRON_PATCH_PATH=$2          # 设置Megatron Patch的代码路径
+MODEL_SIZE=$3                   # 模型结构参数量级：7B, 13B
+BATCH_SIZE=$4                   # 每卡训练一次迭代样本数: 4, 8
+GLOBAL_BATCH_SIZE=$5            # 全局batch size
+LR=$6                           # 学习率: 1e-5, 5e-5
+MIN_LR=$7                       # 最小学习率: 1e-6, 5e-6
+SEQ_LEN=$8                      # 序列长度
+PAD_LEN=$9                      # Padding长度：100
+EXTRA_VOCAB_SIZE=${10}          # 词表扩充大小
+PR=${11}                        # 训练精度: fp16, bf16
+TP=${12}                        # 模型并行度
+PP=${13}                        # 流水并行度
+AC=${14}                        # 激活检查点模式: sel, full
+DO=${15}                        # 是否使用Megatron版Zero-1降显存优化器: true, false
+FL=${16}                        # 是否使用Flash Attention: true, false
+SP=${17}                        # 是否使用序列并行: true, false
+TE=${18}                        # 是否使用Transformer Engine: true, false
+MOE=${19}                       # 是否打开MOE: true, false
+SAVE_INTERVAL=${20}             # 保存ckpt的间隔
+DATASET_PATH=${21}              # 训练数据集路径
+VALID_DATASET_PATH=${22}        # 验证数据集路径
+PRETRAIN_CHECKPOINT_PATH=${23}  # 预训练模型路径
+TRAIN_ITERS=${24}               # 训练step数
+WARMUP_ITERS=${25}              # 预热step数
+OUTPUT_BASEPATH=${26}           # 训练输出文件路径
+```
+
 ## Megatron-Core-Dense模型格式转换
 ```bash
-cd /workspace/PAI-Megatron-Patch/toolkits/model_checkpoints_convertor/mistral \
+cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/mistral \
 sh hf2mcore_convertor.sh \
 7B \
 /mnt/mistral-ckpts/Mistral-7B-v0.1 \
@@ -227,7 +287,7 @@ false
 
 ## Megatron-Core-Dense继续预训练
 ```bash
-cd /workspace/PAI-Megatron-Patch/examples/mistral
+cd /workspace/Pai-Megatron-Patch/examples/mistral
 sh run_pretrain_mcore_mistral.sh  \
 dsw  \
 ../../ \
@@ -258,7 +318,7 @@ false \
 
 ## Megatron-Core-Dense指令微调
 ```bash
-cd /workspace/PAI-Megatron-Patch/examples/mistral
+cd /workspace/Pai-Megatron-Patch/examples/mistral
 sh run_finetune_mcore_mistral_withGA.sh  \
 dsw  \
 ../../ \
@@ -292,7 +352,7 @@ false \
 
 ## Megatron-Core-MoE模型格式转换
 ```bash
-cd /workspace/PAI-Megatron-Patch/toolkits/model_checkpoints_convertor/mistral \
+cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/mistral \
 sh hf2mcore_convertor.sh \
 7B \
 /mnt/mistral-ckpts/Mistral-7B-v0.1 \
@@ -310,7 +370,7 @@ false
 
 ## Megatron-Core-MoE继续预训练
 ```bash
-cd /workspace/PAI-Megatron-Patch/examples/mistral
+cd /workspace/Pai-Megatron-Patch/examples/mistral
 sh run_pretrain_mcore_mistral.sh  \
 dsw  \
 ../../ \
@@ -341,7 +401,7 @@ true \
 
 ## Megatron-Core-MoE指令微调
 ```bash
-cd /workspace/PAI-Megatron-Patch/examples/mistral
+cd /workspace/Pai-Megatron-Patch/examples/mistral
 sh run_finetune_mcore_mistral_withGA.sh  \
 dsw  \
 ../../ \
@@ -375,7 +435,7 @@ true \
 
 ## Megatron-LM-Dense模型转成Huggingface格式
 ```bash
-cd /workspace/PAI-Megatron-Patch/toolkits/model_checkpoints_convertor/mistral
+cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/mistral
 sh hf2megatron_convertor.sh \
 ../../../     \
 /mnt/mistral-ckpts/Mistral-7B-v0.1-hf-to-megatron-tp4-pp1/release  \
@@ -389,7 +449,7 @@ true
 
 ## 运行评估工具
 ```bash
-cd /workspace/PAI-Megatron-Patch/LM-Evaluation-Harness-240310
+cd /workspace/Pai-Megatron-Patch/LM-Evaluation-Harness-240310
 accelerate launch --main_process_port 29051 -m lm_eval \
 --model hf \
 --model_args pretrained=/mnt/mistral-ckpts/Mistral-7B-v0.1-megatron-to-hf,trust_remote_code=True \

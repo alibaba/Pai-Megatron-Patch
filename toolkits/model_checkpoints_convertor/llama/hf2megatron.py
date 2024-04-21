@@ -1109,7 +1109,8 @@ def main():
                 'codellama-13b':'llama-7b',
                 'codellama-34b':'llama2-70b',
                 'llama2-7b':'llama-7b',
-                'llama2-13b':'llama-7b'}
+                'llama2-13b':'llama-7b',
+                'llama3-8b': 'llama2-70b'}
     args.model_name = model_map.get(args.model_name, args.model_name)
     if args.convert_checkpoint_from_megatron_to_transformers:
         convert_checkpoint_from_megatron_to_transformers(args)

@@ -25,17 +25,17 @@ pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 # 数据集和模型下载
 ```bash
 cd /mnt
-mkdir llama2-ckpts
-cd llama2-ckpts
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-ckpts/Llama-2-13b-hf.tgz
-tar -zxf Llama-2-13b-hf.tgz
+mkdir llama3-ckpts
+cd llama3-ckpts
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama3-ckpts/Meta-Llama-3-8B.tgz
+tar -zxf Meta-Llama-3-8B.tgz
 
-mkdir llama2-datasets
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/wudao_llamabpe_text_document.bin
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/wudao_llamabpe_text_document.idx
+mkdir llama3-datasets
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama3-datasets/wudao_llama3bpe_content_document.bin
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama3-datasets/wudao_llama3bpe_content_document.idx
 
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/alpaca_zh-llama2-train.json
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama2-datasets/alpaca_zh-llama2-valid.json
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama3-datasets/alpaca_zh-llama3-train.json
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama3-datasets/alpaca_zh-llama3-valid.json
 ```
 
 # Megatron-LM-Dense模型训练流程
@@ -47,7 +47,7 @@ SOURCE_CKPT_PATH=$2                # 原始CKPT的路径
 TARGET_CKPT_PATH=$3                # 目标CKPT的路径
 TP=$4                              # 模型并行度
 PP=$5                              # 流水并行度
-MN=$6                              # llama-7b, llama-13b, llama-30b, llama-65b, llama2-7b, llama2-13b, llama2-70b
+MN=$6                              # llama3-8b 
 EXTRA_VOCAB_SIZE=$7                # 词表扩充大小
 mg2hf=$8                           # 是否执行mg2hf转换
 ```
@@ -104,8 +104,8 @@ SAVE_INTERVAL=${19}             # 保存ckpt的间隔
 DATASET_PATH=${20}              # 训练数据集路径
 VALID_DATASET_PATH=${21}        # 验证数据集路径
 PRETRAIN_CHECKPOINT_PATH=${22}  # 预训练模型路径
-TRAIN_ITERS=${23}               # 训练steps数
-WARMUP_ITERS=${24}              # 预热steps数
+TRAIN_ITERS=${23}               # 训练step数
+WARMUP_ITERS=${24}              # 预热step数
 OUTPUT_BASEPATH=${25}           # 训练输出文件路径
 ```
 
@@ -114,31 +114,31 @@ OUTPUT_BASEPATH=${25}           # 训练输出文件路径
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/llama
 sh hf2megatron_convertor.sh \
 ../../../     \
-/mnt/llama2-ckpts/Llama-2-13b-hf     \
-/mnt/llama2-ckpts/Llama-2-13b-hf-to-megatron-tp8-pp1  \
-8  \
+/mnt/llama3-ckpts/Meta-Llama-3-8B    \
+/mnt/llama3-ckpts/Meta-Llama-3-8B-to-megatron-tp4-pp1  \
+4  \
 1  \
-llama2-13b \
+llama3-8b \
 0 \
 false
 ```
 
 ## Megatron-LM-Dense继续预训练
 ```bash
-cd /workspace/Pai-Megatron-Patch/examples/llama2
+cd /workspace/Pai-Megatron-Patch/examples/llama3
 sh run_pretrain_megatron_llama.sh  \
 dsw  \
 ../../ \
-13B   \
+8B   \
 1    \
 8 \
 1e-5   \
 1e-6   \
 128  \
 128  \
-0   \
+256   \
 bf16  \
-8   \
+4   \
 1  \
 sel  \
 true   \
@@ -146,29 +146,29 @@ false  \
 false   \
 false   \
 100000  \
-/mnt/llama2-datasets/wudao_llamabpe_text_document   \
-/mnt/llama2-ckpts/Llama-2-13b-hf-to-megatron-tp8-pp1   \
+/mnt/llama3-datasets/wudao_llama3bpe_content_document  \
+/mnt/llama3-ckpts/Meta-Llama-3-8B-to-megatron-tp4-pp1  \
 100000000   \
 10000   \
-/mnt/output_megatron_llama2
+/mnt/output_megatron_llama3
 ```
 
 ## Megatron-LM-Dense指令微调
 ```bash
-cd /workspace/Pai-Megatron-Patch/examples/llama2
+cd /workspace/Pai-Megatron-Patch/examples/llama3
 sh run_finetune_megatron_llama_withGA.sh  \
 dsw  \
 ../../ \
-13B     \
+8B     \
 1      \
 32     \
 1e-5   \
 1e-6   \
 128   \
 128     \
-0      \
+256      \
 bf16   \
-8      \
+4      \
 1      \
 sel    \
 true   \
@@ -176,12 +176,12 @@ false  \
 false  \
 false \
 100 \
-/mnt/llama2-datasets/alpaca_zh-llama2-train.json   \
-/mnt/llama2-datasets/alpaca_zh-llama2-valid.json   \
-/mnt/llama2-ckpts/Llama-2-13b-hf-to-megatron-tp8-pp1   \
+/mnt/llama3-datasets/alpaca_zh-llama2-train.json   \
+/mnt/llama3-datasets/alpaca_zh-llama2-valid.json   \
+/mnt/llama3-ckpts/Meta-Llama-3-8B-to-megatron-tp4-pp1  \
 1000 \
 10 \
-/mnt/output_megatron_llama2/
+/mnt/output_megatron_llama3/
 ```
 
 # Megatron-Core-Dense模型训练流程
@@ -265,14 +265,14 @@ OUTPUT_BASEPATH=${26}           # 训练输出文件路径
 ```bash
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/llama \
 sh hf2mcore_convertor.sh \
-7B \
-/mnt/llama2-ckpts/Llama-2-13b-hf \
+8B \
+/mnt/llama3-ckpts/Meta-Llama-3-8B    \
 ../../../     \
-/mnt/llama2-ckpts/Llama-2-13b-hf \
-/mnt/llama2-ckpts/Llama-2-13b-hf-to-mcore-tp8-pp1  \
-8  \
+/mnt/llama3-ckpts/Meta-Llama-3-8B    \
+/mnt/llama3-ckpts/Meta-Llama-3-8B-to-mcore-tp4-pp1  \
+4  \
 1  \
-0  \
+256  \
 0  \
 0  \
 0 \
@@ -281,20 +281,20 @@ false
 
 ## Megatron-Core-Dense继续预训练
 ```bash
-cd /workspace/Pai-Megatron-Patch/examples/llama2
+cd /workspace/Pai-Megatron-Patch/examples/llama3
 sh run_pretrain_mcore_llama.sh  \
 dsw  \
 ../../ \
-13B   \
+8B   \
 1    \
 8 \
 1e-5   \
 1e-6   \
 128  \
 128  \
-0   \
+256   \
 bf16  \
-8   \
+4   \
 1  \
 sel  \
 true   \
@@ -303,29 +303,29 @@ false   \
 false   \
 false \
 100000  \
-/mnt/llama2-datasets/wudao_llamabpe_text_document   \
-/mnt/llama2-ckpts/Llama-2-13b-hf-to-mcore-tp8-pp1   \
+/mnt/llama3-datasets/wudao_llama3bpe_content_document   \
+/mnt/llama3-ckpts/Meta-Llama-3-8B-to-mcore-tp4-pp1  \
 100000000   \
 10000   \
-/mnt/output_mcore_llama2
+/mnt/output_mcore_llama3
 ```
 
 ## Megatron-Core-Dense指令微调
 ```bash
-cd /workspace/Pai-Megatron-Patch/examples/llama2
+cd /workspace/Pai-Megatron-Patch/examples/llama3
 sh run_finetune_mcore_llama_withGA.sh  \
 dsw  \
 ../../ \
-13B   \
+8B   \
 1    \
 8 \
 1e-5   \
 1e-6   \
 128  \
 128  \
-0   \
+256   \
 bf16  \
-8   \
+4   \
 1  \
 sel  \
 true   \
@@ -334,12 +334,12 @@ false   \
 false   \
 false \
 100000  \
-/mnt/llama2-datasets/alpaca_zh-llama2-train.json   \
-/mnt/llama2-datasets/alpaca_zh-llama2-valid.json   \
-/mnt/llama2-ckpts/Llama-2-13b-hf-to-mcore-tp8-pp1   \
+/mnt/llama3-datasets/alpaca_zh-llama3-train.json   \
+/mnt/llama3-datasets/alpaca_zh-llama3-valid.json   \
+/mnt/llama3-ckpts/Meta-Llama-3-8B-to-mcore-tp4-pp1  \
 100000000   \
 10000   \
-/mnt/output_mcore_llama2
+/mnt/output_mcore_llama3
 ```
 
 # 下游任务评估
@@ -349,11 +349,11 @@ false \
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/llama
 sh hf2megatron_convertor.sh \
 ../../../     \
-/mnt/llama2-ckpts/Llama-2-13b-hf-to-mcore-tp8-pp1/release  \
-/mnt/llama2-ckpts/Llama-2-13b-hf-megatron-to-hf    \
+/mnt/llama3-ckpts/Meta-Llama-3-8B-to-mcore-tp4-pp1/release  \
+/mnt/llama2-ckpts/Meta-Llama-3-8B-hf-megatron-to-hf    \
 8  \
 1  \
-llama2-13b \
+llama3-8b \
 0 \
 true
 ```
@@ -363,7 +363,7 @@ true
 cd /workspace/Pai-Megatron-Patch/LM-Evaluation-Harness-240310
 accelerate launch --main_process_port 29051 -m lm_eval \
 --model hf \
---model_args pretrained=/mnt/llama2-ckpts/Llama-2-13b-hf-megatron-to-hf,trust_remote_code=True \
+--model_args pretrained=/mnt/llama3-ckpts/Meta-Llama-3-8B-hf-megatron-to-hf ,trust_remote_code=True \
 --tasks mmlu,ceval-valid  \
 --batch_size 16
 ```

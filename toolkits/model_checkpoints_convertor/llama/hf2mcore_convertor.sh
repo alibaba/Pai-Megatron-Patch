@@ -51,6 +51,17 @@ gqa_options=" \
 		    --group-query-attention \
 		    --num-query-groups 8"
 
+elif [ $MODEL_SIZE = 8B ]; then
+
+NUM_LAYERS=32
+HIDDEN_SIZE=4096
+NUM_ATTN_HEADS=32
+INTERMEDIATE_SIZE=14336
+
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups 8"
+
 fi
 
 
