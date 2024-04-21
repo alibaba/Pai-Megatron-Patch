@@ -201,6 +201,15 @@ def build_tokenizer(args):
             @property
             def eod(self):
                 return self.tokenizer.eos_token_id
+
+            @property
+            def eos_token(self):
+                return self.tokenizer.eos_token
+
+            @property
+            def pad_token_id(self):
+                return self.tokenizer.pad_token_id
+
         tokenizer = _Qwen2Tokenizer(args.load, + args.extra_vocab_size)
         args.padded_vocab_size = tokenizer.vocab_size
 

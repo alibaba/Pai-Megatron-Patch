@@ -1,5 +1,5 @@
 #!/bin/bash
-# bash hf2mcore_convertor.sh ../../../Megatron-LM-231221 /mnt/workspace/latest/mixtral/Mixtral-8x7B-Instruct-v0.1-to-mcore-tp4-ep4/release/ /mnt/workspace/latest/mixtral/test 4 1 4 16 mixtral-8x7b true
+
 set -e
 START_TIME=$SECONDS
 
@@ -8,31 +8,29 @@ SOURCE_CKPT_PATH=$2
 TARGET_CKPT_PATH=$3
 TP=$4
 PP=$5
-EP=$6
-WS=$7
-MN=$8 #mixtral-8x7b or mistral-7b
-MG2HF=$9
+MN=$6 #mistral-7b
+EXTRA_VOCAB_SIZE=$7
+mg2hf=$8
 
-if [ $MG2HF = true ]; then
+if [ $mg2hf = true ]; then
     do_options="
                 --convert_checkpoint_from_megatron_to_transformers
     "
-elif [ $MG2HF = false ]; then
+elif [ $mg2hf = false ]; then
     do_options=""
 fi
 
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-231007
 
-export PYTHONPATH=${MEGATRON_PATH}:$PYTHONPATH
-
-python hf2mcore.py \
+python hf2megatron.py \
 --load_path ${SOURCE_CKPT_PATH} \
 --save_path ${TARGET_CKPT_PATH} \
---target_params_dtype bf16 \
+--target_params_dtype fp16 \
+--megatron-path ${MEGATRON_PATH} \
 --target_tensor_model_parallel_size ${TP} \
 --target_pipeline_model_parallel_size ${PP} \
---target_expert_model_parallel_size ${EP} \
---world_size ${WS} \
 --model_name ${MN} \
+--extra_num_vocabs ${EXTRA_VOCAB_SIZE} \
 ${do_options}
 
 ELAPSED_TIME=$(($SECONDS - $START_TIME))

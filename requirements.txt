@@ -5,6 +5,9 @@ ninja
 tokenizers
 transformers>=4.38.2
 accelerate>=0.23.0
+datasets==2.16.1
+wcwidth==0.2.12
+pyarrow==12.0.1
 jieba
 sentencepiece
 rjieba

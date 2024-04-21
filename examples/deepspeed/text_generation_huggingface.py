@@ -9,18 +9,18 @@ import argparse
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 
-def get_patch_args(parser):
+def get_tasks_args(parser):
     group = parser.add_argument_group(title='vllm inference')
-    group.add_argument('--cuda-visible-devices', type=int, default=0, help='Cuda visible devices', required=False)
     group.add_argument('--checkpoint', type=str, help='The checkpoint of the the specified model', required=True)
     group.add_argument('--input-file', type=argparse.FileType('r'), help='Specify the input file', required=True)
     group.add_argument('--output-file', type=argparse.FileType('w'), help='Specify the output file', required=True)
-    group.add_argument('--output-max-tokens', default=2048, type=int, help='Specify the output file')
+    group.add_argument('--cuda-visible-devices', type=int, default=0, help='Cuda visible devices', required=False)
+    group.add_argument('--output-max-tokens', default=2048, type=int, help='Specify the output max tokens')
     return parser
 
 
 parser = argparse.ArgumentParser(description='Deepspeed Inference')
-parser = get_patch_args(parser)
+parser = get_tasks_args(parser)
 args = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = str(args.cuda_visible_devices)

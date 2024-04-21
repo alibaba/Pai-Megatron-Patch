@@ -1,10 +1,9 @@
 #!/bin/bash
-#sh run_pretrain_megatron_mixtral.sh dsw ../.. 0.125B 1 8 1e-5 1e-6 80 80 0 bf16 2 1 sel true true true true 100  /mnt/llama2-datasets/alpaca_data.json /mnt/mixtral-ckpts/Mixtral-8x7B-v0.1 10000000000 100000000 /mnt/test_mixtral_output
-
+#sh run_pretrain_megablocks_qwen.sh dsw ../.. 0.5B 1 8 1e-5 1e-6 2048 32768 293 fp16 1 1 sel false false true false true 10 /mnt/qwen-datasets/wudao_qwenbpe_content_document /mnt/qwen-ckpts/Qwen1.5-0.5B 18349219840 183492198 debug
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
-MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-240126
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-MegaBlocks
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
@@ -14,14 +13,12 @@ MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
 GPUS_PER_NODE=8
-TOTAL_GPUS=$(($GPUS_PER_NODE*$NNODES))
 
 elif [ $ENV = dlc ]; then
 
 NNODES=${WORLD_SIZE}
 NODE_RANK=${RANK}
 GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU}
-TOTAL_GPUS=$(($GPUS_PER_NODE*$NNODES))
 
 fi
 
@@ -43,44 +40,67 @@ DO=${15}
 FL=${16}
 SP=${17}
 TE=${18}
-SAVE_INTERVAL=${19}
-DATASET_PATH=${20}
-PRETRAIN_CHECKPOINT_PATH=${21}
-TRAIN_TOKENS=${22}
-WARMUP_TOKENS=${23}
-OUTPUT_BASEPATH=${24}
+MOE=${19}
+SAVE_INTERVAL=${20}
+DATASET_PATH=${21}
+VALID_DATASET_PATH=${22}
+PRETRAIN_CHECKPOINT_PATH=${23}
+TRAIN_TOKENS=${24}
+WARMUP_TOKENS=${25}
+OUTPUT_BASEPATH=${26}
 
-if [ $MODEL_SIZE = 0.125B ]; then
+if [ $MODEL_SIZE = 0.5B ]; then
 
-NUM_LAYERS=2
-HIDDEN_SIZE=4096
-NUM_ATTN_HEADS=32
-INTERMEDIATE_SIZE=14336
-MPE=32768
-SLW=4096
+NUM_LAYERS=24
+HIDDEN_SIZE=1024
+NUM_ATTN_HEADS=16
+INTERMEDIATE_SIZE=2816
+MAX_POSITION_EMBEDDINGS=32768
 
-gqa_options=" \
-		    --group-query-attention \
-		    --num-query-groups 8"
+elif [ $MODEL_SIZE = 1.8B ]; then
+
+NUM_LAYERS=24
+HIDDEN_SIZE=2048
+NUM_ATTN_HEADS=16
+INTERMEDIATE_SIZE=5504
+MAX_POSITION_EMBEDDINGS=32768
+
+elif [ $MODEL_SIZE = 4B ]; then
+
+NUM_LAYERS=40
+HIDDEN_SIZE=2560
+NUM_ATTN_HEADS=20
+INTERMEDIATE_SIZE=6912
+MAX_POSITION_EMBEDDINGS=32768
 
 elif [ $MODEL_SIZE = 7B ]; then
 
 NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
-INTERMEDIATE_SIZE=14336
-MPE=32768
-SLW=4096
+INTERMEDIATE_SIZE=11008
+MAX_POSITION_EMBEDDINGS=32768
 
-gqa_options=" \
-		    --group-query-attention \
-		    --num-query-groups 8"
+elif [ $MODEL_SIZE = 13B ]; then
+
+NUM_LAYERS=40
+HIDDEN_SIZE=5120
+NUM_ATTN_HEADS=40
+INTERMEDIATE_SIZE=13696
+MAX_POSITION_EMBEDDINGS=32768
+
+elif [ $MODEL_SIZE = 72B ]; then
+
+NUM_LAYERS=80
+HIDDEN_SIZE=8192
+NUM_ATTN_HEADS=64
+INTERMEDIATE_SIZE=24576
+MAX_POSITION_EMBEDDINGS=32768
 
 fi
 
 if [ $AC = full ]; then
     activation_checkpoint_options=" \
-        --recompute-num-layers 1 \
 		    --recompute-method uniform \
 		    --recompute-granularity full"
 elif [ $AC = sel ]; then
@@ -88,7 +108,7 @@ elif [ $AC = sel ]; then
         --recompute-activations"
 elif [ $AC = none ]; then
     activation_checkpoint_options=" \
-                    "
+    "
 fi
 
 if [ $PR = fp16 ]; then
@@ -99,7 +119,7 @@ elif [ $PR = bf16 ]; then
         --bf16"
 elif [ $PR = fp8 ]; then
     pr_options=" \
-        --bf16
+        --bf16 \
         --fp8-hybrid \
         --fp8-amax-compute-algo max \
         --fp8-amax-history-len 1024 \
@@ -130,6 +150,18 @@ if [ $TE = true ]; then
 
 elif [ $TE = false ]; then
     te_options=" \
+        --transformer-impl local"
+fi
+
+if [ $MOE = true ]; then
+    moe_options=" \
+		    --moe-top-k 2 \
+		    --moe-num-experts 8 \
+		    --moe-loss-weight 1e-2 \
+		    --moe-expert-model-parallelism"
+
+elif [ $MOE = false ]; then
+    moe_options=" \
                     "
 fi
 
@@ -147,13 +179,11 @@ if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
             --load $PRETRAIN_CHECKPOINT_PATH"
 fi
 
-EP=$(($TOTAL_GPUS/$TP/$PP))
-
 TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 
-NAME="${ENV}-pretrain-megatron-gpt3-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
+NAME="finetune-mcore-qwen-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-moe-${MOE}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
 mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
 mkdir -p "${OUTPUT_BASEPATH}/log/"
@@ -166,15 +196,18 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
         --train-data-path ${DATASET_PATH} \
-        --data-path ${DATASET_PATH} \
+        --valid-data-path ${VALID_DATASET_PATH} \
+        --test-data-path ${VALID_DATASET_PATH} \
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style cosine \
+        --weight-decay 0.1 \
         --adam-beta1 0.9 \
         --adam-beta2 0.95 \
-        --weight-decay 0.1 \
         --clip-grad 1.0 \
-        --init-method-std 0.006 \
+        --init-method-std 0.008 \
+        --attention-dropout 0.0 \
+        --hidden-dropout 0.0 \
         --lr-decay-iters ${LR_DECAY_ITERS} \
         --lr-warmup-iters ${LR_WARMUP_ITERS} \
         --train-iters ${TRAIN_ITERS} \
@@ -183,10 +216,11 @@ megatron_options="  \
         --global-batch-size ${GLOBAL_BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
-        --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --num-attention-heads ${NUM_ATTN_HEADS} \
+        --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
-        --max-position-embeddings ${SEQ_LEN} \
+        --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
+        --max-padding-length ${PAD_LEN} \
         --log-interval 1 \
         --eval-interval 10000 \
         --eval-iters 10 \
@@ -200,32 +234,25 @@ megatron_options="  \
         --pipeline-model-parallel-size ${PP} \
         --no-load-optim \
         --no-load-rng \
-        --num-workers 0 \
-        --seed 1234 \
-        --max-padding-length ${PAD_LEN} \
+        --num-workers 8 \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type MistralTokenizer \
+        --patch-tokenizer-type LLamaTokenizer \
         --dataset LLama-Pretrain-Raw \
         --swiglu \
-        --use-rotary-position-embeddings \
+        --normalization RMSNorm \
+        --norm-epsilon 1e-06 \
+        --use-llama2-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear \
-        --disable-bias-linear-fc \
-        --disable-bias-attn-fc \
-        --normalization RMSNorm \
-        --no-masked-softmax-fusion \
-        --no-position-embedding \
-        --num-experts 8 \
-        --moe-router-topk 2 \
-        --use-mcore-models \
-        --no-rope-fusion \
-        --expert-model-parallel-size ${EP} \
-        --distributed-timeout-minutes 6000 \
-        --transformer-impl transformer_engine"
+        --add-qkv-bias \
+        --rotary-percent 1.0 \
+        --rotary-base 1000000 \
+        --rotary-seq-len-interpolation-factor 1
+        "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megatron_mixtral.py
- ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
+run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megablocks_qwen.py
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options} ${moe_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
