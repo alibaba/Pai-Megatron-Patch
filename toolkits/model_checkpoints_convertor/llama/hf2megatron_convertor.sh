@@ -1,8 +1,5 @@
 #!/bin/bash
-# megatron to transformers: You need to copy the tokenizer files into the save_path
-# bash model_convertor.sh ../../Megatron-LM/ ../../llama-hf2mg-test-2-2/release/ ../../llama_mg2hf 1 1 llama-7b 1 true
-# transformers to megatron
-# bash model_convertor.sh ../../Megatron-LM/ ../../llama-7b-hf ../../llama-hf2mg 1 1 llama-7b 1 false
+
 set -e
 START_TIME=$SECONDS
 
@@ -11,7 +8,7 @@ SOURCE_CKPT_PATH=$2
 TARGET_CKPT_PATH=$3
 TP=$4
 PP=$5
-MN=$6 #mixtral-8x7b
+MN=$6 #llama-7b, llama-13b, llama-30b, llama-65b, llama2-7b, llama2-13b, llama2-70b
 EXTRA_VOCAB_SIZE=$7
 mg2hf=$8
 
@@ -23,9 +20,9 @@ elif [ $mg2hf = false ]; then
     do_options=""
 fi
 
-export PYTHONPATH=${MEGATRON_PATH}:$PYTHONPATH
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-231007
 
-python checkpoint_reshaping_and_interoperability.py \
+python hf2megatron.py \
 --load_path ${SOURCE_CKPT_PATH} \
 --save_path ${TARGET_CKPT_PATH} \
 --target_params_dtype fp16 \

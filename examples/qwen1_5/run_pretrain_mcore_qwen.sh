@@ -1,6 +1,4 @@
 #!/bin/bash
-#sh run_pretrain_mcore_qwen.sh dsw ../.. 0.5B 1 8 1e-5 1e-6 2048 32768 293 bf16 1 1 sel true false true true false 100000 /mnt/qwen-datasets/wudao_qwenbpe_content_document /mnt/qwen-ckpts/qwen1.5_0.5b_mcore_tp1_pp1_v2 10000000000 100000000 debug
-#sh run_pretrain_mcore_qwen.sh dsw ../.. 0.5B 1 8 1e-5 1e-6 2048 32768 293 bf16 1 1 sel true false true true true 10 /mnt/qwen-datasets/wudao_qwenbpe_content_document /mnt/qwen-ckpts/Qwen1.5-0.5B 18349219840 183492198 debug
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -149,7 +147,7 @@ fi
 
 if [ $MOE = true ]; then
     moe_options=" \
-		    --moe-router-topk 1 \
+		    --moe-router-topk 2 \
 		    --num-experts 8 \
 		    --moe-aux-loss-coeff 1e-2 \
 		    --expert-model-parallel-size 1 \
@@ -242,7 +240,6 @@ megatron_options="  \
         --use-mcore-models \
         --rotary-percent 1.0 \
         --rotary-base 1000000 \
-        --apply-query-key-layer-scaling \
         --rotary-seq-len-interpolation-factor 1
         "
 

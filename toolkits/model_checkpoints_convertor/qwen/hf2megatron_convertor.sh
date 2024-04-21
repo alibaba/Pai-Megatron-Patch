@@ -22,7 +22,7 @@ elif [ $mg2hf = false ]; then
     do_options=""
 fi
 
-export PYTHONPATH=${MEGATRON_PATH}:$PYTHONPATH
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-231007
 
 if [[ "$MN" == *"qwen1.5"* ]]; then
 

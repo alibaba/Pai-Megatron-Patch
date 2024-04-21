@@ -1,5 +1,4 @@
 #!/bin/bash
-# sh run_finetune_mcore_llama_withGA.sh dsw ../.. 7B 1 8 1e-5 1e-5 512 512 0 bf16 1 1 sel true false true false 100 /mnt/mistral-datasets/DKYoon-SlimPajama-6B.jsonl /mnt/mistral-datasets/slim_small_valid.json /mnt/llama2-ckpts/Llama-2-7b-hf 2000 0 debug
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -201,7 +200,8 @@ megatron_options="  \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
-        --max-position-embeddings ${SEQ_LEN} \
+        --max-position-embeddings ${PAD_LEN} \
+        --max-padding-length ${PAD_LEN} \
         --log-interval 1 \
         --eval-interval 10000 \
         --eval-iters 10 \
@@ -228,7 +228,8 @@ megatron_options="  \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear \
-        --eod-mask-loss
+        --eod-mask-loss \
+        --transformer-impl transformer_engine
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS finetune_mcore_llama_withGA.py

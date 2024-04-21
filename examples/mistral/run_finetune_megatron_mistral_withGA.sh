@@ -1,10 +1,9 @@
 #!/bin/bash
-#sh run_evaluate_megatron_mixtral.sh dsw ../.. 0.125B 1 81 81 0 bf16 2 1 sel false false true false /mnt/llama2-datasets/alpaca_data.json /mnt/mixtral-ckpts/Mixtral-8x7B-v0.1
-#
+#sh run_pretrain_megatron_mistral.sh dsw ../.. 7B 1 8 1e-5  1e-6 128 128 0 bf16 4 1 sel true false false false 10000 wudao_mistralbpe_content_document_small /mnt/mistral-ckpts/Mistral-7B-v0.1-hf-to-megatron-tp4-pp1/ 100000000 10000 /mnt/output_megatron_mistral
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
-MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-240126
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-231007
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
@@ -14,14 +13,12 @@ MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
 GPUS_PER_NODE=8
-TOTAL_GPUS=$(($GPUS_PER_NODE*$NNODES))
 
 elif [ $ENV = dlc ]; then
 
 NNODES=${WORLD_SIZE}
 NODE_RANK=${RANK}
 GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU}
-TOTAL_GPUS=$(($GPUS_PER_NODE*$NNODES))
 
 fi
 
@@ -29,40 +26,36 @@ DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $
 
 MODEL_SIZE=$3
 BATCH_SIZE=$4
-SEQ_LEN=$5
-PAD_LEN=$6
-EXTRA_VOCAB_SIZE=$7
-PR=$8
-TP=$9
-PP=${10}
-AC=${11}
-DO=${12}
-FL=${13}
-SP=${14}
-TE=${15}
-DATASET_PATH=${16}
-PRETRAIN_CHECKPOINT_PATH=${17}
+GLOBAL_BATCH_SIZE=$5
+LR=$6
+MIN_LR=$7
+SEQ_LEN=$8
+PAD_LEN=$9
+EXTRA_VOCAB_SIZE=${10}
+PR=${11}
+TP=${12}
+PP=${13}
+AC=${14}
+DO=${15}
+FL=${16}
+SP=${17}
+TE=${18}
+SAVE_INTERVAL=${19}
+DATASET_PATH=${20}
+VALID_DATASET_PATH=${21}
+PRETRAIN_CHECKPOINT_PATH=${22}
+TRAIN_TOKENS=${23}
+WARMUP_TOKENS=${24}
+OUTPUT_BASEPATH=${25}
 
-if [ $MODEL_SIZE = 0.125B ]; then
 
-NUM_LAYERS=2
-HIDDEN_SIZE=4096
-NUM_ATTN_HEADS=32
-INTERMEDIATE_SIZE=14336
-MPE=32768
-SLW=4096
-
-gqa_options=" \
-		    --group-query-attention \
-		    --num-query-groups 8"
-
-elif [ $MODEL_SIZE = 7B ]; then
+if [ $MODEL_SIZE = 7B ]; then
 
 NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=14336
-MPE=32768
+MAX_POSITION_EMBEDDINGS=32768
 SLW=4096
 
 gqa_options=" \
@@ -73,7 +66,6 @@ fi
 
 if [ $AC = full ]; then
     activation_checkpoint_options=" \
-        --recompute-num-layers 1 \
 		    --recompute-method uniform \
 		    --recompute-granularity full"
 elif [ $AC = sel ]; then
@@ -140,49 +132,72 @@ if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
             --load $PRETRAIN_CHECKPOINT_PATH"
 fi
 
-EP=$(($TOTAL_GPUS/$TP/$PP))
+TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 
-megatron_options=" \
-        --valid-data-path ${DATASET_PATH}
+NAME="${ENV}-pretrain-megatron-gpt3-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
+mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
+mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
+mkdir -p "${OUTPUT_BASEPATH}/log/"
+current_time=$(date "+%Y.%m.%d-%H.%M.%S")
+TENSORBOARD_DIR="${OUTPUT_BASEPATH}/tensorboard/${NAME}_${current_time}"
+mkdir -p ${TENSORBOARD_DIR}
+
+SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
+
+megatron_options="  \
+        --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
+        --train-data-path ${DATASET_PATH} \
+        --valid-data-path ${VALID_DATASET_PATH} \
+        --lr ${LR} \
+        --min-lr ${MIN_LR} \
+        --lr-decay-style linear \
+        --adam-beta1 0.9 \
+        --adam-beta2 0.95 \
+        --weight-decay 0.1 \
+        --clip-grad 1.0 \
+        --init-method-std 0.006 \
+        --lr-decay-iters ${LR_DECAY_ITERS} \
+        --lr-warmup-iters ${LR_WARMUP_ITERS} \
+        --train-iters ${TRAIN_ITERS} \
         --micro-batch-size ${BATCH_SIZE} \
+        --global-batch-size ${GLOBAL_BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
         --num-attention-heads ${NUM_ATTN_HEADS} \
-        --seq-length ${SEQ_LEN} \
-        --max-position-embeddings ${MPE} \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
+        --seq-length ${SEQ_LEN} \
+        --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
+        --max-padding-length ${PAD_LEN} \
         --log-interval 1 \
-        --eval-interval 100 \
+        --eval-interval 10000 \
         --eval-iters 10 \
+        --save-interval ${SAVE_INTERVAL} \
+        --tensorboard-queue-size 1 \
+        --tensorboard-dir ${TENSORBOARD_DIR} \
+        --log-timers-to-tensorboard \
+        --log-batch-size-to-tensorboard \
+        --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
         --no-load-optim \
         --no-load-rng \
+        --num-workers 8 \
         --seed 1234 \
-        --num-workers 0 \
-        --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type MistralTokenizer \
-        --dataset LLama-SFT \
+        --dataset LLama-Pretrain-Raw \
+        --sliding-window ${SLW} \
         --swiglu \
-        --use-rotary-position-embeddings \
+        --normalization RMSNorm \
+        --use-mistral-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
-        --disable-bias-linear \
-        --disable-bias-linear-fc \
-        --disable-bias-attn-fc \
-        --normalization RMSNorm \
-        --no-masked-softmax-fusion \
-        --no-position-embedding \
-        --num-experts 8 \
-        --moe-router-topk 2 \
-        --use-mcore-models \
-        --no-rope-fusion \
-        --expert-model-parallel-size ${EP} \
-        --transformer-impl transformer_engine
+        --disable-bias-linear
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_megatron_mixtral.py
+run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megatron_mistral.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}

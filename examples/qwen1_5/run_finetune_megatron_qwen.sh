@@ -196,7 +196,6 @@ megatron_options="  \
         --eval-iters 10 \
         --save-interval 1000000 \
         --tensorboard-queue-size 1 \
-        --dataset LLama-SFT \
         --tensorboard-dir ${TENSORBOARD_DIR} \
         --log-timers-to-tensorboard \
         --log-batch-size-to-tensorboard \
@@ -209,7 +208,8 @@ megatron_options="  \
         --seed 1234 \
         --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type LLamaTokenizer \
+        --patch-tokenizer-type Qwen2Tokenizer \
+        --dataset LLama-Pretrain-Raw \
         --swiglu \
         --normalization RMSNorm \
         --use-llama2-rotary-position-embeddings \
@@ -219,7 +219,7 @@ megatron_options="  \
         --rotary-scale-factor 1 \
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS ../llama2/finetune_megatron_llama.py
+run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_mcore_qwen.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options}"
 
 echo ${run_cmd}

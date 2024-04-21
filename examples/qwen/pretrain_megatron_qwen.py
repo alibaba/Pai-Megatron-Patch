@@ -102,7 +102,7 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     """Build train, valid, and test datasets."""
     args = get_args()
 
-    if os.path.isfile(args.train_data_path[0]):
+    if "-Raw" in args.dataset:
         train_ds, valid_ds, test_ds = \
             build_pretrain_dataset_from_original(args.dataset)
     else:

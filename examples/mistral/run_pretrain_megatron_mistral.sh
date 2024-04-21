@@ -54,7 +54,7 @@ NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=14336
-MPE=32768
+MAX_POSITION_EMBEDDINGS=32768
 SLW=4096
 
 gqa_options=" \
@@ -166,7 +166,8 @@ megatron_options="  \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
-        --max-position-embeddings ${MPE} \
+        --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
+        --max-padding-length ${PAD_LEN} \
         --log-interval 1 \
         --eval-interval 10000 \
         --eval-iters 10 \
@@ -182,7 +183,6 @@ megatron_options="  \
         --no-load-rng \
         --num-workers 8 \
         --seed 1234 \
-        --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type MistralTokenizer \
         --dataset LLama-Pretrain-Idxmap \

@@ -33,12 +33,12 @@ from megatron.training import pretrain
 from megatron.core.datasets.gpt_dataset import GPTDatasetConfig
 from megatron.core.datasets.gpt_dataset import GPTDataset
 from megatron.core.models.gpt import GPTModel
+from megatron.arguments import core_transformer_config_from_args
 
 from megatron_patch.data import build_pretrain_dataset_from_original
 from megatron_patch.data.utils import get_batch_on_this_tp_rank_original
 from megatron_patch.tokenizer import get_tokenizer, build_tokenizer
 from megatron_patch.arguments import get_patch_args
-from megatron_patch.arguments import core_transformer_config_from_args
 from megatron_patch.model.mixtral.transformer_config import TransformerConfig
 from megatron_patch.model.mixtral.layer_specs import get_gpt_layer_with_transformer_engine_spec
 
@@ -62,7 +62,7 @@ def model_provider(
     """
     args = get_args()
     build_tokenizer(args)
-    config = core_transformer_config_from_args(get_args(), TransformerConfig)
+    config = core_transformer_config_from_args(get_args())
     transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm)
     model = GPTModel(
         config=config,
