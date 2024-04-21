@@ -288,7 +288,7 @@ false \
 /mnt/output_mcore_mistral
 ```
 
-# Megatron-MoE模型训练流程
+# Megatron-Core-MoE模型训练流程
 
 ## Megatron-Core-MoE模型格式转换
 ```bash
