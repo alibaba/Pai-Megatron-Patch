@@ -71,7 +71,7 @@ EXTRA_VOCAB_SIZE=$7                 # 额外扩充词表数
 mg2hf=$8                            # 是否执行mg2hf转换
 ```
 
-运行run_pretrain_megatron_qwen.sh和run_finetune_megatron_qwen_withGA.sh脚本，需要传入的参数列表如下
+运行run_pretrain_megatron_qwen.sh脚本，需要传入的参数列表如下
 ```
 ENV=$1                          # 运行环境: dlc, dsw
 MEGATRON_PATCH_PATH=$2          # 设置Megatron Patch的代码路径
