@@ -1,9 +1,8 @@
 #!/bin/bash
-#sh run_pretrain_megatron_mistral.sh dsw ../.. 7B 1 8 1e-5  1e-6 128 128 0 bf16 4 1 sel true false false false 10000 wudao_mistralbpe_content_document_small /mnt/mistral-ckpts/Mistral-7B-v0.1-hf-to-megatron-tp4-pp1/ 100000000 10000 /mnt/output_megatron_mistral
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
-MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-231007
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-240405
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
@@ -42,25 +41,23 @@ SP=${17}
 TE=${18}
 SAVE_INTERVAL=${19}
 DATASET_PATH=${20}
-VALID_DATASET_PATH=${21}
-PRETRAIN_CHECKPOINT_PATH=${22}
-TRAIN_ITERS=${23}
-LR_WARMUP_ITERS=${24}
-OUTPUT_BASEPATH=${25}
+PRETRAIN_CHECKPOINT_PATH=${21}
+TRAIN_TOKENS=${22}
+WARMUP_TOKENS=${23}
+OUTPUT_BASEPATH=${24}
 
-
-if [ $MODEL_SIZE = 7B ]; then
+if [ $MODEL_SIZE = 8B ]; then
 
 NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=14336
-MAX_POSITION_EMBEDDINGS=32768
-SLW=4096
+NUM_KEY_VALUE_HEADS=8
+MAX_POSITION_EMBEDDINGS=8192
 
 gqa_options=" \
 		    --group-query-attention \
-		    --num-query-groups 8"
+		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
 
 fi
 
@@ -115,7 +112,7 @@ if [ $TE = true ]; then
 
 elif [ $TE = false ]; then
     te_options=" \
-                    "
+        --transformer-impl local"
 fi
 
 if [ $SP = true ] && [ $TP -gt 1 ]; then
@@ -132,7 +129,9 @@ if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
             --load $PRETRAIN_CHECKPOINT_PATH"
 fi
 
-LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
+TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 
 NAME="${ENV}-pretrain-megatron-gpt3-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
@@ -146,8 +145,8 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
-        --train-data-path ${DATASET_PATH} \
-        --valid-data-path ${VALID_DATASET_PATH} \
+        --split 99,1,0 \
+        --data-path ${DATASET_PATH} \
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style linear \
@@ -179,23 +178,25 @@ megatron_options="  \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
+        --dataset LLama-Pretrain-Idxmap \
         --no-load-optim \
         --no-load-rng \
         --num-workers 8 \
         --seed 1234 \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type MistralTokenizer \
-        --dataset LLama-Pretrain-Raw \
-        --sliding-window ${SLW} \
+        --patch-tokenizer-type LLama3Tokenizer \
         --swiglu \
         --normalization RMSNorm \
-        --use-mistral-rotary-position-embeddings \
+        --use-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
-        --disable-bias-linear
+        --rotary-base 500000 \
+        --attention-dropout 0.0 \
+        --hidden-dropout 0.0 \
+        --norm-epsilon 1e-05 \
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megatron_mistral.py
+run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_llama.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}
