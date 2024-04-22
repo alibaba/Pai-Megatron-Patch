@@ -1,12 +1,14 @@
 #!/bin/bash
-# hf2mcore: tp1_pp1
-# sh hf2mcore_convertor.sh 7B /mnt/llama2-ckpts/Llama-2-7b-hf ../../../ /mnt/llama2-ckpts/Llama-2-7b-hf /mnt/llama2-ckpts/Llama-2-7b-hf-to-mcore-tp1-pp1 1 1 0 0 0 0 false
 
 set -e
-export CUDA_VISIBLE_DEVICES=3
 START_TIME=$SECONDS
+export CUDA_VISIBLE_DEVICES=0
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
+NNODES=1
+NODE_RANK=0
+GPUS_PER_NODE=1
+DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
 MODEL_SIZE=$1
 HG_CKPT_PATH=$2
@@ -27,12 +29,25 @@ if [ $MODEL_SIZE = 7B ]; then
 NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
-INTERMEDIATE_SIZE=11008
+INTERMEDIATE_SIZE=14336
 NUM_KEY_VALUE_HEADS=8
 
 gqa_options=" \
 		    --group-query-attention \
 		    --num-query-groups 8"
+
+elif [ $MODEL_SIZE = 8x7B ]; then
+
+NUM_LAYERS=32
+HIDDEN_SIZE=4096
+NUM_ATTN_HEADS=32
+INTERMEDIATE_SIZE=14336
+NUM_KEY_VALUE_HEADS=8
+WS=${13}
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups 8"
+
 fi
 
 
@@ -40,7 +55,6 @@ if [ $NUM_EXPERTS -gt 0 ]; then
     expert_options="
                 --moe-router-topk ${EXPERTS_TOPK} \
                 --num-experts ${NUM_EXPERTS} \
-                --expert-model-parallel-size 1 \
                 --target_expert_model_parallel_size ${EP}
     "
 fi
@@ -64,7 +78,7 @@ sed "s/CONFIG_HIDDEN_SIZE/${HIDDEN_SIZE}/" ${template_json} \
     | sed "s/CONFIG_KV_HEADS/${NUM_KEY_VALUE_HEADS}/" \
 	  > ${config_json}
 
-DISTRIBUTED_ARGS="--nproc_per_node 1 --nnodes 1 --node_rank 0 --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
+if [ $MODEL_SIZE = 7B ]; then
 
 torchrun ${DISTRIBUTED_ARGS} hf2mcore.py \
     --load_path ${SOURCE_CKPT_PATH} \
@@ -98,7 +112,22 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore.py \
     --hidden-dropout 0.0 \
     ${expert_options} \
     ${convert_options} \
-    ${gqa_options}
+    ${gqa_options} \
+
+elif [ $MODEL_SIZE = 8x7B ]; then
+
+python hf2mcore_mixtral.py \
+--megatron-path ${MEGATRON_PATH} \
+--load_path ${SOURCE_CKPT_PATH} \
+--save_path ${TARGET_CKPT_PATH} \
+--target_params_dtype bf16 \
+--target_tensor_model_parallel_size ${TP} \
+--target_pipeline_model_parallel_size ${PP} \
+--target_expert_model_parallel_size ${EP} \
+--world_size ${WS} \
+${convert_options} \
+
+fi
 
 ELAPSED_TIME=$(($SECONDS - $START_TIME))
 echo "$(($ELAPSED_TIME/60)) min $(($ELAPSED_TIME%60)) sec"

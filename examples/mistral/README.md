@@ -194,7 +194,7 @@ false \
 # Megatron-Core-Dense模型训练流程
 运行hf2mcore_convertor.sh脚本，需要传入的参数列表如下
 ```
-MODEL_SIZE=$1                  # 模型参数：0.5B/1.8B
+MODEL_SIZE=$1                  # 模型参数：7B/8x7B
 HG_CKPT_PATH=$2                # HF的CKPT的路径
 MEGATRON_PATH=$3               # Megatron-LM的根目录
 SOURCE_CKPT_PATH=$4            # 源路径
@@ -206,6 +206,7 @@ NUM_EXPERTS=$9                 # 专家数量
 EXPERTS_TOPK=${10}             # 专家路由Topk
 EP=${11}                       # 专家并行度
 mg2hf=${12}                    # 是否执行mcore2hf转换
+WS=${13}                       # 当8x7B时，指定world size
 ```
 
 运行run_pretrain_mcore_mistral.sh脚本，需要传入的参数列表如下
@@ -309,7 +310,7 @@ false   \
 false   \
 false \
 100000  \
-/mnt/misrtral-datasets/wudao_mistralbpe_content_document \
+/mnt/mistral-datasets/wudao_mistralbpe_content_document \
 /mnt/mistral-ckpts/Mistral-7B-v0.1-to-mcore-tp4-pp1   \
 100000000   \
 10000   \
@@ -351,6 +352,7 @@ false \
 # Megatron-Core-MoE模型训练流程
 
 ## Megatron-Core-MoE模型格式转换
+基于Sparse-Upcycled的Dense转MoE模型格式转换
 ```bash
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/mistral \
 sh hf2mcore_convertor.sh \
@@ -358,14 +360,33 @@ sh hf2mcore_convertor.sh \
 /mnt/mistral-ckpts/Mistral-7B-v0.1 \
 ../../../     \
 /mnt/mistral-ckpts/Mistral-7B-v0.1 \
-/mnt/mistral-ckpts/Mistral-7B-v0.1-to-mcore-tp1-pp1-ep1-exp8 \
+/mnt/mistral-ckpts/Mistral-7B-v0.1-to-mcore-tp4-pp1-ep1-exp2 \
+4  \
+1  \
+0  \
+2  \
+2  \
+1 \
+false
+```
+
+直接对Mixtral-8x7B模型进行Mcore的格式转换
+```bash
+cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/mistral \
+sh hf2mcore_convertor.sh \
+8x7B \
+/mnt/mistral-ckpts/Mixtral-8x7B-v0.1 \
+../../../     \
+/mnt/mistral-ckpts/Mixtral-8x7B-v0.1 \
+/mnt/mistral-ckpts/Mixtral-8x7B-v0.1-to-mcore-tp4-pp1-ep4-exp8-ws16 \
 4  \
 1  \
 0  \
 8  \
 2  \
-1 \
-false
+4 \
+false \
+16
 ```
 
 ## Megatron-Core-MoE继续预训练
@@ -392,8 +413,8 @@ false   \
 false   \
 true \
 100000  \
-/mnt/misrtral-datasets/wudao_mistralbpe_content_document \
-/mnt/mistral-ckpts/Mistral-7B-v0.1-to-mcore-tp1-pp1-ep1-exp8 \
+/mnt/mistral-datasets/wudao_mistralbpe_content_document \
+/mnt/mistral-ckpts/Mistral-7B-v0.1-to-mcore-tp4-pp1-ep1-exp2 \
 100000000   \
 10000   \
 /mnt/output_mcore_mistral
@@ -425,7 +446,7 @@ true \
 100000  \
 /mnt/mistral-datasets/alpaca_zh-mistral-train.json   \
 /mnt/mistral-datasets/alpaca_zh-mistral-valid.json   \
-/mnt/mistral-ckpts/Mistral-7B-v0.1-to-mcore-tp4-pp1   \
+/mnt/mistral-ckpts/Mistral-7B-v0.1-to-mcore-tp4-pp1-ep1-exp2 \
 100000000   \
 10000   \
 /mnt/output_mcore_mistral
