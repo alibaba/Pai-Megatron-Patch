@@ -187,6 +187,7 @@ megatron_options="  \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
         --max-padding-length ${PAD_LEN} \
+        --sliding-window ${SLW} \
         --log-interval 1 \
         --eval-interval 10000 \
         --eval-iters 10 \
@@ -217,7 +218,6 @@ megatron_options="  \
         --no-position-embedding \
         --use-mcore-models \
         --no-rope-fusion \
-        --expert-model-parallel-size ${EP} \
         --distributed-timeout-minutes 6000 \
         --transformer-impl transformer_engine"
 

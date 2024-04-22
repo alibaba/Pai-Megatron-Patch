@@ -2,28 +2,22 @@ import os
 import re
 import json
 import torch
-import transformers
 import torch.nn as nn
-from functools import partial
 from collections import defaultdict
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
 )
-from transformers.models.mixtral.modeling_mixtral import MixtralSparseMoeBlock
-from transformers.models.mixtral.configuration_mixtral import MixtralConfig
+
 from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint, load_sharded_checkpoint
 from megatron.initialize import initialize_megatron
 from megatron import get_args
-from megatron.utils import get_ltor_masks_and_position_ids
 from megatron.checkpointing import get_checkpoint_name, get_checkpoint_tracker_filename, read_metadata
-
 import sys
-
 path_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
 sys.path.append(os.path.join(path_dir, "examples"))
-from llama2.pretrain_mcore_llama import model_provider
+from mistral.pretrain_mcore_mistral import model_provider
 from megatron_patch.arguments import get_patch_args
 
 torch.backends.cudnn.deterministic = True
@@ -142,37 +136,14 @@ def build_huggingface_model(model_to_load, compute_dtype, random_init=False):
     return config, model.eval()
 
 
-def replace_mlp_with_moe(args, model):
-    config = MixtralConfig(
-        intermediate_size=args.intermediate_size,
-        hidden_size=args.hidden_size,
-        num_attention_heads=args.num_attention_heads,
-        num_local_experts=args.num_local_experts,
-        num_key_value_heads=args.num_key_value_heads,
-        rope_theta=args.rope_theta,
-        rms_norm_eps=args.rms_norm_eps,
-        num_experts_per_tok=1,
-    )
-
-    def get_hidden_output(module, args, output):
-        return output[0]
-
-    for layer in model.model.layers:
-        mlp = MixtralSparseMoeBlock(config).to(args.torch_dtype)
-        mlp.register_forward_hook(get_hidden_output)
-        layer.mlp = mlp
-
-    return model
-
 
 def create_huggingface_model(args):
-    if not args.convert_checkpoint_from_megatron_to_transformers or args.num_experts is None:
+    if args.num_experts is None:
         copy_huggingface_tokenizer(args.huggingface_model_path, args.save_path)
         config, model = build_huggingface_model(args.huggingface_model_path, args.params_dtype)
     else:
         copy_huggingface_tokenizer(args.huggingface_model_path, args.save_path, with_code=True)
         config, model = build_huggingface_model(args.save_path, args.params_dtype, random_init=True)
-        model = replace_mlp_with_moe(config, model)
 
     return config, model.eval()
 
@@ -196,7 +167,6 @@ def copy_huggingface_tokenizer(src_path, dst_path, with_code=False):
     if with_code:
         cur_dir = os.path.dirname(os.path.abspath(__file__))
         code_path = os.path.join(cur_dir, 'hf_mistral_moe')
-        os.system("cp -rf " + code_path + "/*.py " + dst_path)
         os.system("cp -rf " + code_path + "/*.json " + dst_path)
 
 
@@ -389,6 +359,7 @@ def convert_checkpoint_from_transformers_to_megatron(mgmodel, hgmodel, args, hf_
 def save_state_dict(args, model, checkpoint_name):
     args.tensor_model_parallel_size = args.target_tensor_model_parallel_size
     args.pipeline_model_parallel_size = args.target_pipeline_model_parallel_size
+    args.add_position_embedding = False
     state_dict = {}
     state_dict['args'] = args
     state_dict['checkpoint_version'] = 3.0
@@ -548,136 +519,6 @@ def save_hgmodel(args, model):
         )
 
 
-def check_mg_eg_forward(mgmodel, hgmodel, mgargs):
-    hg_hiddens = [{} for _ in range(mgargs.num_layers)]
-    mg_hiddens = [{} for _ in range(mgargs.num_layers)]
-
-    head_dim = mgargs.hidden_size // mgargs.num_attention_heads
-    hidden_size = mgargs.hidden_size
-
-    def print_input_hook(module, args, kwargs, layer_idx, mode):
-        frame, name = mode.split('-')
-        if frame == 'hg':
-            hg_hiddens[layer_idx][name] = args[0].transpose(0, 1)
-        elif frame == 'mg' and 'layer' in mode:
-            mg_hiddens[layer_idx][name] = kwargs.get('hidden_states')
-        elif frame == 'mg':
-            mg_hiddens[layer_idx][name] = args[0]
-
-    def print_output_hook(module, args, kwargs, output, layer_idx, mode):
-        frame, name = mode.split('-')
-        if mode in ['hg-q_proj_out', 'hg-k_proj_out', 'hg-v_proj_out']:
-            hg_hiddens[layer_idx][name] = output
-            hg_hiddens[layer_idx][name + '_weight'] = module.weight
-        elif mode in ['hg-lmhead']:
-            hg_hiddens[layer_idx][name] = output.transpose(0, 1)
-            hg_hiddens[layer_idx][name + '_token'] = output.transpose(0, 1).max(dim=-1)[1]
-            print(output.transpose(0, 1).max(dim=-1))
-        elif mode == 'hg-attn_out':
-            hg_hiddens[layer_idx][name] = output[0].transpose(0, 1)
-        elif mode in ['mg-lmhead']:
-            mg_hiddens[layer_idx][name] = output[0]
-            mg_hiddens[layer_idx][name + '_token'] = output[0].max(dim=-1)[1]
-            print(output[0].max(dim=-1))
-        elif mode == 'mg-attn_out':
-            mg_hiddens[layer_idx][name] = output[0]
-        elif mode == 'mg-qkv':
-            mixed_qkv = output[0]
-            sq, b, _ = mixed_qkv.shape
-            mixed_qkv = mixed_qkv.view(sq, b, mgargs.num_query_groups, -1)
-            qh = mgargs.num_attention_heads // mgargs.num_query_groups
-            qo, ko, vo = torch.split(mixed_qkv, [qh * head_dim, head_dim, head_dim], dim=3)
-            qo = qo.reshape(b, -1, hidden_size)
-            ko = ko.reshape(b, -1, hidden_size // qh)
-            vo = vo.reshape(b, -1, hidden_size // qh)
-            mg_hiddens[layer_idx]['q_proj_out'] = qo
-            mg_hiddens[layer_idx]['k_proj_out'] = ko
-            mg_hiddens[layer_idx]['v_proj_out'] = vo
-
-            weight = module.weight.view(mgargs.num_query_groups, -1, head_dim, hidden_size)
-            qw, kw, vw = weight.split([qh, 1, 1], dim=1)
-            mg_hiddens[layer_idx]['q_proj_out_weight'] = qw.reshape(-1, hidden_size)
-            mg_hiddens[layer_idx]['k_proj_out_weight'] = kw.reshape(-1, hidden_size // qh)
-            mg_hiddens[layer_idx]['v_proj_out_weight'] = vw.reshape(-1, hidden_size // qh)
-
-    hgmodel.lm_head.register_forward_hook(partial(print_output_hook, layer_idx=mgargs.num_layers - 1, mode='hg-lmhead'),
-                                          with_kwargs=True)
-    mgmodel.output_layer.register_forward_hook(
-        partial(print_output_hook, layer_idx=mgargs.num_layers - 1, mode='mg-lmhead'), with_kwargs=True)
-
-    for idx, layer in enumerate(hgmodel.model.layers):
-        layer.register_forward_pre_hook(partial(print_input_hook, layer_idx=idx, mode='hg-layer_in'), with_kwargs=True)
-        layer.self_attn.o_proj.register_forward_pre_hook(partial(print_input_hook, layer_idx=idx, mode='hg-o_proj_in'),
-                                                         with_kwargs=True)
-        layer.self_attn.q_proj.register_forward_hook(partial(print_output_hook, layer_idx=idx, mode='hg-q_proj_out'),
-                                                     with_kwargs=True)
-        layer.self_attn.k_proj.register_forward_hook(partial(print_output_hook, layer_idx=idx, mode='hg-k_proj_out'),
-                                                     with_kwargs=True)
-        layer.self_attn.v_proj.register_forward_hook(partial(print_output_hook, layer_idx=idx, mode='hg-v_proj_out'),
-                                                     with_kwargs=True)
-        layer.self_attn.register_forward_hook(partial(print_output_hook, layer_idx=idx, mode='hg-attn_out'),
-                                              with_kwargs=True)
-
-    for idx, layer in enumerate(mgmodel.decoder.layers):
-        layer.register_forward_pre_hook(partial(print_input_hook, layer_idx=idx, mode='mg-layer_in'), with_kwargs=True)
-        layer.self_attention.linear_qkv.register_forward_hook(partial(print_output_hook, layer_idx=idx, mode='mg-qkv'),
-                                                              with_kwargs=True)
-        layer.self_attention.linear_proj.register_forward_pre_hook(
-            partial(print_input_hook, layer_idx=idx, mode='mg-o_proj_in'), with_kwargs=True)
-        layer.self_attention.register_forward_hook(partial(print_output_hook, layer_idx=idx, mode='mg-attn_out'),
-                                                   with_kwargs=True)
-
-    input_ids = torch.tensor([[1, 2, 3]]).long().cuda()
-    attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(input_ids, -100, True, True, True)
-
-    with torch.inference_mode():
-        try:
-            hgmodel.cuda()
-            hgmodel(input_ids=input_ids)
-        except torch.cuda.OutOfMemoryError:
-            print('oom for huggingface model forward')
-        hgmodel.cpu()
-        del hgmodel
-
-    with torch.inference_mode():
-        try:
-            mgmodel.cuda()
-            mgmodel(input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids)
-        except torch.cuda.OutOfMemoryError:
-            print('oom for megatron model forward')
-        mgmodel.cpu()
-        del mgmodel
-
-    epsilon = 1e-5
-    for idx, (hgh, mgh) in enumerate(zip(hg_hiddens, mg_hiddens)):
-        if len(hgh) != len(mgh):
-            continue
-        for k, hgv in hgh.items():
-            mgv, hgv = mgh[k].cpu(), hgv.cpu()
-            same_num = (hgv != mgv).sum()
-            diff_num = ((hgv - mgv) > epsilon).sum()
-            diff_max = (hgv - mgv).abs().max()
-            print(f'layer:{idx}, {k}, diff: {same_num}, diff>{epsilon}:[{diff_num}/{hgv.numel()}] diff_max:{diff_max}')
-
-
-def check_tokenizer_is_same(hgtokenizer, mgtokenizer):
-    if transformers.__version__ <= '4.33.2':
-        print('please update transformers')
-        return
-
-    if mgtokenizer is None:
-        return
-
-    conversation = [
-        {"role": "user", "content": "what's your name"},
-        {"role": "bot", "content": "cold"},
-    ]
-    hgres = hgtokenizer.apply_chat_template(conversation)
-    mgres = mgtokenizer.apply_chat_template(conversation)
-    for x, y in zip(hgres, mgres):
-        assert x == y, 'tokenizer is different for huggingface and megatron'
-
-
 def add_ckpt_args(parser):
     parser = get_patch_args(parser)
     parser = add_checkpointing_args(parser)
@@ -694,12 +535,10 @@ def main():
     if args.convert_checkpoint_from_megatron_to_transformers:
         load_megatron_model(args, mg_model)
         convert_checkpoint_from_megatron_to_transformers(mg_model, hf_model, args)
-        # check_mg_eg_forward(mg_model, hf_model, args)
         save_hgmodel(args, hf_model)
     else:
         hf_model.from_pretrained(args.load_path)
         convert_checkpoint_from_transformers_to_megatron(mg_model, hf_model, args, hf_config)
-        # check_mg_eg_forward(mg_model, hf_model, args)
         save_mgmodel(args, mg_model, args.load_path, args.save_path)
 
 
