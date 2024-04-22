@@ -797,13 +797,13 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     else:
         dtype = torch.float32
 
-    intermediate_size_map = {4096:11008,5120:13824,6656:17920,7168:19200,8192:22016 if args.model_name != "llama2-70b" else 28672}
+    intermediate_size_map = {4096:11008,5120:13824,6656:17920,7168:19200,8192:22016 if "70b" not in args.model_name else 28672}
     config = LlamaConfig(
         vocab_size=vocab_size,
         hidden_size=megatron_args.hidden_size,
         num_hidden_layers=megatron_args.num_layers,
         num_attention_heads=megatron_args.num_attention_heads,
-        num_key_value_heads=megatron_args.num_attention_heads if args.model_name != "llama2-70b" else 8,
+        num_key_value_heads=megatron_args.num_attention_heads if "70b" not in args.model_name else 8,
         rms_norm_eps=1e-06,
         initializer_range=0.02,
         use_cache=True,
@@ -1110,7 +1110,8 @@ def main():
                 'codellama-34b':'llama2-70b',
                 'llama2-7b':'llama-7b',
                 'llama2-13b':'llama-7b',
-                'llama3-8b': 'llama2-70b'}
+                'llama3-8b': 'llama2-70b',
+                'llama3-70b': 'llama2-70b', }
     args.model_name = model_map.get(args.model_name, args.model_name)
     if args.convert_checkpoint_from_megatron_to_transformers:
         convert_checkpoint_from_megatron_to_transformers(args)

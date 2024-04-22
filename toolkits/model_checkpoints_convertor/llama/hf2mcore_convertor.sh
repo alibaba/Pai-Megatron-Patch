@@ -1,9 +1,7 @@
 #!/bin/bash
-# hf2mcore: tp1_pp1
-# sh hf2mcore_convertor.sh 7B /mnt/llama2-ckpts/Llama-2-7b-hf ../../../ /mnt/llama2-ckpts/Llama-2-7b-hf /mnt/llama2-ckpts/Llama-2-7b-hf-to-mcore-tp1-pp1 1 1 0 0 0 0 false
 
 set -e
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=7
 START_TIME=$SECONDS
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
@@ -95,6 +93,8 @@ sed "s/CONFIG_HIDDEN_SIZE/${HIDDEN_SIZE}/" ${template_json} \
 
 DISTRIBUTED_ARGS="--nproc_per_node 1 --nnodes 1 --node_rank 0 --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
+if [ $MODEL_SIZE != 70B ]; then
+
 torchrun ${DISTRIBUTED_ARGS} hf2mcore.py \
     --load_path ${SOURCE_CKPT_PATH} \
     --save_path ${TARGET_CKPT_PATH} \
@@ -128,6 +128,19 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore.py \
     ${expert_options} \
     ${convert_options} \
     ${gqa_options}
+
+else
+python hf2mcore_70b.py \
+  --load ${HG_CKPT_PATH} \
+  --megatron-path ${MEGATRON_PATH} \
+  --load_path ${SOURCE_CKPT_PATH} \
+  --save_path ${TARGET_CKPT_PATH} \
+  --target_params_dtype bf16 \
+  --target_tensor_model_parallel_size ${TP} \
+  --target_pipeline_model_parallel_size ${PP} \
+${convert_options} \
+
+fi
 
 ELAPSED_TIME=$(($SECONDS - $START_TIME))
 echo "$(($ELAPSED_TIME/60)) min $(($ELAPSED_TIME%60)) sec"
