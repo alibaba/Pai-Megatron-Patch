@@ -350,20 +350,22 @@ cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/llama
 sh hf2megatron_convertor.sh \
 ../../../     \
 /mnt/llama3-ckpts/Meta-Llama-3-8B-to-mcore-tp4-pp1/release  \
-/mnt/llama2-ckpts/Meta-Llama-3-8B-hf-megatron-to-hf    \
-8  \
+/mnt/llama3-ckpts/Meta-Llama-3-8B-hf-megatron-to-hf    \
+4  \
 1  \
 llama3-8b \
 0 \
 true
 ```
 
+将开源Huggingface模型文件夹路径下的.json (pytorch_model.bin.index.json除外)文件拷贝至/mnt/llama3-ckpts/Meta-Llama-3-8B-hf-megatron-to-hf目录下，以保证模型可以正常使用。
+
 ## 运行评估工具
 ```bash
 cd /workspace/Pai-Megatron-Patch/LM-Evaluation-Harness-240310
 accelerate launch --main_process_port 29051 -m lm_eval \
 --model hf \
---model_args pretrained=/mnt/llama3-ckpts/Meta-Llama-3-8B-hf-megatron-to-hf ,trust_remote_code=True \
+--model_args pretrained=/mnt/llama3-ckpts/Meta-Llama-3-8B-hf-megatron-to-hf,trust_remote_code=True \
 --tasks mmlu,ceval-valid  \
 --batch_size 16
 ```
