@@ -193,6 +193,7 @@ megatron_options="  \
         --rotary-base 500000 \
         --attention-dropout 0.0 \
         --hidden-dropout 0.0 \
+        --disable-bias-linear \
         --norm-epsilon 1e-05 \
         "
 
