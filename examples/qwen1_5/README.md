@@ -75,7 +75,7 @@ mg2hf=$8                            # 是否执行mg2hf转换
 ```
 ENV=$1                          # 运行环境: dlc, dsw
 MEGATRON_PATCH_PATH=$2          # 设置Megatron Patch的代码路径
-MODEL_SIZE=$3                   # 模型结构参数量级：7B, 13B
+MODEL_SIZE=$3                   # 模型结构参数量级：7B, 14B
 BATCH_SIZE=$4                   # 每卡训练一次迭代样本数: 4, 8
 GLOBAL_BATCH_SIZE=$5            # 全局batch size
 LR=$6                           # 学习率: 1e-5, 5e-5
@@ -103,7 +103,7 @@ OUTPUT_BASEPATH=${24}           # 训练输出文件路径
 ```
 ENV=$1                          # 运行环境: dlc, dsw
 MEGATRON_PATCH_PATH=$2          # 设置Megatron Patch的代码路径
-MODEL_SIZE=$3                   # 模型结构参数量级：7B, 13B
+MODEL_SIZE=$3                   # 模型结构参数量级：7B, 14B
 BATCH_SIZE=$4                   # 每卡训练一次迭代样本数: 4, 8
 GLOBAL_BATCH_SIZE=$5            # 全局batch size
 LR=$6                           # 学习率: 1e-5, 5e-5
@@ -224,7 +224,7 @@ mg2hf=${12}                    # 是否执行mcore2hf转换
 ```
 ENV=$1                          # 运行环境: dlc, dsw
 MEGATRON_PATCH_PATH=$2          # 设置Megatron Patch的代码路径
-MODEL_SIZE=$3                   # 模型结构参数量级：7B, 13B
+MODEL_SIZE=$3                   # 模型结构参数量级：7B, 14B
 BATCH_SIZE=$4                   # 每卡训练一次迭代样本数: 4, 8
 GLOBAL_BATCH_SIZE=$5            # 全局batch size
 LR=$6                           # 学习率: 1e-5, 5e-5
@@ -253,7 +253,7 @@ OUTPUT_BASEPATH=${25}           # 训练输出文件路径
 ```
 ENV=$1                          # 运行环境: dlc, dsw
 MEGATRON_PATCH_PATH=$2          # 设置Megatron Patch的代码路径
-MODEL_SIZE=$3                   # 模型结构参数量级：7B, 13B
+MODEL_SIZE=$3                   # 模型结构参数量级：7B, 14B
 BATCH_SIZE=$4                   # 每卡训练一次迭代样本数: 4, 8
 GLOBAL_BATCH_SIZE=$5            # 全局batch size
 LR=$6                           # 学习率: 1e-5, 5e-5
@@ -449,7 +449,7 @@ true \
 ```
 ENV=$1                          # 运行环境: dlc, dsw
 MEGATRON_PATCH_PATH=$2          # 设置Megatron Patch的代码路径
-MODEL_SIZE=$3                   # 模型结构参数量级：7B, 13B
+MODEL_SIZE=$3                   # 模型结构参数量级：7B, 14B
 BATCH_SIZE=$4                   # 每卡训练一次迭代样本数: 4, 8
 GLOBAL_BATCH_SIZE=$5            # 全局batch size
 LR=$6                           # 学习率: 1e-5, 5e-5
@@ -478,7 +478,7 @@ OUTPUT_BASEPATH=${25}           # 训练输出文件路径
 ```
 ENV=$1                          # 运行环境: dlc, dsw
 MEGATRON_PATCH_PATH=$2          # 设置Megatron Patch的代码路径
-MODEL_SIZE=$3                   # 模型结构参数量级：7B, 13B
+MODEL_SIZE=$3                   # 模型结构参数量级：7B, 14B
 BATCH_SIZE=$4                   # 每卡训练一次迭代样本数: 4, 8
 GLOBAL_BATCH_SIZE=$5            # 全局batch size
 LR=$6                           # 学习率: 1e-5, 5e-5
