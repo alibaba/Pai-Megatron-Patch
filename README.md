@@ -48,14 +48,14 @@ In the reinforcement learning section, the patch offers PPO training workflows, 
 
 
 ## Technical Reports
-- [基于Megatron-Core的稀疏大模型训练工具：阿里云MoE大模型最佳实践](https://mp.weixin.qq.com/s/DkrWEEJ7IxirwWd3qB9Bng)
-- [Mixtral-8x7B在PAI灵骏的训练指南](https://help.aliyun.com/zh/pai/use-cases/train-fine-tune-and-deploy-mixtral-by-using-intelligent-computing-lingjun)
-- [通义千问开源模型在PAI灵骏的最佳实践](https://mp.weixin.qq.com/s?__biz=Mzg4MzgxNDk2OA==&mid=2247491796&idx=1&sn=dc1d719313d794ae1aacdb07669a9545&chksm=cf430783f8348e950218bfcff861a2e6d2d92705807bf5b04f6e9268cc510ffa6e6aa2c87327#rd)
-- [阿里云机器学习PAI开源AI大模型训练工具Pai-Megatron-Patch, 助力大模型技术落地](https://zhuanlan.zhihu.com/p/655942437)
-- [基于单机最高能效270亿参数GPT模型的文本生成与理解](https://zhuanlan.zhihu.com/p/597652820)
-- [中文稀疏GPT大模型落地 — 通往低成本&高性能多任务通用自然语言理解的关键里程碑](https://zhuanlan.zhihu.com/p/561320982)
-- [预训练知识度量比赛夺冠！阿里云PAI发布知识预训练工具](https://zhuanlan.zhihu.com/p/449487792)
-- [阿里云PAI获得FewCLUE基于大模型的小样本学习双料冠军](https://developer.aliyun.com/article/788081?spm=a2c6h.12873639.article-detail.17.11c5383cHpFZks&tlog=yuekan_8)
+- [Sparse Large Model Training Tool Based on Megatron-Core: Best Practices for Alibaba Cloud MoE Large Models](https://mp.weixin.qq.com/s/DkrWEEJ7IxirwWd3qB9Bng)
+- [Mixtral-8x7B Training Guide on PAI Lingjun](https://help.aliyun.com/zh/pai/use-cases/train-fine-tune-and-deploy-mixtral-by-using-intelligent-computing-lingjun)
+- [Best Practices for the Open Source Model Tongyi Qianwen on PAI Lingjun](https://mp.weixin.qq.com/s?__biz=Mzg4MzgxNDk2OA==&mid=2247491796&idx=1&sn=dc1d719313d794ae1aacdb07669a9545&chksm=cf430783f8348e950218bfcff861a2e6d2d92705807bf5b04f6e9268cc510ffa6e6aa2c87327#rd)
+- [Alibaba Cloud Machine Learning PAI Open Source AI Large Model Training Tool Pai-Megatron-Patch, Facilitating the Implementation of Large Model Technologies](https://zhuanlan.zhihu.com/p/655942437)
+- [Text Generation and Understanding with the Highest Energy Efficient 27 Billion Parameter GPT Model on a Single Machine](https://zhuanlan.zhihu.com/p/597652820)
+- [Chinese Sparse GPT Large Model Implementation — A Key Milestone Towards Low-Cost & High-Performance Multitasking General Natural Language Understanding](https://zhuanlan.zhihu.com/p/561320982)
+- [Alibaba Cloud PAI Releases Knowledge Pre-training Tool After Winning the Pre-training Knowledge Measurement Competition](https://zhuanlan.zhihu.com/p/449487792)
+- [Alibaba Cloud PAI Wins Dual Championships in FewCLUE Small Sample Learning Based on Large Models](https://developer.aliyun.com/article/788081?spm=a2c6h.12873639.article-detail.17.11c5383cHpFZks&tlog=yuekan_8)
 
 
 ## Contact
