@@ -1,9 +1,170 @@
 #!/bin/bash
-# bash run_ds_train_huggingface_finetune.sh dsw 7B 1 2 1e-5 2048 bf16 2 true qwen-7b false 2 /mnt/qwen-datasets/wudao_train.json /mnt/qwen-datasets/wudao_valid.json /mnt/qwen-ckpts/qwen-7b-hf /mnt/output_qwen_7b_finetune
-# bash run_ds_train_huggingface_finetune.sh dsw 13B 1 2 1e-5 2048 bf16 2 true llama2-13b true 2 /mnt/llama2-datasets/wudao_train.json /mnt/llama2-datasets/wudao_valid.json /mnt/llama2-ckpts/Llama-2-13b-hf /mnt/output_llama2_finetune
+
+# bash run_ds_train_huggingface_finetune.sh \
+#     --env dsw \
+#     --model-size 13B \
+#     --micro-batch-size 1 \
+#     --gradient-accumulation-steps 2 \
+#     --learning-rate 1e-5 \
+#     --sequence-length 2048 \
+#     --precision bf16 \
+#     --zero-stage 2 \
+#     --enable-gradient-checkpointing true \
+#     --model-name llama2-13b \
+#     --flash-attention true \
+#     --epoch 2 \
+#     --train-dataset /mnt/llama2-datasets/wudao_train.json \
+#     --validation-dataset /mnt/llama2-datasets/wudao_valid.json \
+#     --pretrain-model-path /mnt/llama2-ckpts/Llama-2-13b-hf \
+#     --finetune-output-path /mnt/output_llama2_finetune
+
+function usage() {
+    echo '
+Usage: bash run_ds_train_huggingface_finetune.sh \
+    [--env ENV default dsw] \
+    [--model-size MODEL_SIZE] \
+    [--micro-batch-size MICRO_BATCH_SIZE default 1] \
+    [--gradient-accumulation-steps GRADIENT_ACCUMULATION_STEPS default 1] \
+    [--learning-rate LEARNING_RATE default 1e-5] \
+    [--sequence-length SEQUENCE_LENGTH default 2048] \
+    [--precision PRECISION default bf16] \
+    [--zero-stage ZERO_STAGE default 2] \
+    [--enable-gradient-checkpointing ENABLE_GRADIENT_CHECKPOINTING default true] \
+    [--model-name MODEL_NAME {llama2-13b, qwen-7b, qwen-14b, qwen-72b}] \
+    [--flash-attention FLASH_ATTENTION default false] \
+    [--epoch EPOCH default 1] \
+    [--train-dataset TRAIN_DATASET] \
+    [--validation-dataset VALIDATION_DATASET] \
+    [--pretrain-model-path PRETRAIN_MODEL_PATH] \
+    [--finetune-output-path FINETUNE_OUTPUT_PATH]
+'
+}
+
+ENV="dsw"
+MODEL_SIZE=""
+MICRO_BATCH_SIZE="1"
+GRADIENT_ACCUMULATION_STEPS="1"
+LEARNING_RATE="1e-5"
+SEQUENCE_LENGTH="2048"
+PRECISION="bf16"
+ZERO_STAGE="2"
+ENABLE_GRADIENT_CHECKPOINTING="true"
+MODEL_NAME=""       # llama2-13b, qwen-7b, qwen-14b, qwen-72b
+FLASH_ATTENTION="false"
+EPOCH="1"
+TRAIN_DATASET=""
+VALIDATION_DATASET=""
+PRETRAIN_MODEL_PATH=""
+FINETUNE_OUTPUT_PATH=""
+while [[ "$1" != "" ]]; do
+    case $1 in
+        --env )
+            shift
+            ENV=$1
+            ;;
+        --model-size )
+            shift
+            MODEL_SIZE=$1
+            ;;
+        --micro-batch-size )
+            shift
+            MICRO_BATCH_SIZE=$1
+            ;;
+        --gradient-accumulation-steps )
+            shift
+            GRADIENT_ACCUMULATION_STEPS=$1
+            ;;
+        --model-name )
+            shift
+            MODEL_NAME=$1
+            ;;
+        --learning-rate )
+            shift
+            LEARNING_RATE=$1
+            ;;
+        --sequence-length )
+            shift
+            SEQUENCE_LENGTH=$1
+            ;;
+        --precision )
+            shift
+            PRECISION=$1
+            ;;
+        --zero-stage )
+            shift
+            ZERO_STAGE=$1
+            ;;
+        --enable-gradient-checkpointing )
+            shift
+            ENABLE_GRADIENT_CHECKPOINTING=$1
+            ;;
+        --flash-attention )
+            shift
+            FLASH_ATTENTION=$1
+            ;;
+        --epoch )
+            shift
+            EPOCH=$1
+            ;;
+        --train-dataset )
+            shift
+            TRAIN_DATASET=$1
+            ;;
+        --validation-dataset )
+            shift
+            VALIDATION_DATASET=$1
+            ;;
+        --pretrain-model-path )
+            shift
+            PRETRAIN_MODEL_PATH=$1
+            ;;
+        --finetune-output-path )
+            shift
+            FINETUNE_OUTPUT_PATH=$1
+            ;;
+        -h | --help )
+            usage
+            exit 0
+            ;;
+        * )
+            echo "Unknown argument ${1}"
+            usage
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+for i in "ENV=$ENV" \
+    "MODEL_SIZE=$MODEL_SIZE" \
+    "MICRO_BATCH_SIZE=$MICRO_BATCH_SIZE" \
+    "GRADIENT_ACCUMULATION_STEPS=$GRADIENT_ACCUMULATION_STEPS" \
+    "LEARNING_RATE=$LEARNING_RATE" \
+    "SEQUENCE_LENGTH=$SEQUENCE_LENGTH" \
+    "PRECISION=$PRECISION" \
+    "ZERO_STAGE=$ZERO_STAGE" \
+    "ENABLE_GRADIENT_CHECKPOINTING=$ENABLE_GRADIENT_CHECKPOINTING" \
+    "FLASH_ATTENTION=$FLASH_ATTENTION" \
+    "MODEL_NAME=$MODEL_NAME" \
+    "EPOCH=$EPOCH" \
+    "TRAIN_DATASET=$TRAIN_DATASET" \
+    "VALIDATION_DATASET=$VALIDATION_DATASET" \
+    "PRETRAIN_MODEL_PATH=$PRETRAIN_MODEL_PATH" \
+    "PRETRAIN_MODEL_PATH=$PRETRAIN_MODEL_PATH" \
+    "FINETUNE_OUTPUT_PATH=$FINETUNE_OUTPUT_PATH"
+do
+    config=(${i//=/ })
+    config_name=${config[0]}
+    config_value=${config[1]}
+    if [ -z $config_value ]; then
+        echo "$config_name is null"
+        usage
+        exit 1
+    fi
+done
+
 
 set -e
-ENV=$1
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
     export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
@@ -19,24 +180,7 @@ elif [ $ENV = dlc ]; then
 fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
-
-MODEL_SIZE=$2
-MICRO_BATCH_SIZE=$3
-GA_STEPS=$4
-LR=$5
-SEQ_LEN=$6
-PR=$7
-ZERO=$8
-GC=$9
-MODEL=${10}         # llama2-13b, qwen-7b, qwen-14b, qwen-72b
-FLASH=${11}
-EPOCH=${12}
-TRAIN_DATASET_PATH=${13}
-VALID_DATASET_PATH=${14}
-PRETRAIN_CHECKPOINT_PATH=${15}
-OUTPUT_BASEPATH=${16}
-
-GLOBAL_BATCH_SIZE=$(( ${MICRO_BATCH_SIZE} * ${GA_STEPS} * ${GPUS_PER_NODE} * ${NNODES}))
+GLOBAL_BATCH_SIZE=$(( ${MICRO_BATCH_SIZE} * ${GRADIENT_ACCUMULATION_STEPS} * ${GPUS_PER_NODE} * ${NNODES}))
 
 if [ $MODEL_SIZE = 7B ]; then
 
@@ -75,55 +219,55 @@ elif [ $MODEL_SIZE = 70B ]; then
 
 fi
 
-if [ $PR = fp16 ]; then
+if [ $PRECISION = fp16 ]; then
     pr_options="--fp16"
     FP16='true'
     BF16='false'
-elif [ $PR = bf16 ]; then
+elif [ $PRECISION = bf16 ]; then
     pr_options="--bf16"
     FP16='false'
     BF16='true'
 fi
 
-if [ $GC = true ]; then
+if [ $ENABLE_GRADIENT_CHECKPOINTING = true ]; then
     gc_options="--enable-gradient-checkpointing"
-elif [ $GC = false ]; then
+elif [ $ENABLE_GRADIENT_CHECKPOINTING = false ]; then
     gc_options=""
 fi
 
-if [ $FLASH = true ]; then
+if [ $FLASH_ATTENTION = true ]; then
     flash_options="--flash"
-elif [ $FLASH = false ]; then
+elif [ $FLASH_ATTENTION = false ]; then
     flash_options=""
 fi
 
-NAME="${ENV}-ds-train-huggingface-finetune-${MODEL_SIZE}-lr-${LR}-bs-${MICRO_BATCH_SIZE}-epoch-${EPOCH}-zero-${ZERO}"
-mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
-mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
-mkdir -p "${OUTPUT_BASEPATH}/log/"
+NAME="${ENV}-ds-train-huggingface-finetune-${MODEL_SIZE}-lr-${LEARNING_RATE}-bs-${MICRO_BATCH_SIZE}-epoch-${EPOCH}-zero-${ZERO_STAGE}"
+mkdir -p "${FINETUNE_OUTPUT_PATH}/tensorboard/"
+mkdir -p "${FINETUNE_OUTPUT_PATH}/checkpoint/"
+mkdir -p "${FINETUNE_OUTPUT_PATH}/log/"
 current_time=$(date "+%Y.%m.%d-%H.%M.%S")
-LOGGING_DIR="${OUTPUT_BASEPATH}/log/${NAME}_${current_time}"
+LOGGING_DIR="${FINETUNE_OUTPUT_PATH}/log/${NAME}_${current_time}"
 mkdir -p ${LOGGING_DIR}
 
-FINETUNE_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
+FINETUNE_CHECKPOINT_PATH="${FINETUNE_OUTPUT_PATH}/checkpoint/${NAME}"
 
 hf_options="  \
-        --load ${PRETRAIN_CHECKPOINT_PATH} \
+        --load ${PRETRAIN_MODEL_PATH} \
         --save ${FINETUNE_CHECKPOINT_PATH} \
-        --train-data ${TRAIN_DATASET_PATH} \
-        --valid-data ${VALID_DATASET_PATH} \
+        --train-data ${TRAIN_DATASET} \
+        --valid-data ${VALIDATION_DATASET} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
-        --seq-length ${SEQ_LEN} \
+        --seq-length ${SEQUENCE_LENGTH} \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --intermediate-size ${INTERMEDIATE_SIZE} \
         --micro-batch-size ${MICRO_BATCH_SIZE} \
         --epochs ${EPOCH} \
-        --lr ${LR} \
+        --lr ${LEARNING_RATE} \
         --num-workers 1 \
-        --gradient-accumulation-steps ${GA_STEPS} \
+        --gradient-accumulation-steps ${GRADIENT_ACCUMULATION_STEPS} \
         --logging-dir ${LOGGING_DIR} \
-        --model ${MODEL} \
+        --model ${MODEL_NAME} \
         ${pr_options} \
         ${gc_options} \
         ${flash_options}
@@ -132,12 +276,12 @@ hf_options="  \
 template_json="ds_config_TEMPLATE.json"
 config_json="ds_config.json"
 sed "s/CONFIG_MBSIZE/${MICRO_BATCH_SIZE}/" ${template_json} \
-    | sed "s/CONFIG_ZERO_STATE/${ZERO}/" \
+    | sed "s/CONFIG_ZERO_STATE/${ZERO_STAGE}/" \
     | sed "s/CONFIG_GBSIZE/${GLOBAL_BATCH_SIZE}/" \
-    | sed "s/CONFIG_GAS/${GA_STEPS}/" \
+    | sed "s/CONFIG_GAS/${GRADIENT_ACCUMULATION_STEPS}/" \
     | sed "s/CONFIG_FP16_ENABLED/${FP16}/" \
     | sed "s/CONFIG_BF16_ENABLED/${BF16}/" \
-    | sed "s/CONFIG_LR/${LR}/" \
+    | sed "s/CONFIG_LR/${LEARNING_RATE}/" \
 	  > ${config_json}
 
 run_cmd="torchrun $DISTRIBUTED_ARGS ds_train_huggingface_finetune.py ${hf_options}"

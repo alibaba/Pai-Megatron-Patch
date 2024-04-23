@@ -17,6 +17,7 @@ from megatron.training import pretrain
 from megatron.utils import get_ltor_masks_and_position_ids
 from megatron.utils import average_losses_across_data_parallel_group
 
+from megatron_patch.data import build_pretrain_dataset_from_original
 from megatron_patch.model.qwen1_5_megablocks.gpt_model import GPTModel
 from megatron_patch.arguments import get_patch_args
 from megatron_patch.tokenizer import get_tokenizer, build_tokenizer
@@ -130,20 +131,21 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     """Build train, valid, and test datasets."""
     args = get_args()
 
-    print_rank_0('> building train, validation, and test datasets '
-                 'for GPT ...')
-    train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
-        data_prefix=args.data_path,
-        data_impl=args.data_impl,
-        splits_string=args.split,
-        train_valid_test_num_samples=train_val_test_num_samples,
-        seq_length=args.seq_length,
-        seed=args.seed,
-        skip_warmup=(not args.mmap_warmup),
-        train_data_prefix=args.train_data_path,
-        valid_data_prefix=args.valid_data_path,
-        test_data_prefix=args.test_data_path,)
-    print_rank_0("> finished creating GPT datasets ...")
+    if "-Raw" in args.dataset:
+        train_ds, valid_ds, test_ds = build_pretrain_dataset_from_original(args.dataset)
+    else:
+        train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
+            data_prefix=args.data_path,
+            data_impl=args.data_impl,
+            splits_string=args.split,
+            train_valid_test_num_samples=train_val_test_num_samples,
+            seq_length=args.seq_length,
+            seed=args.seed,
+            skip_warmup=(not args.mmap_warmup),
+            train_data_prefix=args.train_data_path,
+            valid_data_prefix=args.valid_data_path,
+            test_data_prefix=args.test_data_path,)
+        print_rank_0("> finished creating GPT datasets ...")
 
     return train_ds, valid_ds, test_ds
 

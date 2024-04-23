@@ -1,9 +1,8 @@
 #!/bin/bash
-# sh run_finetune_mcore_qwen_withGA.sh dsw ../.. 0.5B 1 96 1e-5 1e-6 128 128 293 bf16 1 1 sel true false false true false 100000 /mnt/qwen-datasets/alpaca_zh-qwen-train.json /mnt/qwen-datasets/alpaca_zh-qwen-valid.json /mnt/qwen-ckpts/qwen1.5_0.5b_mcore_tp1_pp1_v1 1000 10 debug
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
-MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-240126
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-240405
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
@@ -56,6 +55,7 @@ NUM_LAYERS=24
 HIDDEN_SIZE=1024
 NUM_ATTN_HEADS=16
 INTERMEDIATE_SIZE=2816
+MAX_POSITION_EMBEDDINGS=32768
 
 elif [ $MODEL_SIZE = 1.8B ]; then
 
@@ -63,6 +63,7 @@ NUM_LAYERS=24
 HIDDEN_SIZE=2048
 NUM_ATTN_HEADS=16
 INTERMEDIATE_SIZE=5504
+MAX_POSITION_EMBEDDINGS=32768
 
 elif [ $MODEL_SIZE = 4B ]; then
 
@@ -70,6 +71,7 @@ NUM_LAYERS=40
 HIDDEN_SIZE=2560
 NUM_ATTN_HEADS=20
 INTERMEDIATE_SIZE=6912
+MAX_POSITION_EMBEDDINGS=32768
 
 elif [ $MODEL_SIZE = 7B ]; then
 
@@ -77,6 +79,7 @@ NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
+MAX_POSITION_EMBEDDINGS=32768
 
 elif [ $MODEL_SIZE = 13B ]; then
 
@@ -84,6 +87,7 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13696
+MAX_POSITION_EMBEDDINGS=32768
 
 elif [ $MODEL_SIZE = 72B ]; then
 
@@ -91,6 +95,7 @@ NUM_LAYERS=80
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=24576
+MAX_POSITION_EMBEDDINGS=32768
 
 fi
 
@@ -103,7 +108,7 @@ elif [ $AC = sel ]; then
         --recompute-activations"
 elif [ $AC = none ]; then
     activation_checkpoint_options=" \
-                    "
+    "
 fi
 
 if [ $PR = fp16 ]; then
@@ -145,14 +150,16 @@ if [ $TE = true ]; then
 
 elif [ $TE = false ]; then
     te_options=" \
-                    "
+        --transformer-impl local"
 fi
 
 if [ $MOE = true ]; then
     moe_options=" \
 		    --moe-router-topk 1 \
-		    --num-experts 4 \
-		    --expert-model-parallel-size 2"
+		    --num-experts 8 \
+		    --moe-aux-loss-coeff 1e-2 \
+		    --expert-model-parallel-size 1 \
+		    --moe-router-load-balancing-type aux_loss"
 
 elif [ $MOE = false ]; then
     moe_options=" \
@@ -193,12 +200,14 @@ megatron_options="  \
         --test-data-path ${VALID_DATASET_PATH} \
         --lr ${LR} \
         --min-lr ${MIN_LR} \
-        --lr-decay-style linear \
+        --lr-decay-style cosine \
         --adam-beta1 0.9 \
         --adam-beta2 0.95 \
         --weight-decay 0.1 \
         --clip-grad 1.0 \
-        --init-method-std 0.006 \
+        --init-method-std 0.008 \
+        --attention-dropout 0.0 \
+        --hidden-dropout 0.0 \
         --dataloader-type cyclic \
         --lr-decay-iters ${LR_DECAY_ITERS} \
         --lr-warmup-iters ${LR_WARMUP_ITERS} \
@@ -210,7 +219,8 @@ megatron_options="  \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
-        --max-position-embeddings ${SEQ_LEN} \
+        --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
+        --max-padding-length ${PAD_LEN} \
         --log-interval 1 \
         --eval-interval 10000 \
         --eval-iters 10 \
@@ -225,10 +235,8 @@ megatron_options="  \
         --no-load-optim \
         --no-load-rng \
         --num-workers 8 \
-        --seed 1234 \
-        --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type Qwen2Tokenizer \
+        --patch-tokenizer-type LLamaTokenizer \
         --dataset LLama-Pretrain-Raw \
         --swiglu \
         --normalization RMSNorm \
@@ -238,13 +246,14 @@ megatron_options="  \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear \
-        --eod-mask-loss \
-        --rotary-base 100000000 \
-        --rotary-percent 1 \
+        --add-qkv-bias \
+        --use-mcore-models \
+        --rotary-percent 1.0 \
+        --rotary-base 1000000 \
         --rotary-seq-len-interpolation-factor 1
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS finetune_mcore_qwen_withGA.py
+run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_mcore_qwen.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options} ${moe_options}"
 
 echo ${run_cmd}

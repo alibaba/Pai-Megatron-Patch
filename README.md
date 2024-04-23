@@ -1,10 +1,12 @@
 ## Quick Start
 
-|  | Megatron-LM-Dense | Megatron-Core-Dense | Megatron-Core-MoE | MegaBlocks-MoE |
-| --- | --- | --- | --- | --- |
-| LLama2 |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama2/README.md#Megatron-LM-Dense模型训练流程) | TBD | TBD |  TBD |
-| Mistral |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/mistral/README.md#Megatron-LM-Dense模型训练流程) | TBD | TBD |  TBD |
-| Qwen1.5 |  TBD | TBD | TBD |  TBD |
+
+|         |                                                  Megatron-LM-Dense                                                   |                                                  Megatron-Core-Dense                                                   |                                                  Megatron-Core-MoE                                                   | MegaBlocks-MoE |
+|:--------|:--------------------------------------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------------------:|:--------------------------------------------------------------------------------------------------------------------:|:--------------:|
+| LLama3  | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama3/README.md#Megatron-LM-Dense模型训练流程)  | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama3/README.md#Megatron-Core-Dense模型训练流程)  |                                                         N/A                                                          |      N/A       |
+| LLama2  | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama2/README.md#Megatron-LM-Dense模型训练流程)  | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama2/README.md#Megatron-Core-Dense模型训练流程)  |                                                         N/A                                                          |      N/A       |
+| Mistral | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/mistral/README.md#Megatron-LM-Dense模型训练流程) | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/mistral/README.md#Megatron-Core-Dense模型训练流程) | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/mistral/README.md#Megatron-Core-MoE模型训练流程) |      N/A       |
+| Qwen1.5 | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen1_5/README.md#Megatron-LM-Dense模型训练流程) | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen1_5/README.md#Megatron-Core-Dense模型训练流程) | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen1_5/README.md#Megatron-Core-MoE模型训练流程) |      [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen1_5/README.md#MegaBlocks-MoE模型训练流程)        |
 
 
 ## Introduction
@@ -13,6 +15,7 @@ English | [简体中文](./README_zh-CN.md)
 Pai-Megatron-Patch (https://github.com/alibaba/Pai-Megatron-Patch) is a deep learning training toolkit built for developers to train and predict LLMs & VLMs by using Megatron framework easily. With the continuous development of LLMs, the model structure and scale are rapidly evolving. Although these models can be conveniently manufactured using Transformers or DeepSpeed training framework, the training efficiency is comparably low. This phenomenon becomes even severer when the model scale exceeds 10 billion. The primary objective of Pai-Megatron-Patch is to effectively utilize the computational power of GPUs for LLM. This tool allows convenient training of commonly used LLM with all the accelerating techniques provided by Megatron-LM.
 
 What's New:
+- **Support training llama3 models by using Megatron-LM and Megatron-Core.** [🔥🔥 2024.04.21]
 - **Support training qwen1.5 models by using Megatron-Core.** [🔥🔥 2024.03.20]
 - **Support training qwen1.5 models by using Megatron-LM.** [🔥🔥 2024.02.28]
 - **Support training mixtral-8x7b moe model by using Megatron-Core.** [🔥🔥 2024.01.26]

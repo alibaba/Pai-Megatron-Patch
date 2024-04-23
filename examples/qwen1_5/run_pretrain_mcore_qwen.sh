@@ -1,6 +1,4 @@
 #!/bin/bash
-#sh run_pretrain_mcore_qwen.sh dsw ../.. 0.5B 1 8 1e-5 1e-6 2048 32768 293 bf16 1 1 sel true false true true false 100000 /mnt/qwen-datasets/wudao_qwenbpe_content_document /mnt/qwen-ckpts/qwen1.5_0.5b_mcore_tp1_pp1_v2 10000000000 100000000 debug
-#sh run_pretrain_mcore_qwen.sh dsw ../.. 0.5B 1 8 1e-5 1e-6 2048 32768 293 bf16 1 1 sel true false true true true 10 /mnt/qwen-datasets/wudao_qwenbpe_content_document /mnt/qwen-ckpts/Qwen1.5-0.5B 18349219840 183492198 debug
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -55,6 +53,7 @@ NUM_LAYERS=24
 HIDDEN_SIZE=1024
 NUM_ATTN_HEADS=16
 INTERMEDIATE_SIZE=2816
+MAX_POSITION_EMBEDDINGS=32768
 
 elif [ $MODEL_SIZE = 1.8B ]; then
 
@@ -62,6 +61,7 @@ NUM_LAYERS=24
 HIDDEN_SIZE=2048
 NUM_ATTN_HEADS=16
 INTERMEDIATE_SIZE=5504
+MAX_POSITION_EMBEDDINGS=32768
 
 elif [ $MODEL_SIZE = 4B ]; then
 
@@ -69,6 +69,7 @@ NUM_LAYERS=40
 HIDDEN_SIZE=2560
 NUM_ATTN_HEADS=20
 INTERMEDIATE_SIZE=6912
+MAX_POSITION_EMBEDDINGS=32768
 
 elif [ $MODEL_SIZE = 7B ]; then
 
@@ -76,6 +77,7 @@ NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
+MAX_POSITION_EMBEDDINGS=32768
 
 elif [ $MODEL_SIZE = 13B ]; then
 
@@ -83,6 +85,7 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13696
+MAX_POSITION_EMBEDDINGS=32768
 
 elif [ $MODEL_SIZE = 72B ]; then
 
@@ -90,6 +93,7 @@ NUM_LAYERS=80
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=24576
+MAX_POSITION_EMBEDDINGS=32768
 
 fi
 
@@ -149,7 +153,7 @@ fi
 
 if [ $MOE = true ]; then
     moe_options=" \
-		    --moe-router-topk 1 \
+		    --moe-router-topk 2 \
 		    --num-experts 8 \
 		    --moe-aux-loss-coeff 1e-2 \
 		    --expert-model-parallel-size 1 \
@@ -212,7 +216,8 @@ megatron_options="  \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
-        --max-position-embeddings ${PAD_LEN} \
+        --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
+        --max-padding-length ${PAD_LEN} \
         --log-interval 1 \
         --eval-interval 10000 \
         --eval-iters 10 \
@@ -242,7 +247,6 @@ megatron_options="  \
         --use-mcore-models \
         --rotary-percent 1.0 \
         --rotary-base 1000000 \
-        --apply-query-key-layer-scaling \
         --rotary-seq-len-interpolation-factor 1
         "
 

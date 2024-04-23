@@ -22,11 +22,11 @@ elif [ $mg2hf = false ]; then
     do_options=""
 fi
 
-export PYTHONPATH=${MEGATRON_PATH}:$PYTHONPATH
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-231007
 
 if [[ "$MN" == *"qwen1.5"* ]]; then
 
-python hf2megatron_1.5.py \
+python hf2megatron_qwen1.5.py \
 --load_path ${SOURCE_CKPT_PATH} \
 --save_path ${TARGET_CKPT_PATH} \
 --target_params_dtype fp16 \
@@ -39,7 +39,7 @@ ${do_options}
 
 else
     
-python hf2megatron_1.0.py \
+python hf2megatron_qwen1.0.py \
 --load_path ${SOURCE_CKPT_PATH} \
 --save_path ${TARGET_CKPT_PATH} \
 --target_params_dtype fp16 \

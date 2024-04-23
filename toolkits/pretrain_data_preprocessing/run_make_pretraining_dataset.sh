@@ -65,7 +65,7 @@ elif [ $tokenizer = "llamabpe" ]; then
 
   python preprocess_data.py \
   --input ${INPUT} \
-  --output-prefix ${output_data_dir}/SlimPajama_pad_llamabpe \
+  --output-prefix ${output_data_dir}/wudao_llama3bpe \
   --dataset-impl mmap \
   --patch-tokenizer-type LLamaTokenizer \
   --load ${load_dir} \

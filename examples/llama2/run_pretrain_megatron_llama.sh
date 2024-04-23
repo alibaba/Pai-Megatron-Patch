@@ -1,5 +1,4 @@
 #!/bin/bash
-# sh run_pretrain_megatron_llama.sh dsw ../.. 13B 1 8 1e-5 1e-6 128 128 0 bf16 4 1 sel true false false false 100000 wudao_llamabpe_text_document /mnt/llama2-ckpts/Llama-2-13b-hf-to-megatron-tp4-pp1/ 100000000 10000 /mnt/output_megatron_llama2
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -54,6 +53,7 @@ NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
+MAX_POSITION_EMBEDDINGS=2048
 
 gqa_options=""
 
@@ -63,6 +63,7 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13824
+MAX_POSITION_EMBEDDINGS=2048
 
 gqa_options=""
 
@@ -72,6 +73,7 @@ NUM_LAYERS=80
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=28672
+MAX_POSITION_EMBEDDINGS=2048
 
 gqa_options=" \
 		    --group-query-attention \
@@ -182,7 +184,8 @@ megatron_options="  \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
-        --max-position-embeddings ${SEQ_LEN} \
+        --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
+        --max-padding-length ${PAD_LEN} \
         --log-interval 1 \
         --eval-interval 10000 \
         --eval-iters 10 \

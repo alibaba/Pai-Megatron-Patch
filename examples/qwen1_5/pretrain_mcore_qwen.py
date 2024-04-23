@@ -29,7 +29,6 @@ from megatron_patch.model.qwen1_5.layer_specs import get_gpt_layer_with_transfor
 from megatron_patch.model.qwen1_5.model import GPTModel
 from megatron_patch.arguments import get_patch_args
 from megatron_patch.tokenizer import get_tokenizer, build_tokenizer
-os.environ['NVTE_APPLY_QK_LAYER_SCALING'] = '1'
 import torch._dynamo
 torch._dynamo.config.suppress_errors = True
 

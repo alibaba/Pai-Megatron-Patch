@@ -1,10 +1,13 @@
 ## 快速开始
 
-|  | Megatron-LM-Dense | Megatron-Core-Dense | Megatron-Core-MoE | MegaBlocks-MoE |
-| --- | --- | --- | --- | --- |
-| LLama2 |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama2/README.md#Megatron-LM-Dense模型训练流程) | TBD | TBD |  TBD |
-| Mistral |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/mistral/README.md#Megatron-LM-Dense模型训练流程) | TBD | TBD |  TBD |
-| Qwen1.5 |  TBD | TBD | TBD |  TBD |
+
+|         |                                                  Megatron-LM-Dense                                                   |                                                  Megatron-Core-Dense                                                   |                                                  Megatron-Core-MoE                                                   | MegaBlocks-MoE |
+|:--------|:--------------------------------------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------------------:|:--------------------------------------------------------------------------------------------------------------------:|:--------------:|
+| LLama3  | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama3/README.md#Megatron-LM-Dense模型训练流程)  | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama3/README.md#Megatron-Core-Dense模型训练流程)  |                                                         N/A                                                          |      N/A       |
+| LLama2  | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama2/README.md#Megatron-LM-Dense模型训练流程)  | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama2/README.md#Megatron-Core-Dense模型训练流程)  |                                                         N/A                                                          |      N/A       |
+| Mistral | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/mistral/README.md#Megatron-LM-Dense模型训练流程) | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/mistral/README.md#Megatron-Core-Dense模型训练流程) | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/mistral/README.md#Megatron-Core-MoE模型训练流程) |      N/A       |
+| Qwen1.5 | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen1_5/README.md#Megatron-LM-Dense模型训练流程) | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen1_5/README.md#Megatron-Core-Dense模型训练流程) | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen1_5/README.md#Megatron-Core-MoE模型训练流程) |      [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen1_5/README.md#MegaBlocks-MoE模型训练流程)        |
+
 
 ## Pai-Megatron-Patch是什么
 [English](./README.md) | 简体中文
@@ -30,6 +33,7 @@ Pai-Megatron-Patch是各类开源大模型和Megatron训练加速引擎之间的
 - [阿里云PAI获得FewCLUE基于大模型的小样本学习双料冠军](https://developer.aliyun.com/article/788081?spm=a2c6h.12873639.article-detail.17.11c5383cHpFZks&tlog=yuekan_8)
 
 新功能：
+- **支持用Megatron-LM和Megatron-Core框架训练llama3系列模型** [🔥🔥 2024.04.21]
 - **支持用Megatron-Core框架训练qwen1.5系列模型** [🔥🔥 2024.03.20]
 - **支持用Megatron-LM框架训练qwen1.5系列模型** [🔥🔥 2024.02.28]
 - **支持用Megatron-Core框架训练mixtral-8x7b MoE稀疏模型** [🔥🔥 2024.01.26]

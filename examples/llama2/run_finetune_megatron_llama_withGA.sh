@@ -1,12 +1,10 @@
 #!/bin/bash
-#sh run_finetune_megatron_llama_withGA.sh dsw ../.. 13B 1 32 1e-5 1e-6 128 128 0 bf16 8 1 sel true false false false 100 alpaca_zh-llama2-train.json alpaca_zh-llama2-valid.json /mnt/llama2-ckpts/Llama-2-13b-hf-to-megatron-tp8-pp1 1000 10 /mnt/output_megatron_llama2
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
 MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-231007
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
-export HF_DATASETS_CACHE=/mnt/llama2-datasets
 if [ $ENV = dsw ]; then
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 MASTER_ADDR=localhost
@@ -56,6 +54,7 @@ NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
+MAX_POSITION_EMBEDDINGS=2048
 
 gqa_options=""
 
@@ -65,6 +64,7 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13824
+MAX_POSITION_EMBEDDINGS=2048
 
 gqa_options=""
 
@@ -74,6 +74,7 @@ NUM_LAYERS=80
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=28672
+MAX_POSITION_EMBEDDINGS=2048
 
 gqa_options=" \
 		    --group-query-attention \
@@ -162,7 +163,6 @@ if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
             --load $PRETRAIN_CHECKPOINT_PATH"
 fi
 
-
 LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS} ))
 
 NAME="${ENV}-finetune-megatron-llama2-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_ITERS}"
@@ -200,7 +200,8 @@ megatron_options="  \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
-        --max-position-embeddings ${SEQ_LEN} \
+        --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
+        --max-padding-length ${PAD_LEN} \
         --log-interval 1 \
         --eval-interval 10000 \
         --eval-iters 10 \
@@ -216,7 +217,6 @@ megatron_options="  \
         --no-load-rng \
         --num-workers 0 \
         --seed 1234 \
-        --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type LLamaTokenizer \
         --dataset LLama-Pretrain-Raw \

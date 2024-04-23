@@ -1,5 +1,4 @@
 #!/bin/bash
-#sh run_pretrain_mcore_llama.sh dsw ../.. 0.1B 1 8 1e-5 1e-6 2048 2048 0 bf16 1 1 sel true false true true false 100000 /mnt/llama2-datasets/SlimPajama_llamabpe_content_document /mnt/llama2-ckpts/Llama-2-7b-hf/ 10000000000 100000000 /mnt/output_patch_test
 set -e
 ENV=$1
 MEGATRON_PATCH_PATH=$2
@@ -7,12 +6,12 @@ MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-240126
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=1
+GPUS_PER_NODE=8
 
 elif [ $ENV = dlc ]; then
 
@@ -48,20 +47,13 @@ TRAIN_TOKENS=${23}
 WARMUP_TOKENS=${24}
 OUTPUT_BASEPATH=${25}
 
-if [ $MODEL_SIZE = 0.1B ]; then
-
-NUM_LAYERS=1
-HIDDEN_SIZE=768
-NUM_ATTN_HEADS=32
-INTERMEDIATE_SIZE=11008
-gqa_options=""
-
-elif [ $MODEL_SIZE = 7B ]; then
+if [ $MODEL_SIZE = 7B ]; then
 
 NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
+MAX_POSITION_EMBEDDINGS=2048
 
 gqa_options=""
 
@@ -71,6 +63,7 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13824
+MAX_POSITION_EMBEDDINGS=2048
 
 gqa_options=""
 
@@ -80,6 +73,7 @@ NUM_LAYERS=80
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=28672
+MAX_POSITION_EMBEDDINGS=2048
 
 gqa_options=" \
 		    --group-query-attention \
@@ -206,7 +200,8 @@ megatron_options="  \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
-        --max-position-embeddings ${SEQ_LEN} \
+        --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
+        --max-padding-length ${PAD_LEN} \
         --log-interval 1 \
         --eval-interval 10000 \
         --eval-iters 10 \
@@ -222,7 +217,6 @@ megatron_options="  \
         --no-load-rng \
         --num-workers 0 \
         --seed 1234 \
-        --max-padding-length ${PAD_LEN} \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type LLamaTokenizer \
         --dataset LLama-Pretrain-Idxmap \
@@ -233,8 +227,7 @@ megatron_options="  \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear \
-        --eod-mask-loss \
-        --reset-attention-mask
+        --transformer-impl transformer_engine
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_mcore_llama.py
