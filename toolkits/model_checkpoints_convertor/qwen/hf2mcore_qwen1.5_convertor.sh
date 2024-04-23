@@ -6,7 +6,7 @@
 # sh hf2mcore_qwen1.5_convertor.sh 0.5B /mnt/qwen-ckpts/Qwen1.5-0.5B ../../../ /mnt/qwen-ckpts/Qwen1.5-0.5B /mnt/qwen-ckpts/Qwen1.5-0.5B-hf-to-mcore-tp1-pp1-ep1-exp8 1 1 293 8 2 1 false
 
 set -e
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=7
 START_TIME=$SECONDS
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
@@ -32,12 +32,18 @@ HIDDEN_SIZE=1024
 NUM_ATTN_HEADS=16
 INTERMEDIATE_SIZE=2816
 
+gqa_options=""
+cpu_options=""
+
 elif [ $MODEL_SIZE = 1.8B ]; then
 
 NUM_LAYERS=24
 HIDDEN_SIZE=2048
 NUM_ATTN_HEADS=16
 INTERMEDIATE_SIZE=5504
+
+gqa_options=""
+cpu_options=""
 
 elif [ $MODEL_SIZE = 7B ]; then
 
@@ -46,12 +52,41 @@ HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
 
+gqa_options=""
+cpu_options=""
+
 elif [ $MODEL_SIZE = 14B ]; then
 
 NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13696
+
+gqa_options=""
+cpu_options=""
+
+elif [ $MODEL_SIZE = 32B ]; then
+
+NUM_LAYERS=64
+HIDDEN_SIZE=5120
+NUM_ATTN_HEADS=40
+INTERMEDIATE_SIZE=27392
+
+cpu_options=""
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups 8"
+
+elif [ $MODEL_SIZE = 72B ]; then
+
+NUM_LAYERS=80
+HIDDEN_SIZE=8192
+NUM_ATTN_HEADS=64
+INTERMEDIATE_SIZE=24576
+
+gqa_options=""
+cpu_options=" \
+		    --use-cpu-initialization"
 
 fi
 
@@ -86,6 +121,8 @@ sed "s/CONFIG_HIDDEN_SIZE/${HIDDEN_SIZE}/" ${template_json} \
 
 DISTRIBUTED_ARGS="--nproc_per_node 1 --nnodes 1 --node_rank 0 --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
+if [ $MODEL_SIZE != 32B ]; then
+
 torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen1.5.py \
     --load_path ${SOURCE_CKPT_PATH} \
     --save_path ${TARGET_CKPT_PATH} \
@@ -118,7 +155,22 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen1.5.py \
     --attention-dropout 0.0 \
     --hidden-dropout 0.0 \
     ${expert_options} \
-    ${convert_options}
+    ${convert_options} \
+    ${gqa_options} \
+    ${cpu_options}
+
+else
+python hf2mcore_qwen1.5_gqa.py \
+  --load ${HG_CKPT_PATH} \
+  --megatron-path ${MEGATRON_PATH} \
+  --load_path ${SOURCE_CKPT_PATH} \
+  --save_path ${TARGET_CKPT_PATH} \
+  --target_params_dtype bf16 \
+  --target_tensor_model_parallel_size ${TP} \
+  --target_pipeline_model_parallel_size ${PP} \
+${convert_options} \
+
+fi
 
 ELAPSED_TIME=$(($SECONDS - $START_TIME))
 echo "$(($ELAPSED_TIME/60)) min $(($ELAPSED_TIME%60)) sec"

@@ -221,7 +221,7 @@ def get_args():
         '--patch-tokenizer-type',
         type=str,
         required=True,
-        choices=['Qwen2Tokenizer'],
+        choices=['Qwen2Tokenizer', 'LLamaTokenizer'],
         help='What type of tokenizer to use.',
     )
     group.add_argument('--load',
