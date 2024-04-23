@@ -90,11 +90,9 @@ llama3-datasets
 ```bash
 # 开源网站获取训练代码
 git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
-# wget获取训练代码
-https://atp-modelzoo.oss-cn-hangzhou.aliyuncs.com/release/models/Pai-Megatron-Patch.tgz
 ```
 
-在DSW的Terminal中进入代码目录：/mnt/workspace/Pai-Megatron-Patch/toolkits/pretrain_data_preprocessing。查看run_make_pretraining_dataset.sh脚本内容。里面有6个启动参数需要在运行时输入，具体参数列表如下：
+在DSW的Terminal中进入代码目录：/mnt/workspace/Pai-Megatron-Patch/toolkits/pretrain_data_preprocessing。查看run_make_pretraining_dataset.sh脚本内容。里面有5个启动参数需要在运行时输入，具体参数列表如下：
 ```
 MEGATRON_PATCH_PATH=$1             # 设置Megatron Patch的代码路径
 input_data_dir=$2                  # 打包后的wudao数据集的文件夹路径
