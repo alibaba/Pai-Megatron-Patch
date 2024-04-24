@@ -1,24 +1,23 @@
 # Table of Contents
 
-```markdown
-# Table of Contents
-   * [Installation](#Installation)
-   * [Dataset & Model Download](#Dataset-and-Model-Download)
-   * [Megatron-LM-Dense Model Training Process](#Megatron-LM-Dense-Model-Training-Process)
-      * [Model Format Conversion](#Megatron-LM-Dense-Model-Format-Conversion)
-      * [Continue Pretraining](#Megatron-LM-Dense-Continue-Pretraining)
-      * [Instruction Fine-tuning](#Megatron-LM-Dense-Instruction-Fine-tuning)
-   * [Megatron-Core-Dense Model Training Process](#Megatron-Core-Dense-Model-Training-Process)
-      * [Model Format Conversion](#Megatron-Core-Dense-Model-Format-Conversion)
-      * [Continue Pretraining](#Megatron-Core-Dense-Continue-Pretraining)
-      * [Instruction Fine-tuning](#Megatron-Core-Dense-Instruction-Fine-tuning)
-   * [Megatron-Core-MoE Model Training Process](#Megatron-Core-MoE-Model-Training-Process)
-      * [Model Format Conversion](#Megatron-Core-MoE-Model-Format-Conversion)
-      * [Continue Pretraining](#Megatron-Core-MoE-Continue-Pretraining)
-      * [Instruction Fine-tuning](#Megatron-Core-MoE-Instruction-Fine-tuning)
-   * [Downstream Task Evaluation](#Downstream-Task-Evaluation)
-      * [Megatron-LM Model Format Conversion](#Megatron-LM-Dense-Model-Conversion-to-Huggingface-Format)
-      * [Run Evaluation Tools](#Run-Evaluation-Tools)
+   * [Installation](#installation)
+   * [Dataset and Model Download](#dataset-and-model-download)
+   * [Megatron-LM-Dense Model Training Process](#megatron-lm-dense-model-training-process)
+      * [Megatron-LM-Dense Model Format Conversion](#megatron-lm-dense-model-format-conversion)
+      * [Continue Pretraining Megatron-LM-Dense](#continue-pretraining-megatron-lm-dense)
+      * [Instruction Fine-tuning Megatron-LM-Dense](#instruction-fine-tuning-megatron-lm-dense)
+   * [Megatron-Core-Dense Model Training Process](#megatron-core-dense-model-training-process)
+      * [Megatron-Core-Dense Model Format Conversion](#megatron-core-dense-model-format-conversion)
+      * [Continue Pretraining Megatron-Core-Dense](#continue-pretraining-megatron-core-dense)
+      * [Instruction Fine-tuning Megatron-Core-Dense](#instruction-fine-tuning-megatron-core-dense)
+   * [Megatron-Core-MoE Model Training Process](#megatron-core-moe-model-training-process)
+      * [Megatron-Core-MoE Model Format Conversion](#megatron-core-moe-model-format-conversion)
+      * [Continue Pretraining Megatron-Core-MoE](#continue-pretraining-megatron-core-moe)
+      * [Instruction Fine-tuning Megatron-Core-MoE](#instruction-fine-tuning-megatron-core-moe)
+   * [Downstream Task Evaluation](#downstream-task-evaluation)
+      * [Megatron-LM-Dense Model Conversion to Huggingface Format](#megatron-lm-dense-model-conversion-to-huggingface-format)
+      * [Run Evaluation Tools](#run-evaluation-tools)
+
 
 # Installation
 It is recommended to create a container using the official NVIDIA image nvcr.io/nvidia/pytorch:23.12-py3
@@ -487,6 +486,5 @@ accelerate launch --main_process_port 29051 -m lm_eval \
 --model_args pretrained=/mnt/mistral-ckpts/Mistral-7B-v0.1-megatron-to-hf,trust_remote_code=True \
 --tasks mmlu,ceval-valid  \
 --batch_size 16
-```
 ```
 
