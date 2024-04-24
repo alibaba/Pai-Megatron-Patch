@@ -399,9 +399,7 @@ false \
 
 ## Continue Pretraining Megatron-Core-MoE
 ```bash
-cd /workspace/Pai-Megatron-Patch/examples/m
-
-istral
+cd /workspace/Pai-Megatron-Patch/examples/mistral
 sh run_pretrain_mcore_mistral.sh  \
 dsw  \
 ../../ \
