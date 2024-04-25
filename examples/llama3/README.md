@@ -358,7 +358,7 @@ llama3-8b \
 true
 ```
 
-将开源Huggingface模型文件夹路径下的.json (pytorch_model.bin.index.json除外)文件拷贝至/mnt/llama3-ckpts/Meta-Llama-3-8B-hf-megatron-to-hf目录下，以保证模型可以正常使用。
+请将开源Huggingface模型文件夹路径下的.json (pytorch_model.bin.index.json除外)文件拷贝至/mnt/llama3-ckpts/Meta-Llama-3-8B-hf-megatron-to-hf目录下，以保证模型可以正常使用。
 
 ## 运行评估工具
 ```bash
