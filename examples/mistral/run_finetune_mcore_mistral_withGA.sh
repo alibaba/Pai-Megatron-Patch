@@ -221,7 +221,8 @@ megatron_options="  \
         --no-rope-fusion \
         --expert-model-parallel-size ${EP} \
         --distributed-timeout-minutes 6000 \
-        --transformer-impl transformer_engine"
+        --transformer-impl transformer_engine \
+        --eod-mask-loss"
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_mcore_mistral.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options} ${moe_options}"
