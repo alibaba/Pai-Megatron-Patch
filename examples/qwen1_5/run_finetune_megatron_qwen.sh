@@ -45,7 +45,7 @@ PRETRAIN_CHECKPOINT_PATH=${20}
 EPOCH=${21}
 OUTPUT_BASEPATH=${22}
 
-
+gqa_options=""
 if [ $MODEL_SIZE = 0.5B ]; then
 
 NUM_LAYERS=24
@@ -81,12 +81,25 @@ HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13696
 
+elif [ $MODEL_SIZE = 32B ]; then
+
+NUM_LAYERS=64
+HIDDEN_SIZE=5120
+NUM_ATTN_HEADS=40
+INTERMEDIATE_SIZE=27392
+
+
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups 8"
+
 elif [ $MODEL_SIZE = 72B ]; then
 
 NUM_LAYERS=80
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=24576
+
 
 fi
 
@@ -220,7 +233,7 @@ megatron_options="  \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_mcore_qwen.py
- ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options}"
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

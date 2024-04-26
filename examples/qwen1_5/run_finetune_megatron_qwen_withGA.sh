@@ -7,12 +7,12 @@ MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-231007
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=1
+GPUS_PER_NODE=8
 
 elif [ $ENV = dlc ]; then
 
@@ -31,7 +31,7 @@ LR=$6
 MIN_LR=$7
 SEQ_LEN=$8
 PAD_LEN=$9
-EXTRA_VOCAB_SIZE=${10}
+EXTRA_VOCAB_SIZE=${10} # 293 for models smaller than 32b, 421 for those larger
 PR=${11}
 TP=${12}
 PP=${13}
@@ -54,7 +54,7 @@ NUM_LAYERS=24
 HIDDEN_SIZE=1024
 NUM_ATTN_HEADS=16
 INTERMEDIATE_SIZE=2816
-MAX_POSITION_EMBEDDINGS=32768
+
 
 elif [ $MODEL_SIZE = 1.8B ]; then
 
@@ -62,7 +62,7 @@ NUM_LAYERS=24
 HIDDEN_SIZE=2048
 NUM_ATTN_HEADS=16
 INTERMEDIATE_SIZE=5504
-MAX_POSITION_EMBEDDINGS=32768
+
 
 elif [ $MODEL_SIZE = 4B ]; then
 
@@ -70,7 +70,7 @@ NUM_LAYERS=40
 HIDDEN_SIZE=2560
 NUM_ATTN_HEADS=20
 INTERMEDIATE_SIZE=6912
-MAX_POSITION_EMBEDDINGS=32768
+
 
 elif [ $MODEL_SIZE = 7B ]; then
 
@@ -78,7 +78,7 @@ NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
-MAX_POSITION_EMBEDDINGS=32768
+
 
 elif [ $MODEL_SIZE = 14B ]; then
 
@@ -86,7 +86,17 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13696
-MAX_POSITION_EMBEDDINGS=32768
+
+elif [ $MODEL_SIZE = 32B ]; then
+
+NUM_LAYERS=64
+HIDDEN_SIZE=5120
+NUM_ATTN_HEADS=40
+INTERMEDIATE_SIZE=27392
+
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups 8"
 
 elif [ $MODEL_SIZE = 72B ]; then
 
@@ -94,7 +104,7 @@ NUM_LAYERS=80
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=24576
-MAX_POSITION_EMBEDDINGS=32768
+
 
 fi
 
@@ -204,7 +214,7 @@ megatron_options="  \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
-        --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
+        --max-position-embeddings ${SEQ_LEN} \
         --max-padding-length ${PAD_LEN} \
         --log-interval 1 \
         --eval-interval 10000 \
@@ -227,13 +237,15 @@ megatron_options="  \
         --patch-tokenizer-type LLamaTokenizer \
         --swiglu \
         --normalization RMSNorm \
-        --use-rotary-position-embeddings \
+        --use-llama2-rotary-position-embeddings \
         --position-embedding-type rope \
-        --untie-embeddings-and-output-weights
+        --untie-embeddings-and-output-weights \
+        --rotary-base 1000000 \
+        --rotary-scale-factor 1 \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS ../llama2/finetune_megatron_llama_withGA.py
- ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options}"
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

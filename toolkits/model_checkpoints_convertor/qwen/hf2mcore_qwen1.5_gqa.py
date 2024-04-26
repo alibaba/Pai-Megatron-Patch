@@ -278,7 +278,6 @@ def convert_checkpoint_from_transformers_to_megatron(args):
     # Saving config and tokenzier files
     os.system("cp -rf " + args.load_path + "/*.json " + args.save_path)
     os.system("cp -rf " + args.load_path + "/tokeniz* " + args.save_path)
-    os.system("cp -rf " + args.load_path + "/merges.txt " + args.save_path)
 
     # Saving the tracker file
     tracker_filepath = os.path.join(args.save_path, "latest_checkpointed_iteration.txt")
@@ -437,8 +436,8 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                     layer_name = f"layers.{layer}.{out_name}.layer_norm_weight"
 
                 elif op_name.startswith("post_attention_layernorm") and weight_or_bias == "weight":
-                    out_name = "mlp.linear_fc1.layer_norm_weight"
-                    layer_name = f"layers.{layer}.{out_name}"
+                    out_name = "pre_mlp_layernorm"
+                    layer_name = f"layers.{layer}.{out_name}.{weight_or_bias}"
 
                 # handle attention K, V, Q weights
                 elif op_name.startswith("self_attn.query"):
