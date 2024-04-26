@@ -31,6 +31,7 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
+    Qwen2Config
 )
 from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint
 
@@ -176,6 +177,18 @@ tensor_parallel_params = [
     # megatron-lm layers to merge across tp ranks
     "self_attn.query_key_value.weight",
     "self_attn.query_key_value.bias",
+    "self_attn.dense.weight",
+    "mlp.dense_h_to_4h_1.weight",
+    "mlp.dense_h_to_4h_2.weight",
+    "mlp.dense_4h_to_h.weight"
+]
+
+tensor_parallel_params_32b = [
+    # megatron-lm layers to merge across tp ranks
+    "self_attn.query.weight",
+    "self_attn.key_value.weight",
+    "self_attn.query.bias",
+    "self_attn.key_value.bias",
     "self_attn.dense.weight",
     "mlp.dense_h_to_4h_1.weight",
     "mlp.dense_h_to_4h_2.weight",
@@ -408,10 +421,16 @@ def convert_checkpoint_from_transformers_to_megatron(args):
         k_bias = state_dict['model.layers.' + str(layer_id) + '.self_attn.k_proj.bias']
         v_bias = state_dict['model.layers.' + str(layer_id) + '.self_attn.v_proj.bias']
 
-        internal_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query_key_value.weight'] =\
-                torch.cat((q_weight, k_weight, v_weight))
-        internal_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query_key_value.bias'] =\
-                torch.cat((q_bias, k_bias, v_bias))
+        if args.model_name != "qwen1.5-32b":
+            internal_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query_key_value.weight'] =\
+                    torch.cat((q_weight, k_weight, v_weight))
+            internal_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query_key_value.bias'] =\
+                    torch.cat((q_bias, k_bias, v_bias))
+        else:
+            internal_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query.weight'] = q_weight
+            internal_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.query.bias'] = q_bias
+            internal_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.key_value.weight'] = torch.cat((k_weight, v_weight))
+            internal_state_dict['transformer.layers.'+str(layer_id)+'.self_attn.key_value.bias'] = torch.cat((k_bias, v_bias))
 
         internal_state_dict['transformer.layers.' + str(layer_id) + '.self_attn.dense.weight'] =\
             state_dict['model.layers.' + str(layer_id) + '.self_attn.o_proj.weight']
@@ -575,7 +594,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 elif op_name.startswith("self_attn.rotary_emb"):
                     layer_name = f"layers.{layer}.self_attention.rotary_emb.inv_freq"
 
-                elif op_name.startswith("self_attn.query_key_value"):
+                elif op_name.startswith("self_attn.query_key_value") and args.model_name != "qwen1.5-32b":
                     # transformers stores D X (3*D) but Megatron-LM expects (3*D) X D.
                     params = transformers_to_megatron_fix_query_key_value_ordering(
                         params,
@@ -586,6 +605,28 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                     )
                     layer_name = f"layers.{layer}.self_attention.query_key_value.{weight}"
 
+                elif op_name.startswith("self_attn.query") and args.model_name == "qwen1.5-32b":
+                    # transformers stores D X (3*D) but Megatron-LM expects (3*D) X D.
+                    params = transformers_to_megatron_fix_query_key_value_ordering(
+                        params,
+                        3.0,
+                        1,
+                        heads,
+                        hidden_size_per_head,
+                    )
+                    layer_name = f"layers.{layer}.self_attention.query.{weight}"
+
+                elif op_name.startswith("self_attn.key_value") and args.model_name == "qwen1.5-32b":
+                    # transformers stores D X (3*D) but Megatron-LM expects (3*D) X D.
+                    params = transformers_to_megatron_fix_query_key_value_ordering(
+                        params,
+                        3.0,
+                        2,
+                        8,
+                        hidden_size_per_head,
+                    )
+                    layer_name = f"layers.{layer}.self_attention.key_value.{weight}"
+                
                 # handle attention and mlp weights
                 elif weight == "weight":
                     out_name = transformers_to_megatron.get(op_name, None)
@@ -598,14 +639,15 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 else:
                     continue
 
-                if op_name + "." + weight in tensor_parallel_params:
+                tensor_parallel_params_new = tensor_parallel_params if args.model_name != "qwen1.5-32b" else tensor_parallel_params_32b
+                if op_name + "." + weight in tensor_parallel_params_new:
                     dim = 1 if op_name in ["self_attn.dense", "mlp.dense_4h_to_h"] else 0
                     params = torch.chunk(params, args.target_tensor_model_parallel_size, dim=dim)
 
                 for i in range(args.target_tensor_model_parallel_size):
                     params_dict = get_element_from_dict_by_path(output_state_dict[i], "model.language_model.encoder")
                     params_dict[layer_name] = (
-                        params[i].clone() if (op_name + "." + weight in tensor_parallel_params) else params.clone()
+                        params[i].clone() if (op_name + "." + weight in tensor_parallel_params_new) else params.clone()
                     )
 
             for i in range(args.target_tensor_model_parallel_size):
@@ -629,6 +671,52 @@ def convert_checkpoint_from_transformers_to_megatron(args):
 
                 del params_dict[dense_h_to_4h_1_layer_name]
                 del params_dict[dense_h_to_4h_2_layer_name]
+
+                if args.model_name == "qwen1.5-32b":
+                    hidden_size = config.hidden_size 
+                    num_groups = 8
+                    head_dim = config.hidden_size // config.num_attention_heads
+                    num_heads = config.num_attention_heads
+
+                    query_name = 'self_attention.query.weight'
+                    query_layer_name = f"layers.{layer}.{query_name}"
+                    query_weight = params_dict[query_layer_name]
+
+                    kv_name = 'self_attention.key_value.weight'
+                    kv_layer_name = f"layers.{layer}.{kv_name}"
+                    kv_weight = params_dict[kv_layer_name]
+
+                    qkv_name = 'self_attention.query_key_value.weight'
+                    qkv_layer_name = f"layers.{layer}.{qkv_name}"
+
+                    group_query_weight = query_weight.view(num_groups // args.target_tensor_model_parallel_size, num_heads // num_groups * head_dim, hidden_size)
+                    group_kv_weight = kv_weight.view(num_groups // args.target_tensor_model_parallel_size, 2 * head_dim, hidden_size)
+
+                    group_qkv_weight = torch.cat([group_query_weight, group_kv_weight], dim=1)
+                    params_dict[qkv_layer_name] = group_qkv_weight.view(-1, hidden_size)
+
+                    del params_dict[query_layer_name]
+                    del params_dict[kv_layer_name]
+
+                    query_name = 'self_attention.query.bias'
+                    query_layer_name = f"layers.{layer}.{query_name}"
+                    query_weight = params_dict[query_layer_name]
+
+                    kv_name = 'self_attention.key_value.bias'
+                    kv_layer_name = f"layers.{layer}.{kv_name}"
+                    kv_weight = params_dict[kv_layer_name]
+
+                    qkv_name = 'self_attention.query_key_value.bias'
+                    qkv_layer_name = f"layers.{layer}.{qkv_name}"
+
+                    group_query_weight = query_weight.view(num_groups // args.target_tensor_model_parallel_size, num_heads // num_groups * head_dim, 1)
+                    group_kv_weight = kv_weight.view(num_groups // args.target_tensor_model_parallel_size, 2 * head_dim, 1)
+
+                    group_qkv_weight = torch.cat([group_query_weight, group_kv_weight], dim=1)
+                    params_dict[qkv_layer_name] = group_qkv_weight.view(-1)
+
+                    del params_dict[query_layer_name]
+                    del params_dict[kv_layer_name]
 
         if pp_rank == args.target_pipeline_model_parallel_size - 1:
             # handle final layernorm
@@ -731,7 +819,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     else:
         dtype = torch.float32
 
-    intermediate_size_map = {1024:2816,2048:5504,2560:6912,4096:11008,5120:13824,6656:17920,7168:19200,8192:22016}
+    intermediate_size_map = {1024:2816,2048:5504,2560:6912,4096:11008,5120:13824 if args.model_name != 'qwen1.5-32b' else 27392,6656:17920,7168:19200,8192:22016}
     config = Qwen2Config(
         bos_token_id=151643,
         eos_token_id=151645,
@@ -739,7 +827,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
         hidden_size=megatron_args.hidden_size,
         num_hidden_layers=megatron_args.num_layers,
         num_attention_heads=megatron_args.num_attention_heads,
-        num_key_value_heads=megatron_args.num_attention_heads,
+        num_key_value_heads=megatron_args.num_attention_heads if args.model_name != 'qwen1.5-32b' else 8,
         rms_norm_eps=1e-06,
         initializer_range=0.02,
         use_cache=True,
@@ -864,7 +952,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
             # Transpose the QKV matrix.
             elif (
                 op_name == "attention.query_key_value" or op_name == "self_attention.query_key_value"
-            ) and weight_or_bias == "weight":
+            ) and weight_or_bias == "weight" and args.model_name != 'qwen1.5-32b':
 
                 out_val = megatron_to_transformers_fix_query_key_value_ordering(
                     params,
@@ -887,7 +975,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
             # Not applicable
             elif (
                 op_name == "attention.query_key_value" or op_name == "self_attention.query_key_value"
-            ) and weight_or_bias == "bias":
+            ) and weight_or_bias == "bias" and args.model_name != 'qwen1.5-32b':
                 out_val = megatron_to_transformers_fix_query_key_value_ordering(
                     params, checkpoint_version, 3, heads, hidden_size_per_head
                 )
@@ -896,6 +984,46 @@ def convert_checkpoint_from_megatron_to_transformers(args):
                 QKV = {0:'q_proj',1:'k_proj',2:'v_proj'}
                 for index, matrix in enumerate(torch.split(out_val, out_val.shape[0]//3, 0)):
                     output_state_dict[layer_name + f".self_attn.{QKV[index]}.bias"] = matrix.clone()
+
+            # Transpose the Q matrix for query for Llama70b.
+            elif (
+                op_name == "attention.query_key_value" or op_name == "self_attention.query_key_value"
+            ) and args.model_name == "qwen1.5-32b":
+                num_groups = 8
+                head_dim = config.hidden_size // config.num_attention_heads
+                num_heads = config.num_attention_heads
+                hidden_size = config.hidden_size 
+
+                tp_states = torch.chunk(params, args.target_tensor_model_parallel_size, dim=0)
+                query_dim = num_heads // num_groups * head_dim
+                kv_dim = 2 * head_dim
+                if weight_or_bias == 'weight':
+                    tp_states = [i.view(num_groups//args.target_tensor_model_parallel_size, query_dim + kv_dim, hidden_size) for i in tp_states]
+                    query = torch.cat([i[:, :query_dim].reshape(-1, hidden_size) for i in tp_states])
+                    key_value = torch.cat([i[:, query_dim:].reshape(-1, hidden_size) for i in tp_states])
+                else:
+                    tp_states = [i.view(num_groups//args.target_tensor_model_parallel_size, query_dim + kv_dim) for i in tp_states]
+                    query = torch.cat([i[:, :query_dim].reshape(-1) for i in tp_states])
+                    key_value = torch.cat([i[:, query_dim:].reshape(-1) for i in tp_states])
+
+                out_val = megatron_to_transformers_fix_query_key_value_ordering(
+                    query,
+                    checkpoint_version,
+                    1,
+                    heads,
+                    hidden_size_per_head,
+                )
+                output_state_dict[layer_name + f".self_attn.q_proj.{weight_or_bias}"] = out_val.clone()
+                out_val = megatron_to_transformers_fix_query_key_value_ordering(
+                    key_value,
+                    checkpoint_version,
+                    2,
+                    8,
+                    hidden_size_per_head,
+                )
+                KV = {0:'k_proj',1:'v_proj'}
+                for index, matrix in enumerate(torch.split(out_val, out_val.shape[0]//2, 0)):
+                    output_state_dict[layer_name + f".self_attn.{KV[index]}.{weight_or_bias}"] = matrix.clone()
 
             # Transpose the weights.
             elif weight_or_bias == "weight":

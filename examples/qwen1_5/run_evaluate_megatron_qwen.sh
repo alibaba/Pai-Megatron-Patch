@@ -28,7 +28,7 @@ MODEL_SIZE=$3
 BATCH_SIZE=$4
 SEQ_LEN=$5
 PAD_LEN=$6
-EXTRA_VOCAB_SIZE=$7
+EXTRA_VOCAB_SIZE=$7 # 293 for models smaller than 32b, 421 for those larger
 PR=$8
 TP=$9
 PP=${10}
@@ -40,6 +40,7 @@ TE=${15}
 DATASET_PATH=${16}
 PRETRAIN_CHECKPOINT_PATH=${17}
 
+gqa_options=""
 if [ $MODEL_SIZE = 0.5B ]; then
 
 NUM_LAYERS=24
@@ -68,12 +69,25 @@ HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
 
+
 elif [ $MODEL_SIZE = 14B ]; then
 
 NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13696
+
+elif [ $MODEL_SIZE = 32B ]; then
+
+NUM_LAYERS=64
+HIDDEN_SIZE=5120
+NUM_ATTN_HEADS=40
+INTERMEDIATE_SIZE=27392
+MAX_POSITION_EMBEDDINGS=2048
+
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups 8"
 
 elif [ $MODEL_SIZE = 72B ]; then
 
@@ -176,7 +190,7 @@ megatron_options=" \
         --patch-tokenizer-type LLamaTokenizer \
         --swiglu \
         --normalization RMSNorm \
-        --use-llama2-rotary-position-embeddings \
+        --use-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --rotary-base 1000000 \
@@ -184,7 +198,7 @@ megatron_options=" \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS ../llama2/evaluate_megatron_llama.py
- ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options}"
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

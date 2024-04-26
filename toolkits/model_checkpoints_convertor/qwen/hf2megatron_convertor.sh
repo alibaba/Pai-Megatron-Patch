@@ -11,7 +11,7 @@ TARGET_CKPT_PATH=$3
 TP=$4
 PP=$5
 MN=$6 #qwen-7b,qwen-14b,qwen-72b;qwen1.5-0.5b,qwen1.5-1.8b,qwen1.5-4b,qwen1.5-7b,qwen1.5-14b,qwen1.5-72b
-EXTRA_VOCAB_SIZE=$7
+EXTRA_VOCAB_SIZE=$7 # 0 for all models
 mg2hf=$8
 
 if [ $mg2hf = true ]; then
@@ -29,7 +29,7 @@ if [[ "$MN" == *"qwen1.5"* ]]; then
 python hf2megatron_qwen1.5.py \
 --load_path ${SOURCE_CKPT_PATH} \
 --save_path ${TARGET_CKPT_PATH} \
---target_params_dtype fp16 \
+--target_params_dtype bf16 \
 --megatron-path ${MEGATRON_PATH} \
 --target_tensor_model_parallel_size ${TP} \
 --target_pipeline_model_parallel_size ${PP} \

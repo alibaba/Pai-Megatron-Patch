@@ -21,7 +21,7 @@ TP=$5
 BS=$6
 SEQ_LEN=$7
 PAD_LEN=$8
-EXTRA_VOCAB_SIZE=$9
+EXTRA_VOCAB_SIZE=$9 # 293 for models smaller than 32b, 421 for those larger
 PR=${10}
 TOP_K=${11}
 INPUT_SEQ_LEN=${12}
@@ -33,6 +33,7 @@ TEMPERATURE=${17}
 # set this penalty between 1.1 and 1.5 to reduce repetition, default is 1.2
 REPETITION_PENALTY=${18}
 
+gqa_options=""
 if [ $MODEL_SIZE = 0.5B ]; then
 
 NUM_LAYERS=24
@@ -67,6 +68,17 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13696
+
+elif [ $MODEL_SIZE = 32B ]; then
+
+NUM_LAYERS=64
+HIDDEN_SIZE=5120
+NUM_ATTN_HEADS=40
+INTERMEDIATE_SIZE=27392
+
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups 8"
 
 elif [ $MODEL_SIZE = 72B ]; then
 
@@ -132,7 +144,7 @@ rapidformer_options="  \
     "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS ../llama2/generate_text_megatron_llama.py
- ${rapidformer_options} ${load_options} ${input_options} ${pr_options}"
+ ${rapidformer_options} ${load_options} ${input_options} ${pr_options} ${gqa_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
