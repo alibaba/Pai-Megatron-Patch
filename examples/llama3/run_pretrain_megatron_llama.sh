@@ -146,6 +146,7 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
         --split 99,1,0 \
+        --train-data-path ${DATASET_PATH} \
         --data-path ${DATASET_PATH} \
         --lr ${LR} \
         --min-lr ${MIN_LR} \
@@ -184,7 +185,7 @@ megatron_options="  \
         --num-workers 8 \
         --seed 1234 \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type LLama3Tokenizer \
+        --patch-tokenizer-type LLamaTokenizer \
         --swiglu \
         --normalization RMSNorm \
         --use-rotary-position-embeddings \
