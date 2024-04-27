@@ -28,6 +28,7 @@ NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
 NUM_KV_HEADS=32
 VOCAB_SIZE=32000
+ROPE_THETA=10000
 
 gqa_options=""
 
@@ -39,7 +40,7 @@ NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13824
 NUM_KV_HEADS=40
 VOCAB_SIZE=32000
-
+ROPE_THETA=10000
 gqa_options=""
 
 elif [ $MODEL_SIZE = 70B ]; then
@@ -50,7 +51,8 @@ NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=28672
 NUM_KV_HEADS=8
 VOCAB_SIZE=32000
-
+ROPE_THETA=500000
+ROPE_THETA=10000
 gqa_options=" \
 		    --group-query-attention \
 		    --num-query-groups 8"
@@ -63,6 +65,7 @@ NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=14336
 NUM_KV_HEADS=8
 VOCAB_SIZE=128256
+ROPE_THETA=500000
 
 gqa_options=" \
 		    --group-query-attention \
@@ -98,6 +101,7 @@ sed "s/CONFIG_HIDDEN_SIZE/${HIDDEN_SIZE}/" ${template_json} \
     | sed "s/CONFIG_EXPERTS_topk/${EXPERTS_TOPK}/" \
     | sed "s/CONFIG_KV_HEADS/${NUM_KV_HEADS}/" \
     | sed "s/CONFIG_VOCAB_SIZE/${VOCAB_SIZE}/" \
+    | sed "s/CONFIG_ROPE_THETA/${ROPE_THETA}/" \
 	  > ${config_json}
 
 DISTRIBUTED_ARGS="--nproc_per_node 1 --nnodes 1 --node_rank 0 --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
