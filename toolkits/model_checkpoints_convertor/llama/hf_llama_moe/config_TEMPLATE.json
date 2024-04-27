@@ -25,7 +25,7 @@
     "torch_dtype": "float16",
     "transformers_version": "4.36.0.dev0",
     "use_cache": true,
-    "vocab_size": 32000,
+    "vocab_size": CONFIG_VOCAB_SIZE,
     "num_local_experts": CONFIG_NUM_EXPERTS,
     "num_experts_per_tok": CONFIG_EXPERTS_topk
   }
