@@ -102,6 +102,12 @@ def add_megatron_checkpoint_args(parser):
         ),
     )
 
+    parser.add_argument(
+        "--num_expert_split_size",
+        type=int,
+        default=1
+    )
+
     return parser
 
 
@@ -182,7 +188,13 @@ def create_megatron_model(args, hf_config):
     args.num_layers = hf_config.num_hidden_layers
     args.num_attention_heads = hf_config.num_attention_heads
     args.kv_channels = args.hidden_size // args.num_attention_heads
-    args.ffn_hidden_size = hf_config.intermediate_size
+    if not args.convert_checkpoint_from_megatron_to_transformers:
+        if args.num_expert_split_size == 1:
+            args.ffn_hidden_size = hf_config.intermediate_size
+        else:
+            args.ffn_hidden_size = hf_config.intermediate_size // args.num_expert_split_size
+    else:
+        args.ffn_hidden_size = hf_config.intermediate_size
     args.num_query_groups = hf_config.num_key_value_heads
     model = model_provider()
     return model.eval()
@@ -343,12 +355,21 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hgmodel, args):
             else:
                 hglayer.post_attention_layernorm.weight.copy_(mglayer.pre_mlp_layernorm.weight)
                 hglayer.mlp.gate.weight.copy_(mglayer.mlp.router.weight)
-                for mgexpert, hgexpert in zip(mglayer.mlp.experts.local_experts, hglayer.mlp.experts):
-                    gate_weight, fc1_weight = torch.split(mgexpert.linear_fc1.weight,
-                                                          split_size_or_sections=args.ffn_hidden_size)
-                    hgexpert.w1.weight.copy_(gate_weight)
-                    hgexpert.w3.weight.copy_(fc1_weight)
-                    hgexpert.w2.weight.copy_(mgexpert.linear_fc2.weight)
+                if args.num_expert_split_size == 1:
+                    for mgexpert, hgexpert in zip(mglayer.mlp.experts.local_experts, hglayer.mlp.experts):
+                        gate_weight, fc1_weight = torch.split(mgexpert.linear_fc1.weight,
+                                                              split_size_or_sections=args.ffn_hidden_size)
+                        hgexpert.w1.weight.copy_(gate_weight)
+                        hgexpert.w3.weight.copy_(fc1_weight)
+                        hgexpert.w2.weight.copy_(mgexpert.linear_fc2.weight)
+                else:
+                    for mgexpert, hgexpert in zip(mglayer.mlp.experts.local_experts, hglayer.mlp.experts):
+                        gate_weight, fc1_weight = torch.split(mgexpert.linear_fc1.weight,
+                                                              split_size_or_sections=args.ffn_hidden_size)
+                        hgexpert.w1.weight.copy_(gate_weight)
+                        hgexpert.w3.weight.copy_(fc1_weight)
+                        hgexpert.w2.weight.copy_(mgexpert.linear_fc2.weight)
+
         hgmodel.model.norm.weight.copy_(mgmodel.decoder.final_layernorm.weight)
         hgmodel.lm_head.weight.copy_(mgmodel.output_layer.weight)
 
@@ -369,7 +390,6 @@ def convert_checkpoint_from_transformers_to_megatron(mgmodel, hgmodel, args, hf_
             qkv = torch.cat([q, k, v], dim=1).view(-1, hidden_dim).contiguous()
             mglayer.self_attention.linear_qkv.weight.copy_(qkv)
 
-
             mglayer.self_attention.linear_proj.weight.copy_(hglayer.self_attn.o_proj.weight)
             fc1_weight = torch.cat([hglayer.mlp.gate_proj.weight, hglayer.mlp.up_proj.weight])
             if num_experts is None:
@@ -377,11 +397,30 @@ def convert_checkpoint_from_transformers_to_megatron(mgmodel, hgmodel, args, hf_
                 mglayer.mlp.linear_fc2.weight.copy_(hglayer.mlp.down_proj.weight)
                 mglayer.mlp.linear_fc1.layer_norm_weight.copy_(hglayer.post_attention_layernorm.weight)
             else:
-                mglayer.pre_mlp_layernorm.weight.copy_(hglayer.post_attention_layernorm.weight)
-                nn.init.normal_(mglayer.mlp.router.weight, mean=0, std=0.02)
-                for expert in mglayer.mlp.experts.local_experts:
-                    expert.linear_fc1.weight.copy_(fc1_weight)
-                    expert.linear_fc2.weight.copy_(hglayer.mlp.down_proj.weight)
+                if args.num_expert_split_size == 1:
+                    mglayer.pre_mlp_layernorm.weight.copy_(hglayer.post_attention_layernorm.weight)
+                    nn.init.normal_(mglayer.mlp.router.weight, mean=0, std=0.02)
+                    for expert in mglayer.mlp.experts.local_experts:
+                        expert.linear_fc1.weight.copy_(fc1_weight)
+                        expert.linear_fc2.weight.copy_(hglayer.mlp.down_proj.weight)
+                else:
+                    mglayer.pre_mlp_layernorm.weight.copy_(hglayer.post_attention_layernorm.weight)
+                    nn.init.normal_(mglayer.mlp.router.weight, mean=0, std=0.02)
+
+                    split_size = hf_config.intermediate_size // args.num_expert_split_size
+                    gate_proj_splits = torch.split(hglayer.mlp.gate_proj.weight, split_size_or_sections=split_size,
+                                                   dim=0)
+                    up_proj_splits = torch.split(hglayer.mlp.up_proj.weight, split_size_or_sections=split_size,
+                                                   dim=0)
+                    down_proj_splits = torch.split(hglayer.mlp.down_proj.weight, split_size_or_sections=split_size,
+                                                 dim=1)
+
+                    for idx, expert in enumerate(mglayer.mlp.experts.local_experts):
+                        split_idx = idx % args.num_expert_split_size
+                        local_fc1_weight = torch.cat([gate_proj_splits[split_idx], up_proj_splits[split_idx]])
+                        expert.linear_fc1.weight.copy_(local_fc1_weight)
+                        expert.linear_fc2.weight.copy_(down_proj_splits[split_idx])
+
         mgmodel.decoder.final_layernorm.weight.copy_(hgmodel.model.norm.weight)
         mgmodel.output_layer.weight.copy_(hgmodel.lm_head.weight)
 
