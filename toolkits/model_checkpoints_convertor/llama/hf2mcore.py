@@ -408,18 +408,24 @@ def convert_checkpoint_from_transformers_to_megatron(mgmodel, hgmodel, args, hf_
                     nn.init.normal_(mglayer.mlp.router.weight, mean=0, std=0.02)
 
                     split_size = hf_config.intermediate_size // args.num_expert_split_size
-                    gate_proj_splits = torch.split(hglayer.mlp.gate_proj.weight, split_size_or_sections=split_size,
-                                                   dim=0)
-                    up_proj_splits = torch.split(hglayer.mlp.up_proj.weight, split_size_or_sections=split_size,
-                                                   dim=0)
-                    down_proj_splits = torch.split(hglayer.mlp.down_proj.weight, split_size_or_sections=split_size,
-                                                 dim=1)
+                    gate_proj_splits = torch.split(hglayer.mlp.gate_proj.weight, split_size_or_sections=split_size)
+                    up_proj_splits = torch.split(hglayer.mlp.up_proj.weight, split_size_or_sections=split_size)
+                    down_proj_splits = torch.split(hglayer.mlp.down_proj.weight, split_size_or_sections=split_size, dim=1)
 
                     for idx, expert in enumerate(mglayer.mlp.experts.local_experts):
-                        split_idx = idx % args.num_expert_split_size
-                        local_fc1_weight = torch.cat([gate_proj_splits[split_idx], up_proj_splits[split_idx]])
-                        expert.linear_fc1.weight.copy_(local_fc1_weight)
-                        expert.linear_fc2.weight.copy_(down_proj_splits[split_idx])
+                        expert.linear_fc1.weight.copy_(torch.cat([gate_proj_splits[idx], up_proj_splits[idx]]))
+                        expert.linear_fc2.weight.copy_(down_proj_splits[idx])
+
+                    """
+                    for idx, expert in enumerate(mglayer.mlp.experts.local_experts):
+                        base_linear_fc1 = torch.cat([gate_proj_splits[idx], up_proj_splits[idx]])
+                        extra_linear_fc1 = torch.empty(32, base_linear_fc1.shape[1])
+                        extra_linear_fc2 = torch.empty(base_linear_fc1.shape[1], 16)
+                        nn.init.normal_(extra_linear_fc1, mean=0, std=0.02)
+                        nn.init.normal_(extra_linear_fc2, mean=0, std=0.02)
+                        expert.linear_fc1.weight.copy_(torch.cat([base_linear_fc1, extra_linear_fc1.to(torch.float16)]))
+                        expert.linear_fc2.weight.copy_(torch.cat([down_proj_splits[idx], extra_linear_fc2.to(torch.float16)], dim=1))
+                    """
 
         mgmodel.decoder.final_layernorm.weight.copy_(hgmodel.model.norm.weight)
         mgmodel.output_layer.weight.copy_(hgmodel.lm_head.weight)
