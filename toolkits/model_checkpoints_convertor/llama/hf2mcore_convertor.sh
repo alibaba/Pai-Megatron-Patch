@@ -18,7 +18,8 @@ EXTRA_VOCAB_SIZE=$8
 NUM_EXPERTS=$9
 EXPERTS_TOPK=${10}
 EP=${11}
-mg2hf=${12}
+NUM_EXPERT_SPLITS=${12}
+mg2hf=${13}
 
 if [ $MODEL_SIZE = 7B ]; then
 
@@ -73,13 +74,19 @@ gqa_options=" \
 
 fi
 
+if [ $NUM_EXPERT_SPLITS -gt 0 ]; then
+
+INTERMEDIATE_SIZE=$(( ${INTERMEDIATE_SIZE} / ${NUM_EXPERT_SPLITS}))
+
+fi
 
 if [ $NUM_EXPERTS -gt 0 ]; then
     expert_options="
                 --moe-router-topk ${EXPERTS_TOPK} \
                 --num-experts ${NUM_EXPERTS} \
                 --expert-model-parallel-size 1 \
-                --target_expert_model_parallel_size ${EP}
+                --target_expert_model_parallel_size ${EP} \
+                --num_expert_split_size ${NUM_EXPERT_SPLITS} \
     "
 fi
 
