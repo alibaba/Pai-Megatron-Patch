@@ -930,6 +930,8 @@ def convert_checkpoint_from_megatron_to_transformers(args):
             # import pdb
             # pdb.set_trace()
             if op_name + "." + weight_or_bias not in tensor_parallel_params_mg:
+                if val is None:
+                    continue                
                 params = val.to(dtype)
             else:
                 # import pdb
