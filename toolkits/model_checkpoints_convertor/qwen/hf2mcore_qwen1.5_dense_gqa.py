@@ -24,69 +24,47 @@ from transformers import AutoModelForCausalLM, AutoConfig, AutoTokenizer
 from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint
 
 
-def add_args(parser):
-    parser.add_argument('--megatron-path',
-                        type=str,
-                        default=None,
-                        help='Base directory of Megatron repository')
+def add_extra_args(parser):
 
     parser.add_argument(
-        "--convert_checkpoint_from_megatron_to_transformers",
-        action="store_true",
-        help=(
-            "If True, convert a Megatron checkpoint to a Transformers checkpoint. "
-            "If False, convert a Transformers checkpoint to a Megatron checkpoint."
-        ),
-    )
-    parser.add_argument(
-        "--load_path",
-        type=str,
-        required=True,
-        help="Path to the checkpoint to convert.",
+        '--convert-checkpoint-from-megatron-to-transformers',
+        action='store_true',
+        help=
+        ('If True, convert a Megatron checkpoint to a Transformers checkpoint. '
+         'If False, convert a Transformers checkpoint to a Megatron checkpoint.'
+         ),
     )
 
     parser.add_argument(
-        "--load",
-        type=str,
-        required=True,
-        help="Path to the checkpoint to convert.",
-    )
-
-    parser.add_argument(
-        "--save_path",
-        type=str,
-        required=True,
-        help="Path to the converted checkpoint.",
-    )
-
-
-    parser.add_argument(
-        "--target_tensor_model_parallel_size",
+        "--target-tensor-model-parallel-size",
         type=int,
-        default=1,
-        help=(
-            "The tensor model parallel size of the converted checkpoint. "
-            "Only used when converting a Transformers checkpoint to a Megatron checkpoint."
-        ),
-    )
-    parser.add_argument(
-        "--target_pipeline_model_parallel_size",
-        type=int,
-        default=1,
-        help=(
-            "The pipeline model parallel size of the converted checkpoint. "
-            "Only used when converting a Transformers checkpoint to a Megatron checkpoint."
-        ),
+        default=1
     )
 
     parser.add_argument(
-        "--target_params_dtype",
-        type=str,
-        default="fp32",
-        help=(
-            "The dtype of the converted checkpoint. "
-            "Only used when converting a Transformers checkpoint to a Megatron checkpoint."
-        ),
+        "--target-pipeline-model-parallel-size",
+        type=int,
+        default=1
+    )
+
+    parser.add_argument(
+        "--hf-ckpt-path",
+        type=str
+    )
+
+    parser.add_argument(
+        "--load-path",
+        type=str
+    )
+
+    parser.add_argument(
+        "--save-path",
+        type=str
+    )
+
+    parser.add_argument(
+        "--target-params-dtype",
+        type=str
     )
 
     parser.add_argument(
@@ -99,8 +77,6 @@ def add_args(parser):
             "Only used when converting a Megatron checkpoint to a Transformers checkpoint."
         ),
     )
-
-    parser.add_argument("--print-checkpoint-structure", action="store_true")
 
     return parser
 
@@ -566,12 +542,6 @@ def convert_checkpoint_from_transformers_to_megatron(args):
             checkpoint_dir = os.path.join(release_dir, checkpoint_dir)
             os.makedirs(checkpoint_dir, exist_ok=True)
             checkpoint_path = os.path.join(checkpoint_dir, checkpoint_name)
-            if args.print_checkpoint_structure:
-                print(
-                    f"Checkpoint structure of model state dict shard belonging to TP rank {tp_rank} and PP rank"
-                    f" {pp_rank}:"
-                )
-                recursive_print(None, output_state_dict[tp_rank])
             torch.save(output_state_dict[tp_rank], checkpoint_path)
 
 
@@ -587,9 +557,16 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     """
     os.makedirs(args.save_path, exist_ok=True)
 
-    # Saving config and tokenzier files
-    os.system("cp -rf " + args.load + "/config.json " + args.save_path)
-    os.system("cp -rf " + args.load + "/tokenizer* " + args.save_path)
+    os.system("cp -rf " + args.hf_ckpt_path + "/config*.json " + args.save_path)
+    os.system("cp -rf " + args.hf_ckpt_path+ "/tokenizer* " + args.save_path)
+    os.system("cp -rf " + args.hf_ckpt_path + "/vocab.json " + args.save_path)
+    os.system("cp -rf " + args.hf_ckpt_path + "/merges.txt " + args.save_path)
+
+    os.system("cp -rf " + args.hf_ckpt_path + "/config*.json " + args.load_path)
+    os.system("cp -rf " + args.hf_ckpt_path+ "/tokenizer* " + args.load_path)
+    os.system("cp -rf " + args.hf_ckpt_path + "/vocab.json " + args.load_path)
+    os.system("cp -rf " + args.hf_ckpt_path + "/merges.txt " + args.load_path)
+
     import glob
     if glob.glob(args.load_path + "/mp_rank*/distrib*"):
         # if os.path.exists(args.load_path+"/mp_rank*/distrib*"):
@@ -608,7 +585,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     else:
         dtype = torch.float32
 
-    config = AutoConfig.from_pretrained(args.load)
+    config = AutoConfig.from_pretrained(args.hf_ckpt_path)
     output_state_dict = {}
 
     # checkpoint_version = state_dict.get("checkpoint_version", 3.0)
@@ -817,13 +794,6 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     )
     output_state_dict["lm_head.weight"] = params.to(dtype).clone()
 
-    # It should be done!
-    print("Conversion from Megatron-LM to Transformers is done!")
-
-    # Print the structure of converted state dict.
-    if args.print_checkpoint_structure:
-        recursive_print(None, output_state_dict)
-
     # # Store the config to file.
     # print("Saving config")
     # config.save_pretrained(args.save_path)
@@ -852,10 +822,12 @@ def convert_checkpoint_from_megatron_to_transformers(args):
             f"index located at {save_index_file}."
         )
 
+    print("Conversion from Megatron-LM to Transformers is done!")
+
 
 def main():
     parser = argparse.ArgumentParser()
-    parser = add_args(parser)
+    parser = add_extra_args(parser)
     args = parser.parse_args()
     if args.convert_checkpoint_from_megatron_to_transformers:
         convert_checkpoint_from_megatron_to_transformers(args)

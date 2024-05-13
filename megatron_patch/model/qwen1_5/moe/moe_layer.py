@@ -14,6 +14,7 @@
 
 from abc import ABC, abstractmethod
 import torch
+import torch.nn.functional as F
 
 from megatron.core import parallel_state
 from megatron.core.transformer.module import MegatronModule
@@ -25,7 +26,7 @@ from .token_dispatcher import (
     MoEAllGatherTokenDispatcher,
     MoEAlltoAllTokenDispatcher,
 )
-from ..transformer.mlp import MLPSubmodules
+from ..transformer.mlp import MLPSubmodules, MLP
 
 class BaseMoELayer(MegatronModule, ABC):
     """Base class for a mixture of experts layer.
@@ -75,6 +76,11 @@ class MoELayer(BaseMoELayer):
         self.submodules = submodules
         super(MoELayer, self).__init__(config=config, layer_number=layer_number)
         self.router = TopKRouter(config=self.config)
+        self.enable_shared_experts = config.enable_shared_expert
+        if config.enable_shared_expert:
+            self.shared_expert = MLP(self.config, submodules, is_expert=True, is_shared_expert=True)
+            self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
+
         if self.config.moe_grouped_gemm:
             self.experts = GroupedMLP(self.num_local_experts, self.config)
         else:
@@ -101,4 +107,10 @@ class MoELayer(BaseMoELayer):
         )
         expert_output, mlp_bias = self.experts(dispatched_input, tokens_per_expert)
         output, mlp_bias = self.token_dispatcher.token_unpermutation(expert_output, mlp_bias)
+
+        if self.enable_shared_experts:
+            shared_expert_output, shared_bias = self.shared_expert(hidden_states)
+            shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states).view(-1, 1)) * shared_expert_output.view(-1, hidden_states.shape[-1])
+            output = output + shared_expert_output.view(-1, hidden_states.shape[-2], hidden_states.shape[-1])
+
         return output, mlp_bias

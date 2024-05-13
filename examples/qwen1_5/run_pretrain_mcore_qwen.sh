@@ -113,6 +113,17 @@ INTERMEDIATE_SIZE=24576
 MAX_POSITION_EMBEDDINGS=32768
 gqa_options=""
 
+elif [ $MODEL_SIZE = A2.7B ]; then
+
+HIDDEN_SIZE=2048
+NUM_ATTN_HEADS=16
+NUM_LAYERS=24
+INTERMEDIATE_SIZE=5632
+MOE_INTERMEDIATE_SIZE=1408
+SHARED_EXPERT_INTERMEDIATE_SIZE=5632
+MAX_POSITION_EMBEDDINGS=8192
+gqa_options=""
+
 fi
 
 if [ $AC = full ]; then
@@ -170,12 +181,24 @@ elif [ $TE = false ]; then
 fi
 
 if [ $MOE = true ]; then
-    moe_options=" \
-		    --moe-router-topk 2 \
-		    --num-experts 8 \
-		    --moe-aux-loss-coeff 1e-2 \
-		    --expert-model-parallel-size 1 \
-		    --moe-router-load-balancing-type aux_loss"
+    if [ $MODEL_SIZE = A2.7B ]; then
+        moe_options=" \
+            --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
+            --shared-moe-ffn-hidden-size ${SHARED_EXPERT_INTERMEDIATE_SIZE} \
+            --enable-shared-expert \
+            --moe-router-topk 4 \
+            --num-experts 60 \
+            --moe-aux-loss-coeff 1e-2 \
+            --expert-model-parallel-size 4 \
+            --moe-router-load-balancing-type aux_loss"
+    else
+        moe_options=" \
+            --moe-router-topk 2 \
+            --num-experts 8 \
+            --moe-aux-loss-coeff 1e-2 \
+            --expert-model-parallel-size 1 \
+            --moe-router-load-balancing-type aux_loss"
+    fi
 
 elif [ $MOE = false ]; then
     moe_options=" \

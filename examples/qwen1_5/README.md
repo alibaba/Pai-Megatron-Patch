@@ -204,20 +204,41 @@ false \
 ```
 
 # Megatron-Core-Dense模型训练流程
-运行hf2mcore_qwen1.5_convertor.sh脚本，需要传入的参数列表如下
+这里提供三种转换工具，分别是针对dense模型的格式转换，dense2moe的格式转换以及moe模型的格式转换。
+dense模式的格式转换命令如下，运行hf2mcore_qwen1.5_dense_convertor.sh脚本，需要传入的参数列表如下
 ```
 MODEL_SIZE=$1                  # 模型参数：0.5B/1.8B
-HG_CKPT_PATH=$2                # HF的CKPT的路径
-MEGATRON_PATH=$3               # Megatron-LM的根目录
-SOURCE_CKPT_PATH=$4            # 源路径
-TARGET_CKPT_PATH=$5            # 目标路径
-TP=$6                          # 模型并行度
-PP=$7                          # 流水并行度
-EXTRA_VOCAB_SIZE=$8            # 额外扩充词表大小
-NUM_EXPERTS=$9                 # 专家数量
-EXPERTS_TOPK=${10}             # 专家路由Topk
-EP=${11}                       # 专家并行度
-mg2hf=${12}                    # 是否执行mcore2hf转换
+SOURCE_CKPT_PATH=$2            # 源路径
+TARGET_CKPT_PATH=$3            # 目标路径
+TP=$4                          # 模型并行度
+PP=$5                          # 流水并行度
+mg2hf=$6                       # 是否执行mcore2hf转换
+HG_CKPT_PATH=$7                # HF的CKPT的路径
+```
+
+dense2moe模式的格式转换命令如下，运行hf2mcore_qwen1.5_dense_to_moe_convertor.sh本，需要传入的参数列表如下
+```
+MODEL_SIZE=$1                  # 模型参数：0.5B/1.8B
+SOURCE_CKPT_PATH=$2            # 源路径
+TARGET_CKPT_PATH=$3            # 目标路径
+TP=$4                          # 模型并行度
+PP=$5                          # 流水并行度
+EP=$6                          # 专家并行度
+NUM_EXPERTS=$7                 # 专家数
+NUM_SPLITS=$8                  # MLP切分度
+MOE_INTERMEDIATE_SIZE=$9       # moe模块的ffn hidden size
+```
+
+moe模式的格式转换命令如下，运行hf2mcore_qwen1.5_moe_convertor.sh本，需要传入的参数列表如下
+```
+MODEL_SIZE=$1                  # 模型参数：0.5B/1.8B
+SOURCE_CKPT_PATH=$2            # 源路径
+TARGET_CKPT_PATH=$3           # 目标路径
+TP=$4                         # 模型并行度
+PP=$5                          # 流水并行度
+EP=$6                        # 专家并行度
+mg2hf=$7                      # 是否执行mcore2hf转换
+HG_CKPT_PATH=$8               # HF的CKPT的路径
 ```
 
 运行run_pretrain_mcore_qwen.sh脚本，需要传入的参数列表如下
@@ -363,20 +384,31 @@ false \
 # Megatron-Core-MoE模型训练流程
 
 ## Megatron-Core-MoE模型格式转换
+可以通过upcycled的方式将一个dense模型转换成moe模型，比如使用下面的命令可以将1.8B的dense模型转换成Qwen1.5-MoE-A2.7B来进行继续预训练。
 ```bash
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen \
-sh hf2mcore_qwen1.5_convertor.sh \
-0.5B \
-/mnt/qwen-ckpts/Qwen1.5-0.5B \
-../../../     \
-/mnt/qwen-ckpts/Qwen1.5-0.5B \
-/mnt/qwen-ckpts/Qwen1.5-0.5B-hf-to-mcore-tp1-pp1-ep1-exp8 \
+sh hf2mcore_qwen1.5_dense_to_moe_convertor.sh \
+1.8B \
+/mnt/qwen-ckpts/Qwen1.5-1.8B \
+/mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-to-mcore-tp1-pp1-ep4 \
 1  \
 1  \
-293  \
-8  \
-2  \
+4 \
+60 \
+4 \
+1408 
+```
+
+另外还可以直接将一个HF版的Qwen1.5-MoE-A2.7B转换成Mcore的形式来进行继续预训练。
+```bash
+cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen \
+bash hf2mcore_qwen1.5_moe_convertor.sh \
+2.7B \
+/mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B \
+/mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-Chat-to-mcore-tp1-pp1-ep4 \
 1 \
+1 \
+4 \
 false
 ```
 

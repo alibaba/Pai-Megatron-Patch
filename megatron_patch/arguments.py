@@ -339,4 +339,28 @@ def get_patch_args(parser):
     group.add_argument('--num-fewshot', type=int, default=None,
                        help='num fewshot')
 
+    group.add_argument(
+        '--convert-checkpoint-from-megatron-to-transformers',
+        action='store_true',
+        help=
+        ('If True, convert a Megatron checkpoint to a Transformers checkpoint. '
+         'If False, convert a Transformers checkpoint to a Megatron checkpoint.'
+         ),
+    )
+
+    group.add_argument(
+        "--moe-ffn-hidden-size",
+        type=int,
+        default=None
+    )
+
+    group.add_argument(
+        "--shared-moe-ffn-hidden-size",
+        type=int,
+        default=None
+    )
+
+    group.add_argument('--enable-shared-expert', action='store_true',
+                       help='enable-shared-expert')
+
     return parser
