@@ -832,7 +832,8 @@ def convert_megatron_grouped_gemm_mlp(
     output_state_dict: dict,
 ):
     print(f"experts: key={key}")
-    dim = 0 if "weight2" in key else 1
+    is_weight2 = "weight2" in key
+    # dim = 0 if "weight2" in key else 1
 
     for expert_id in experts_ids:
         expert_group_and_slice_location = [
@@ -847,6 +848,21 @@ def convert_megatron_grouped_gemm_mlp(
         # extract each expert part from each tp and its corresponding ep group
         expert_group_idx, slice_idx = expert_group_and_slice_location[0]
         experts_weights = []
+
+        def w1_shape(tp_tensor, slice_idx):
+            grouped = tp_tensor.view(
+                exps_per_group_num, -1, tp_tensor.size(1) // exps_per_group_num
+            )
+            print(f"expert w1 ggemm tensor {grouped.shape}")
+            return grouped[slice_idx]
+
+        def w2_shape(tp_tensor, slice_idx):
+            grouped = tp_tensor.view(
+                exps_per_group_num, tp_tensor.size(0) // exps_per_group_num, -1
+            )
+            print(f"expert w2 ggemm tensor {grouped.shape}")
+            return grouped[slice_idx]
+
         for tp_rank in range(tp_size):
             group_key = ".".join([prefix, str(expert_group_idx)])
             print(f"group_key={group_key} tp_rank={tp_rank}")
@@ -854,23 +870,20 @@ def convert_megatron_grouped_gemm_mlp(
             print(f"tp_tensor={tp_tensor.shape}")
             exps_per_group_num = len(ep_local_indexes[expert_group_idx])
 
-            if dim == 1:  # weight 1
+            def w1_shape(tp_tensor, slice_idx):
                 assert tp_tensor.size(1) % exps_per_group_num == 0
-                print(
-                    f"tp_tensor reshape ={tp_tensor.view(exps_per_group_num,-1, tp_tensor.size(1) // exps_per_group_num).shape}"
-                )
-                expert_part = tp_tensor.view(
+                grouped = tp_tensor.view(
                     exps_per_group_num, -1, tp_tensor.size(1) // exps_per_group_num
-                )[slice_idx]
-            else:  # weight 2
-                assert tp_tensor.size(0) % exps_per_group_num == 0
-                print(
-                    f"tp_tensor reshape ={tp_tensor.view(exps_per_group_num, tp_tensor.size(0) // exps_per_group_num, -1).shape}"
                 )
-                expert_part = tp_tensor.view(
-                    exps_per_group_num, tp_tensor.size(0) // exps_per_group_num, -1
-                )[slice_idx]
+                print(f"expert w1 ggemm tensor {grouped.shape}")
+                return grouped[slice_idx]
 
+            assert tp_tensor.size(0) % exps_per_group_num == 0
+            expert_part = (
+                w2_shape(tp_tensor, slice_idx)
+                if is_weight2
+                else w1_shape(tp_tensor, slice_idx)
+            )
             print(f"expert_part={expert_part.shape}")
             experts_weights.append(expert_part)
         # concatenate expert slices from different tp-s
