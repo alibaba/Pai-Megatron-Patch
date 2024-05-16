@@ -887,7 +887,7 @@ def convert_megatron_grouped_gemm_mlp(
             print(f"expert_part={expert_part.shape}")
             experts_weights.append(expert_part)
         # concatenate expert slices from different tp-s
-        expert_full_tensor = torch.cat(experts_weights, dim=dim)
+        expert_full_tensor = torch.cat(experts_weights, dim= 0 if "weight2" in key else 1)
         print(
             f"Full concatenated exp tensor for prefix={prefix} is {expert_full_tensor.shape}"
         )
