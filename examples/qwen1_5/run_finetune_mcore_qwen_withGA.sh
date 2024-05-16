@@ -291,7 +291,8 @@ megatron_options="  \
         --use-mcore-models \
         --rotary-percent 1.0 \
         --rotary-base 1000000 \
-        --rotary-seq-len-interpolation-factor 1
+        --rotary-seq-len-interpolation-factor 1 \
+        --eod-mask-loss
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_mcore_qwen.py
