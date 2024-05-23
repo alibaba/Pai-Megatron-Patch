@@ -291,13 +291,14 @@ FL=${16}                        # 是否使用Flash Attention: true, false
 SP=${17}                        # 是否使用序列并行: true, false
 TE=${18}                        # 是否使用Transformer Engine: true, false
 MOE=${19}                       # 是否打开MOE: true, false
-SAVE_INTERVAL=${20}             # 保存ckpt的间隔
-DATASET_PATH=${21}              # 训练数据集路径
-VALID_DATASET_PATH=${22}        # 验证数据集路径
-PRETRAIN_CHECKPOINT_PATH=${23}  # 预训练模型路径
-TRAIN_ITERS=${24}               # 训练step数
-WARMUP_ITERS=${25}              # 预热step数
-OUTPUT_BASEPATH=${26}           # 训练输出文件路径
+EP=${20}                        # 专家并行度
+SAVE_INTERVAL=${21}             # 保存ckpt的间隔
+DATASET_PATH=${22}              # 训练数据集路径
+VALID_DATASET_PATH=${23}        # 验证数据集路径
+PRETRAIN_CHECKPOINT_PATH=${24}  # 预训练模型路径
+TRAIN_ITERS=${25}               # 训练step数
+WARMUP_ITERS=${26}              # 预热step数
+OUTPUT_BASEPATH=${27}           # 训练输出文件路径
 ```
 
 ## Megatron-Core-Dense模型格式转换
@@ -390,8 +391,8 @@ cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen \
 sh hf2mcore_qwen1.5_dense_to_moe_convertor.sh \
 1.8B \
 /mnt/qwen-ckpts/Qwen1.5-1.8B \
-/mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-to-mcore-tp1-pp1-ep4 \
-1  \
+/mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-to-mcore-tp2-pp1-ep4 \
+2  \
 1  \
 4 \
 60 \
@@ -405,8 +406,8 @@ cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen \
 bash hf2mcore_qwen1.5_moe_convertor.sh \
 2.7B \
 /mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B \
-/mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-Chat-to-mcore-tp1-pp1-ep4 \
-1 \
+/mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-to-mcore-tp2-pp1-ep4 \
+2 \
 1 \
 4 \
 false
@@ -415,41 +416,41 @@ false
 ## Megatron-Core-MoE继续预训练
 ```bash
 cd /workspace/Pai-Megatron-Patch/examples/qwen1_5
-sh run_pretrain_mcore_qwen.sh  \
-dsw  \
+sh run_pretrain_mcore_qwen.sh \
+dsw \
 ../../ \
-0.5B   \
-1    \
+A2.7B \
+1 \
 8 \
-1e-5   \
-1e-6   \
-128  \
-128  \
-293   \
-bf16  \
-1   \
-1  \
-sel  \
-true   \
-false  \
-false   \
-false   \
+1e-5 \
+1e-6 \
+2048 \
+2048 \
+293 \
+bf16 \
+2 \
+1 \
+sel \
 true \
-100000  \
+true \
+true \
+true \
+true \
+500 \
 /mnt/qwen-datasets/wudao_qwenbpe_text_document  \
-/mnt/qwen-ckpts/Qwen1.5-0.5B-hf-to-mcore-tp1-pp1-ep1-exp8   \
+/mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-to-mcore-tp2-pp1-ep4 \
 100000000   \
 10000   \
-/mnt/output_mcore_qwen
+/mnt/qwen-ckpts/test_cp_upcycled
 ```
 
 ## Megatron-Core-MoE指令微调
 ```bash
 cd /workspace/Pai-Megatron-Patch/examples/qwen1_5
 sh run_finetune_mcore_qwen_withGA.sh  \
-dsw  \
+dsw \
 ../../ \
-0.5B   \
+A2.7B \
 1    \
 8 \
 1e-5   \
@@ -458,21 +459,22 @@ dsw  \
 128  \
 293   \
 bf16  \
-1   \
+2   \
 1  \
-sel  \
-true   \
-false  \
-false   \
-false   \
+sel \
 true \
+true \
+true \
+true \
+true \
+4 \
 100000  \
 /mnt/qwen-datasets/alpaca_zh-qwen-train.json   \
 /mnt/qwen-datasets/alpaca_zh-qwen-valid.json   \
-/mnt/qwen-ckpts/Qwen1.5-0.5B-hf-to-mcore-tp1-pp1-ep1-exp8   \
+/mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-to-mcore-tp2-pp1-ep4 \
 100000000   \
 10000   \
-/mnt/output_mcore_qwen
+/mnt/qwen-ckpts/test_ft_upcycled
 ```
 
 # MegaBlocks-MoE模型训练流程
