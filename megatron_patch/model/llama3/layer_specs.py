@@ -31,7 +31,6 @@ from megatron.core.transformer.transformer_layer import TransformerLayer, Transf
 
 from .transformer.mlp import MLP, MLPSubmodules
 from .transformer.attention import SelfAttention, SelfAttentionSubmodules
-from .moe.moe_layer import MoELayer
 
 # Use this spec to use lower level Transformer Engine modules (required for fp8 training)
 def get_gpt_layer_with_transformer_engine_spec(
@@ -95,25 +94,16 @@ def get_gpt_layer_local_spec(
         ),
     )
 
-
 # Helper function to get module spec for MLP/MoE
 def _get_mlp_module_spec(
     use_te: bool = True, num_experts: int = None, moe_grouped_gemm: bool = False
 ) -> ModuleSpec:
-    if num_experts is None:
-        # Dense MLP w/ or w/o TE modules.
-        return ModuleSpec(
-            module=MLP,
-            submodules=MLPSubmodules(
-                linear_fc1=TELayerNormColumnParallelLinear if use_te else ColumnParallelLinear,
-                linear_fc2=TERowParallelLinear if use_te else RowParallelLinear,
-            ),
-        )
-    else:
-        # Mixture of experts with modules in megatron core.
-        return ModuleSpec(
-            module=MoELayer,
-            submodules=MLPSubmodules(linear_fc1=ColumnParallelLinear, linear_fc2=RowParallelLinear,)
-            if not moe_grouped_gemm
-            else None,
-        )
+
+    # Dense MLP w/ or w/o TE modules.
+    return ModuleSpec(
+        module=MLP,
+        submodules=MLPSubmodules(
+            linear_fc1=TELayerNormColumnParallelLinear if use_te else ColumnParallelLinear,
+            linear_fc2=TERowParallelLinear if use_te else RowParallelLinear,
+        ),
+    )
