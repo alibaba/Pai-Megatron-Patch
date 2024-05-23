@@ -14,7 +14,7 @@ from megatron.legacy.model.utils import init_method_normal, scaled_init_method_n
 from megatron.legacy.model.enums import AttnMaskType, LayerType
 from megatron.legacy.model.module import MegatronModule
 
-from .transformer import ParallelTransformer
+from .transformer_legacy import ParallelTransformer
 
 
 
