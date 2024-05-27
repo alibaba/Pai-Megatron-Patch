@@ -108,7 +108,7 @@ def get_patch_args(parser):
                        help='Initial learning rate. Depending on decay style and initial warmup, the learing rate at '
                             'each iteration would be different.')
     parser.add_argument('--model', type=str, help='name and size of the model',
-                        choices=['llama2-13b', 'qwen-7b', 'qwen-14b', 'qwen-72b'])
+                        choices=['llama2-13b', 'qwen-7b', 'qwen-14b', 'qwen1.5-32b', 'qwen-72b'])
     parser.add_argument('--flash', action='store_true', help='use flash attention, only work for llama2-13b.')
     return parser
 
@@ -324,6 +324,7 @@ def main():
         logging_dir=args.logging_dir,
         logging_steps=1,
         disable_tqdm=False,
+        save_strategy='epoch',
         ddp_timeout=18000
     )
 
@@ -363,7 +364,7 @@ def main():
     )
 
     tokenizer = AutoTokenizer.from_pretrained(args.load, trust_remote_code=True)
-    if args.model in ('qwen-7b', 'qwen-14b', 'qwen-72b'):
+    if args.model in ('qwen-7b', 'qwen-14b', 'qwen1.5-32b', 'qwen-72b'):
         tokenizer.eos_token = '<|endoftext|>'
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -438,7 +439,7 @@ def main():
         return data_dict
 
     with training_args.main_process_first(desc="dataset map tokenization"):
-        num_proc = 1 if args.model in ('qwen-7b', 'qwen-14b', 'qwen-72b') else 64
+        num_proc = 1 if args.model in ('qwen-7b', 'qwen-14b', 'qwen1.5-32b', 'qwen-72b') else 64
         lm_datasets = raw_datasets.map(
             tokenize_function,
             batched=True,

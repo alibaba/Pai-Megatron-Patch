@@ -363,4 +363,52 @@ def get_patch_args(parser):
     group.add_argument('--enable-shared-expert', action='store_true',
                        help='enable-shared-expert')
 
+    group.add_argument(
+        "--q-lora-rank",
+        type=int,
+        default=None
+    )
+
+    group.add_argument(
+        "--kv-lora-rank",
+        type=int,
+        default=None
+    )
+
+    group.add_argument(
+        "--qk-nope-head-dim",
+        type=int,
+        default=None
+    )
+
+    group.add_argument(
+        "--qk-rope-head-dim",
+        type=int,
+        default=None
+    )
+
+    group.add_argument(
+        "--v-head-dim",
+        type=int,
+        default=None
+    )
+
+    group.add_argument(
+        "--num-shared-experts",
+        type=int,
+        default=None
+    )
+
+    group.add_argument(
+        "--moe-layer-freq",
+        type=int,
+        default=1
+    )
+
+    group.add_argument(
+        "--rotary-scaling-factor",
+        type=int,
+        default=1
+    )
+
     return parser

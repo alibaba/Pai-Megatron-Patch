@@ -1,16 +1,18 @@
 #! /bin/bash
 START_TIME=$SECONDS
-MEGATRON_PATCH_PATH=$1
-MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-240405
-export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
-input_data_dir=$2
-tokenizer=$3
-output_data_dir=$4
-load_dir=$5
+
+CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-240405
+
+input_data_dir=$1
+tokenizer=$2
+output_data_dir=$3
+load_dir=$4
 
 INPUT="${input_data_dir}"
 
-if [ $tokenizer = "qwen2bpe" ]; then
+if [ $tokenizer = "Qwen2Tokenizer" ]; then
   python preprocess_data_megatron.py \
   --input ${INPUT} \
   --output-prefix ${output_data_dir}/skypile_qwen2bpe \
@@ -22,7 +24,19 @@ if [ $tokenizer = "qwen2bpe" ]; then
   --keep-sequential-samples \
   --append-eod
 
-elif [ $tokenizer = "llamabpe" ]; then
+elif [ $tokenizer = "DeepSeekV2Tokenizer" ]; then
+  python preprocess_data_megatron.py \
+  --input ${INPUT} \
+  --output-prefix ${output_data_dir}/SlimPajama_deepseekv2bpe \
+  --patch-tokenizer-type DeepSeekV2Tokenizer \
+  --tokenizer-type GPT2BPETokenizer \
+  --load ${load_dir} \
+  --workers 8 \
+  --partitions 1 \
+  --keep-sequential-samples \
+  --append-eod
+
+elif [ $tokenizer = "LLamaTokenizer" ]; then
   python preprocess_data_megatron.py \
   --input ${INPUT} \
   --output-prefix ${output_data_dir}/SlimPajama_llamabpe \

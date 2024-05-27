@@ -1,8 +1,8 @@
 #!/bin/bash
-# bash hf2mcore_qwen1.5_dense_to_moe_convertor.sh 1.8B /mnt/qwen-ckpts/Qwen1.5-1.8B /mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-to-mcore-tp1-pp1-ep1 1 1 1 60 4 1408
+# bash hf2mcore_qwen1.5_dense_to_moe_convertor.sh 1.8B /mnt/qwen-ckpts/Qwen1.5-1.8B /mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-to-mcore-tp1-pp1-ep4 1 1 4 60 4 1408
 
 set -e
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=7
 START_TIME=$SECONDS
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)

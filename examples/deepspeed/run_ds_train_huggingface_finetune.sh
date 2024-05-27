@@ -49,7 +49,7 @@ SEQUENCE_LENGTH="2048"
 PRECISION="bf16"
 ZERO_STAGE="2"
 ENABLE_GRADIENT_CHECKPOINTING="true"
-MODEL_NAME=""       # llama2-13b, qwen-7b, qwen-14b, qwen-72b
+MODEL_NAME=""       # llama2-13b, qwen-7b, qwen-14b, qwen1.5-32b, qwen-72b
 FLASH_ATTENTION="false"
 EPOCH="1"
 TRAIN_DATASET=""
@@ -202,6 +202,13 @@ elif [ $MODEL_SIZE = 14B ]; then
     HIDDEN_SIZE=5120
     NUM_ATTN_HEADS=40
     INTERMEDIATE_SIZE=13696
+
+elif [ $MODEL_SIZE = 32B ]; then
+
+    NUM_LAYERS=64
+    HIDDEN_SIZE=5120
+    NUM_ATTN_HEADS=40
+    INTERMEDIATE_SIZE=27392
 
 elif [ $MODEL_SIZE = 65B ]; then
 
