@@ -213,6 +213,51 @@ def build_tokenizer(args):
         tokenizer = _Qwen2Tokenizer(args.load, args.extra_vocab_size)
         args.padded_vocab_size = tokenizer.vocab_size
 
+
+    elif args.patch_tokenizer_type == 'DeepSeekV2Tokenizer':
+        from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
+        class _DeepSeekV2Tokenizer(MegatronTokenizer):
+            def __init__(self, tokenizer_path, extra_vocab_size):
+                super().__init__(tokenizer_path)
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    tokenizer_path,
+                    trust_remote_code=True
+                )
+                self.extra_vocab_size = extra_vocab_size
+
+            @property
+            def vocab_size(self):
+                return len(self.tokenizer) + self.extra_vocab_size - 2
+
+            @property
+            def vocab(self):
+                return self.tokenizer.encoder
+
+            @property
+            def inv_vocab(self):
+                return self.tokenizer.decoder
+
+            def tokenize(self, text):
+                return self.tokenizer.encode(text)
+
+            def detokenize(self, token_ids):
+                return self.tokenizer.decode(token_ids)
+
+            @property
+            def eod(self):
+                return self.tokenizer.eos_token_id
+
+            @property
+            def eos_token(self):
+                return self.tokenizer.eos_token
+
+            @property
+            def pad_token_id(self):
+                return self.tokenizer.pad_token_id
+
+        tokenizer = _DeepSeekV2Tokenizer(args.load, args.extra_vocab_size)
+        args.padded_vocab_size = tokenizer.vocab_size
+
     elif args.patch_tokenizer_type == 'QwenVLTokenizer':
         from .tokenization_qwen_vl import QWenTokenizer
         tokenizer = QWenTokenizer.from_pretrained(

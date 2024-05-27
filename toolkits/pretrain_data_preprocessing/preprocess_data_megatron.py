@@ -75,8 +75,10 @@ class Encoder(object):
             doc_ids = []
             sentence_lens = []
             for sentence in sentences:
-                #sentence_ids = Encoder.tokenizer.tokenize(sentence)
-                sentence_ids = Encoder.tokenizer(sentence, add_special_tokens=False)['input_ids']
+                if self.args.patch_tokenizer_type == "DeepSeekV2Tokenizer":
+                    sentence_ids = Encoder.tokenizer.tokenizer(sentence, add_special_tokens=False)['input_ids']
+                else:
+                    sentence_ids = Encoder.tokenizer(sentence, add_special_tokens=False)['input_ids']
                 if max(sentence_ids) >= Encoder.tokenizer.vocab_size:
                     print(text)
                     print(max(sentence_ids))
@@ -221,7 +223,7 @@ def get_args():
         '--patch-tokenizer-type',
         type=str,
         required=True,
-        choices=['Qwen2Tokenizer', 'LLamaTokenizer'],
+        choices=['Qwen2Tokenizer', 'LLamaTokenizer', 'DeepSeekV2Tokenizer'],
         help='What type of tokenizer to use.',
     )
     group.add_argument('--load',
