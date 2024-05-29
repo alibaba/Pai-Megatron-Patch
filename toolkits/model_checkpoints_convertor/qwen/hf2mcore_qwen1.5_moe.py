@@ -203,6 +203,14 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hgmodel, args):
 
 
 def convert_checkpoint_from_transformers_to_megatron(hgmodel, mgmodel, args):
+
+    if args.fp16:
+        mgmodel = mgmodel.float16()
+        hgmodel = hgmodel.float16()
+    elif args.bf16:
+        mgmodel = mgmodel.bfloat16()
+        hgmodel = hgmodel.bfloat16()
+
     num_attention_heads = args.num_attention_heads
     hidden_dim = args.hidden_size
     head_dim = hidden_dim // args.num_attention_heads
@@ -398,6 +406,9 @@ def check_mg_eg_forward(mgmodel, hgmodel, mgargs):
     hg_hiddens = [{} for _ in range(mgargs.num_layers)]
     mg_hiddens = [{} for _ in range(mgargs.num_layers)]
 
+    vocab_size = mgargs.padded_vocab_size
+    hidden_size = mgargs.hidden_size
+
     def print_input_hook(module, args, kwargs, layer_idx, mode):
         frame, name = mode.split('-')
         if frame == 'hg':
@@ -410,13 +421,35 @@ def check_mg_eg_forward(mgmodel, hgmodel, mgargs):
     def print_output_hook(module, args, kwargs, output, layer_idx, mode):
         frame, name = mode.split('-')
         if mode in ['hg-lmhead']:
-            hg_hiddens[layer_idx][name] = output.transpose(0, 1)
+            hg_hiddens[layer_idx][name] = output.transpose(0, 1).reshape(-1, vocab_size)
+            hg_hiddens[layer_idx][name + "_weight"] = module.weight
             hg_hiddens[layer_idx][name + '_token'] = output.transpose(0, 1).max(dim=-1)[1]
-            print(output.transpose(0, 1).max(dim=-1))
         elif mode in ['mg-lmhead']:
-            mg_hiddens[layer_idx][name] = output[0]
+            mg_hiddens[layer_idx][name] = output[0].reshape(-1, vocab_size)
+            mg_hiddens[layer_idx][name + "_weight"] = module.weight
             mg_hiddens[layer_idx][name + '_token'] = output[0].max(dim=-1)[1]
-            print(output[0].max(dim=-1))
+        elif mode in ['hg-o_proj_out']:
+            hg_hiddens[layer_idx][name] = output
+            hg_hiddens[layer_idx][name + '_weight'] = module.weight
+        elif mode in ['mg-o_proj_out']:
+            mg_hiddens[layer_idx][name] = output[0].reshape(-1, hidden_size)
+            mg_hiddens[layer_idx][name + '_weight'] = module.weight
+        elif mode in ['hg-attn_out']:
+            hg_hiddens[layer_idx][name] = output[0].reshape(-1, hidden_size)
+        elif mode in ['mg-attn_out']:
+            mg_hiddens[layer_idx][name] = output[0].reshape(-1, hidden_size)
+        elif mode in ['hg-down_proj_out']:
+            hg_hiddens[layer_idx][name] = output.reshape(-1, hidden_size)
+            hg_hiddens[layer_idx][name + '_weight'] = module.weight
+        elif mode in ['mg-down_proj_out']:
+            mg_hiddens[layer_idx][name] = output[0].reshape(-1, hidden_size)
+            mg_hiddens[layer_idx][name + '_weight'] = module.weight
+        elif mode in ['hg-shared_experts_down_proj_out']:
+            hg_hiddens[layer_idx][name] = output.reshape(-1, hidden_size)
+            hg_hiddens[layer_idx][name + '_weight'] = module.weight
+        elif mode in ['mg-shared_experts_down_proj_out']:
+            mg_hiddens[layer_idx][name] = output[0].reshape(-1, hidden_size)
+            mg_hiddens[layer_idx][name + '_weight'] = module.weight
 
     hgmodel.lm_head.register_forward_hook(partial(print_output_hook, layer_idx=mgargs.num_layers - 1, mode='hg-lmhead'),
                                           with_kwargs=True)
@@ -425,23 +458,25 @@ def check_mg_eg_forward(mgmodel, hgmodel, mgargs):
 
     for idx, layer in enumerate(hgmodel.model.layers):
         layer.register_forward_pre_hook(partial(print_input_hook, layer_idx=idx, mode='hg-layer_in'), with_kwargs=True)
+
         layer.self_attn.o_proj.register_forward_pre_hook(partial(print_input_hook, layer_idx=idx, mode='hg-o_proj_in'),
                                                          with_kwargs=True)
-        layer.self_attn.q_proj.register_forward_hook(partial(print_output_hook, layer_idx=idx, mode='hg-q_proj_out'),
+
+        layer.self_attn.o_proj.register_forward_hook(partial(print_output_hook, layer_idx=idx, mode='hg-o_proj_out'),
                                                      with_kwargs=True)
-        layer.self_attn.k_proj.register_forward_hook(partial(print_output_hook, layer_idx=idx, mode='hg-k_proj_out'),
-                                                     with_kwargs=True)
-        layer.self_attn.v_proj.register_forward_hook(partial(print_output_hook, layer_idx=idx, mode='hg-v_proj_out'),
-                                                     with_kwargs=True)
+
         layer.self_attn.register_forward_hook(partial(print_output_hook, layer_idx=idx, mode='hg-attn_out'),
                                               with_kwargs=True)
 
     for idx, layer in enumerate(mgmodel.decoder.layers):
         layer.register_forward_pre_hook(partial(print_input_hook, layer_idx=idx, mode='mg-layer_in'), with_kwargs=True)
-        layer.self_attention.linear_qkv.register_forward_hook(partial(print_output_hook, layer_idx=idx, mode='mg-qkv'),
-                                                              with_kwargs=True)
+
         layer.self_attention.linear_proj.register_forward_pre_hook(
             partial(print_input_hook, layer_idx=idx, mode='mg-o_proj_in'), with_kwargs=True)
+
+        layer.self_attention.linear_proj.register_forward_hook(
+            partial(print_output_hook, layer_idx=idx, mode='mg-o_proj_out'), with_kwargs=True)
+
         layer.self_attention.register_forward_hook(partial(print_output_hook, layer_idx=idx, mode='mg-attn_out'),
                                                    with_kwargs=True)
 
@@ -469,9 +504,7 @@ def check_mg_eg_forward(mgmodel, hgmodel, mgargs):
 
     epsilon = 1e-5
     for idx, (hgh, mgh) in enumerate(zip(hg_hiddens, mg_hiddens)):
-        print(len(hgh), len(mgh))
-        if len(hgh) != len(mgh):
-            continue
+        assert len(hgh) == len(mgh)
         for k, hgv in hgh.items():
             mgv, hgv = mgh[k].cpu(), hgv.cpu()
             same_num = (hgv != mgv).sum()
@@ -487,12 +520,12 @@ def main():
         mg_model = load_megatron_model(args)
         hf_model = AutoModelForCausalLM.from_config(config=AutoConfig.from_pretrained(args.hf_ckpt_path))
         convert_checkpoint_from_megatron_to_transformers(mg_model, hf_model, args)
-        check_mg_eg_forward(mg_model, hf_model, args)
         save_hgmodel(args, hf_model)
     else:
         hf_model = AutoModelForCausalLM.from_pretrained(args.load, trust_remote_code=True)
         mg_model = model_provider()
         convert_checkpoint_from_transformers_to_megatron(hf_model, mg_model, args)
+        check_mg_eg_forward(mg_model, hf_model, args)
         save_mgmodel(mg_model, args)
 
 if __name__ == "__main__":
