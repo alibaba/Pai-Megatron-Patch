@@ -404,7 +404,7 @@ sh hf2mcore_qwen1.5_dense_to_moe_convertor.sh \
 ```bash
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen \
 bash hf2mcore_qwen1.5_moe_convertor.sh \
-2.7B \
+A2.7B \
 /mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B \
 /mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-to-mcore-tp2-pp1-ep4 \
 2 \

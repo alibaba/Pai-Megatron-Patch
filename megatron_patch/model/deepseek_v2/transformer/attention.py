@@ -1,4 +1,17 @@
-# Copyright (c) 2023, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2024 Alibaba PAI and Nvidia Megatron-LM Team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Union
@@ -54,7 +67,6 @@ class Attention(MegatronModule, ABC):
         # For normal attention without groups, num_query_groups == num_attention_heads,
         # so these two will be the same
         self.query_projection_size = self.config.v_head_dim * self.config.num_attention_heads
-        #self.query_projection_size = 196 * self.config.num_attention_heads
         self.kv_projection_size = self.config.kv_channels * self.config.num_query_groups
 
         # Per attention head and per partition values.
@@ -218,43 +230,6 @@ class Attention(MegatronModule, ABC):
         attn_output = attn_output.transpose(0, 2).transpose(1, 2).contiguous()
 
         core_attn_out = attn_output.reshape(q_len, bsz, self.num_heads * self.config.v_head_dim)
-
-        # ==================================
-        # core attention computation
-        # ==================================
-        #torch.Size([96, 1, 16384])
-        """
-        attn_mask_type = self.attn_mask_type
-        if self.checkpoint_core_attention and self.training:
-            core_attn_out = self._checkpointed_attention_forward(
-                query,
-                key,
-                value,
-                attention_mask,
-                attn_mask_type=attn_mask_type,
-                packed_seq_params=packed_seq_params,
-            )
-        else:
-            core_attn_out = self.core_attention(
-                query,
-                key,
-                value,
-                attention_mask,
-                attn_mask_type=attn_mask_type,
-                packed_seq_params=packed_seq_params,
-            )
-
-        if packed_seq_params is not None:
-            # reshape to same output shape as unpacked case
-            # (t, np, hn) -> (t, b=1, h=np*hn)
-            # t is the pack size = sum (sq_i)
-            # note that batch is a dummy dimension in the packed case
-            core_attn_out = core_attn_out.reshape(core_attn_out.size(0), 1, -1)
-        """
-        # =================
-        # Output. [sq, b, h]
-        # =================
-        # torch.Size([96, 1, 16384])
 
         output, bias = self.linear_proj(core_attn_out)
 
@@ -436,14 +411,6 @@ class SelfAttention(Attention):
         key_states[:, :, :, : self.config.qk_nope_head_dim] = k_nope
         key_states[:, :, :, self.config.qk_nope_head_dim :] = k_pe
 
-        #[1, 128, 96, 192] -> [96, 1, 128, 192]
-        #query = query_states.transpose(0, 2).transpose(1, 2)
-        #key = key_states.transpose(0, 2).transpose(1, 2)
-
-        #value = torch.zeros_like(value_states.new_empty(bsz, self.num_heads, q_len, self.q_head_dim))
-        #value[:, :, :, : self.config.qk_nope_head_dim] = value_states
-        #value = value.transpose(0, 2).transpose(1, 2)
-        #value = value_states.transpose(0, 2).transpose(1, 2)
         return query_states, key_states, value_states
 
 

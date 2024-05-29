@@ -1,4 +1,16 @@
-# Copyright (c) 2023, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2024 Alibaba PAI and Nvidia Megatron-LM Team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import math
 from abc import ABC, abstractmethod
@@ -145,8 +157,12 @@ class TopKRouter(Router):
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: The scores and the indices tensor after applying load balancing.
         """
-        top_logits, indices = torch.topk(logits, k=self.topk, dim=1)
-        scores = torch.softmax(top_logits, dim=-1, dtype=torch.float32).type_as(logits)
+        #top_logits, indices = torch.topk(logits, k=self.topk, dim=1)
+        #scores = torch.softmax(top_logits, dim=-1, dtype=torch.float32).type_as(logits)
+
+        routing_weights = torch.softmax(logits, dim=1, dtype=torch.float)
+        scores, indices = torch.topk(routing_weights, k=self.topk, dim=-1)
+
         # Apply load balancing loss
         probs = torch.softmax(logits, dim=-1, dtype=torch.float32)
         scores = self.apply_load_balancing_loss(probs, indices, activation=scores)

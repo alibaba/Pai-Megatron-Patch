@@ -16,8 +16,6 @@ from megatron.legacy.model.module import MegatronModule
 
 from .transformer_legacy import ParallelTransformer
 
-
-
 def parallel_lm_logits(input_, word_embeddings_weight, parallel_output,
                        bias=None):
     """LM logits using word embedding weights."""

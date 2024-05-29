@@ -1,6 +1,6 @@
 #!/bin/bash
-# bash hf2mcore_qwen1.5_moe_convertor.sh 2.7B /mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B /mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-to-mcore-tp1-pp1-ep4 1 1 4 false
-# bash hf2mcore_qwen1.5_moe_convertor.sh 2.7B /mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-to-mcore-tp1-pp1-ep4 /mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-to-hf 1 1 4 true /mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B
+# bash hf2mcore_qwen1.5_moe_convertor.sh A2.7B /mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B /mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-to-mcore-tp1-pp1-ep4 1 1 4 false
+# bash hf2mcore_qwen1.5_moe_convertor.sh A2.7B /mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-to-mcore-tp1-pp1-ep4 /mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B-to-hf 1 1 4 true /mnt/qwen-ckpts/Qwen1.5-MoE-A2.7B
 
 set -e
 export CUDA_VISIBLE_DEVICES=7
@@ -21,7 +21,7 @@ CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
 export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-240405
 
-if [ $MODEL_SIZE = 2.7B ]; then
+if [ $MODEL_SIZE = A2.7B ]; then
 
 HIDDEN_SIZE=2048
 NUM_ATTN_HEADS=16
@@ -29,12 +29,13 @@ NUM_LAYERS=24
 INTERMEDIATE_SIZE=5632
 MOE_INTERMEDIATE_SIZE=1408
 SHARED_EXPERT_INTERMEDIATE_SIZE=5632
+MAX_POSITION_EMBEDDINGS=8192
 EXTRA_VOCAB_SIZE=293
 NUM_EXPERTS=60
 EXPERTS_TOPK=4
+ROPE_THETA=1000000
 
 gqa_options=""
-
 cpu_options=" \
             --use-cpu-initialization"
 
@@ -76,7 +77,7 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen1.5_moe.py \
     --shared-moe-ffn-hidden-size ${SHARED_EXPERT_INTERMEDIATE_SIZE} \
     --ffn-hidden-size ${INTERMEDIATE_SIZE} \
     --num-attention-heads ${NUM_ATTN_HEADS} \
-    --max-position-embeddings 1 \
+    --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
     --seq-length 1 \
     --no-async-tensor-model-parallel-allreduce \
     --patch-tokenizer-type Qwen2Tokenizer \
@@ -92,9 +93,7 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen1.5_moe.py \
     --attention-dropout 0.0 \
     --hidden-dropout 0.0 \
     --enable-shared-expert \
-    --rotary-percent 1.0 \
-    --rotary-base 1000000 \
-    --rotary-seq-len-interpolation-factor 1
+    --rotary-base ${ROPE_THETA} \
     ${expert_options} \
     ${convert_options} \
     ${gqa_options} \
