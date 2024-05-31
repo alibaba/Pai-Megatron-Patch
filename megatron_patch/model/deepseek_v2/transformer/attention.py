@@ -70,12 +70,12 @@ class Attention(MegatronModule, ABC):
         self.kv_projection_size = self.config.kv_channels * self.config.num_query_groups
 
         # Per attention head and per partition values.
-        world_size = parallel_state.get_tensor_model_parallel_world_size()
+        self.world_size = parallel_state.get_tensor_model_parallel_world_size()
         self.hidden_size_per_attention_head = divide(
             self.query_projection_size, self.config.num_attention_heads
         )
-        self.num_attention_heads_per_partition = divide(self.config.num_attention_heads, world_size)
-        self.num_query_groups_per_partition = divide(self.config.num_query_groups, world_size)
+        self.num_attention_heads_per_partition = divide(self.config.num_attention_heads, self.world_size)
+        self.num_query_groups_per_partition = divide(self.config.num_query_groups, self.world_size)
 
         self.q_head_dim = self.config.qk_nope_head_dim + self.config.qk_rope_head_dim
         self.softmax_scale = self.q_head_dim ** (-0.5)
@@ -102,7 +102,7 @@ class Attention(MegatronModule, ABC):
             bias=self.config.add_bias_linear,
             input_is_parallel=True,
             skip_bias_add=True,
-            is_expert=False,
+            is_expert=True,
             tp_comm_buffer_name='proj',
         )
 
@@ -201,18 +201,20 @@ class Attention(MegatronModule, ABC):
         )
 
         kv_seq_len = q_len
-        if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
+        if attn_weights.size() != (bsz, self.num_attention_heads_per_partition, q_len, kv_seq_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
+                f"Attention weights should be of size {(bsz, self.num_attention_heads_per_partition, q_len, kv_seq_len)}, but is"
                 f" {attn_weights.size()}"
             )
 
         if attention_mask is not None:
+            """
             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
-
+            """
+            attention_mask = attention_mask[:, : ,:kv_seq_len, :kv_seq_len]
             attention_mask = attention_mask.to(torch.bfloat16)
             attention_mask[attention_mask > 0] = -3.3895e+38
             attn_weights = attn_weights + attention_mask
@@ -229,8 +231,7 @@ class Attention(MegatronModule, ABC):
 
         attn_output = attn_output.transpose(0, 2).transpose(1, 2).contiguous()
 
-        core_attn_out = attn_output.reshape(q_len, bsz, self.num_heads * self.config.v_head_dim)
-
+        core_attn_out = attn_output.reshape(q_len, bsz, self.num_attention_heads_per_partition * self.config.v_head_dim)
         output, bias = self.linear_proj(core_attn_out)
 
         return output, bias
@@ -269,7 +270,7 @@ class SelfAttention(Attention):
                 gather_output=False,
                 bias=False,
                 skip_bias_add=False,
-                is_expert=False,
+                is_expert=True,
             )
 
         else:
@@ -283,7 +284,7 @@ class SelfAttention(Attention):
                 gather_output=False,
                 bias=False,
                 skip_bias_add=False,
-                is_expert=False,
+                is_expert=True,
             )
 
             self.linear_q_b_proj = build_module(
@@ -295,9 +296,10 @@ class SelfAttention(Attention):
                 gather_output=False,
                 bias=False,
                 skip_bias_add=False,
-                is_expert=False,
+                is_expert=True,
             )
 
+        """
         self.linear_kv_a_proj_with_mqa = build_module(
             submodules.linear_kv_a_proj_with_mqa,
             self.config.hidden_size,
@@ -307,7 +309,13 @@ class SelfAttention(Attention):
             gather_output=False,
             bias=False,
             skip_bias_add=False,
-            is_expert=False,
+            is_expert=True,
+        )
+        """
+        self.linear_kv_a_proj_with_mqa = torch.nn.Linear(
+            self.config.hidden_size,
+            self.config.kv_lora_rank + self.config.qk_rope_head_dim,
+            bias=False
         )
 
         self.linear_kv_b_proj = build_module(
@@ -319,14 +327,14 @@ class SelfAttention(Attention):
             gather_output=False,
             bias=False,
             skip_bias_add=False,
-            is_expert=False,
+            is_expert=True,
         )
 
         if self.config.q_lora_rank is not None:
 
             self.q_a_layernorm = build_module(
                 submodules.q_a_layernorm,
-                hidden_size=self.config.q_lora_rank,
+                hidden_size=self.config.q_lora_rank//self.world_size,
                 config=self.config,
                 eps=self.config.layernorm_epsilon,
             )
@@ -343,71 +351,75 @@ class SelfAttention(Attention):
         Derives `query`, `key` and `value` tensors from `hidden_states`.
         """
         # Attention heads [sq, b, h] --> [sq, b, ng * (np/ng + 2) * hn)]
-
         q_len, bsz, _ = hidden_states.size()
         if self.config.q_lora_rank is not None:
-            # [96, 1, 1536]
             q, _ = self.linear_q_a_proj(hidden_states)
-
             q = self.q_a_layernorm(q)
-
-            # [96, 1, 24576]
             q, _ = self.linear_q_b_proj(q)
         else:
+            #hidden_states:[48, 1, 2048], q: [48, 1, 1536]
             q, _ = self.linear_q_proj(hidden_states)
 
-        # [96, 1, 128, 192]
-        q = q.view(q_len, bsz, self.num_heads, self.q_head_dim)
+        # [48, 1, 8, 192]
+        q = q.view(q_len, bsz, self.num_attention_heads_per_partition, self.q_head_dim)
 
-        # q_nope: [96, 1, 128, 128], q_pe: [96, 1, 128, 64]
+        # q_nope: [48, 1, 8, 128], q_pe: [48, 1, 8, 64]
         q_nope, q_pe = torch.split(
             q, [self.config.qk_nope_head_dim, self.config.qk_rope_head_dim], dim=-1
         )
 
-        #[96, 1, 576])
-        compressed_kv, _ = self.linear_kv_a_proj_with_mqa(hidden_states)
+        #[48, 1, 576])
+        compressed_kv = self.linear_kv_a_proj_with_mqa(hidden_states)
 
-        #compressed_kv:[96, 1, 512], k_pe: [96, 1, 64]
+        #compressed_kv:[48, 1, 512], k_pe: [48, 1, 64]
         compressed_kv, k_pe = torch.split(
-            compressed_kv, [self.config.kv_lora_rank, self.config.qk_rope_head_dim], dim=-1
+            compressed_kv, [self.config.kv_lora_rank,
+                            self.config.qk_rope_head_dim], dim=-1
         )
 
-        #[96, 1, 32768]
+        #[48, 1, 2048]
         kv, _ = self.linear_kv_b_proj(self.kv_a_layernorm(compressed_kv))
 
-        #[96, 1, 128, 256])
-        kv = kv.view(q_len, bsz, self.num_heads, self.config.qk_nope_head_dim + self.config.v_head_dim)
+        #[48, 1, 8, 256])
+        kv = kv.view(q_len, bsz, self.num_attention_heads_per_partition, self.config.qk_nope_head_dim + self.config.v_head_dim)
 
-        #k_nope: [96, 1, 128, 128], value_states: [96, 1, 128, 128]
+        #k_nope: [48, 1, 8, 128], value_states: [48, 1, 8, 128]
         k_nope, value_states = torch.split(
             kv, [self.config.qk_nope_head_dim, self.config.v_head_dim], dim=-1
         )
 
-        # [96, 1, 128, 128] -> [1, 128, 96, 128]
+        # [48, 1, 8, 128] -> [1, 8, 48, 128]
         value_states = value_states.transpose(0, 1).transpose(1, 2)
         kv_seq_len = value_states.shape[-2]
-        #cos: [96, 64], sin:[96, 64]
+
+        #cos: [48, 64], sin:[48, 64]
         cos, sin = self.rotary_pos_emb(value_states, seq_len=kv_seq_len)
 
+        #[48, 1, 8, 64] -> [1, 8, 48, 64]
         q_pe = q_pe.transpose(0, 1).transpose(1, 2)
+        #[48, 1, 64] -> [1, 48, 64]
         k_pe = k_pe.transpose(0, 1)
-        k_pe = k_pe.view(bsz, q_len, 1, self.config.qk_rope_head_dim).transpose(1, 2)
+        #[1, 1, 48, 64]
+        k_pe = k_pe.reshape(bsz, q_len, 1, -1).transpose(1, 2)
 
-        #q_pe: [1, 128, 96, 64], k_pe:[1, 1, 96, 64]
-        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin, position_ids)
+        #q_pe: [1, 8, 48, 64], k_pe:[1, 1, 48, 64]
+        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin, position_ids[:, :kv_seq_len])
 
-        #[1, 128, 96, 192]
-        query_states = k_pe.new_empty(bsz, self.num_heads, q_len, self.q_head_dim)
-        #[96, 1, 128, 128] -> [1, 128, 96, 128]
+        #[1, 8, 48, 192]
+        query_states = k_pe.new_empty(bsz, self.num_attention_heads_per_partition, q_len, self.q_head_dim)
+
+        #[48, 1, 8, 128] -> [1, 8, 48, 128]
         q_nope = q_nope.transpose(0, 1).transpose(1, 2)
+
         query_states[:, :, :, : self.config.qk_nope_head_dim] = q_nope
         query_states[:, :, :, self.config.qk_nope_head_dim :] = q_pe
 
 
-        #[1, 128, 96, 192]
-        key_states = k_pe.new_empty(bsz, self.num_heads, q_len, self.q_head_dim)
-        # [96, 1, 128, 128] -> [1, 128, 96, 128]
+        #[1, 8, 48, 192]
+        key_states = k_pe.new_empty(bsz, self.num_attention_heads_per_partition, q_len, self.q_head_dim)
+        # [48, 1, 8, 128] -> [1, 8, 48, 128]
         k_nope = k_nope.transpose(0, 1).transpose(1, 2)
+
         key_states[:, :, :, : self.config.qk_nope_head_dim] = k_nope
         key_states[:, :, :, self.config.qk_nope_head_dim :] = k_pe
 

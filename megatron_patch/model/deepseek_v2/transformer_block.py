@@ -38,7 +38,7 @@ from megatron.core.utils import make_sharded_tensor_for_checkpoint, make_viewles
 
 from .transformer_config import TransformerConfig
 from .transformer_layer import BaseTransformerLayer
-
+from .rms_norm import DeepseekV2RMSNorm
 
 def get_num_layers_to_build(config: TransformerConfig) -> int:
 
@@ -119,6 +119,7 @@ class TransformerBlock(MegatronModule):
         self.post_layer_norm = post_layer_norm
         self.pre_process = pre_process
         self.post_process = post_process
+        self.world_size = parallel_state.get_tensor_model_parallel_world_size()
 
         # required for pipeline parallel schedules
         self.input_tensor = None
@@ -184,10 +185,10 @@ class TransformerBlock(MegatronModule):
 
         if self.post_process and self.post_layer_norm:
             # Final layer norm before output.
-            self.final_layernorm = TENorm(
-                config=self.config,
+            self.final_layernorm = DeepseekV2RMSNorm(
                 hidden_size=self.config.hidden_size,
                 eps=self.config.layernorm_epsilon,
+                config=self.config
             )
 
     def _get_layer(self, layer_number: int):
