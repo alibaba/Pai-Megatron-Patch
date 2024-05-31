@@ -1,6 +1,4 @@
 #!/bin/bash
-# bash hf2mcore_deepseek_v2_moe_convertor.sh A2.4B /mnt/deepseek-ckpts/DeepSeek-V2-Lite /mnt/deepseek-ckpts/DeepSeek-V2-Lite-to-mcore-tp1-pp1-ep4 fp32 1 1 4 false
-
 set -e
 export CUDA_VISIBLE_DEVICES=7
 START_TIME=$SECONDS

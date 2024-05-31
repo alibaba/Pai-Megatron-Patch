@@ -81,6 +81,7 @@ class TransformerLayer(MegatronModule, BaseTransformerLayer):
         super().__init__(config=config)
         self.submodules_config = submodules
 
+        self.world_size = parallel_state.get_tensor_model_parallel_world_size()
         self.layer_number = layer_number + self._get_layer_offset()
         self.hidden_dropout = config.hidden_dropout if hidden_dropout is None else hidden_dropout
 

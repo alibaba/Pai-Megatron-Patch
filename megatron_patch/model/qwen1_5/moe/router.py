@@ -160,7 +160,7 @@ class TopKRouter(Router):
         #top_logits, indices = torch.topk(logits, k=self.topk, dim=1)
         #scores = torch.softmax(top_logits, dim=-1, dtype=torch.float32).type_as(logits)
 
-        routing_weights = torch.softmax(logits, dim=1, dtype=torch.float)
+        routing_weights = torch.softmax(logits, dim=1, dtype=torch.float32).type_as(logits)
         scores, indices = torch.topk(routing_weights, k=self.topk, dim=-1)
 
         # Apply load balancing loss

@@ -8,12 +8,12 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 
 ENV=$1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=1
+GPUS_PER_NODE=8
 
 elif [ $ENV = dlc ]; then
 
@@ -51,7 +51,7 @@ if [ $MODEL_SIZE = A21B ]; then
 
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=128
-NUM_LAYERS=1
+NUM_LAYERS=60
 INTERMEDIATE_SIZE=12288
 MOE_INTERMEDIATE_SIZE=1536
 MAX_POSITION_EMBEDDINGS=163840
@@ -184,7 +184,7 @@ fi
 
 LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
 
-NAME="${ENV}-finetune-megatron-deepseek-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_ITERS}"
+NAME="${ENV}-finetune-mcore-deepseek-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
 mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
 mkdir -p "${OUTPUT_BASEPATH}/log/"
