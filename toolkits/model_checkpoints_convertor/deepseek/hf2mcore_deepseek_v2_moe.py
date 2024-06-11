@@ -229,7 +229,12 @@ def convert_checkpoint_from_transformers_to_megatron(hgmodel, mgmodel, args):
         for layer_idx, (mglayer, hglayer) in enumerate(zip(mgmodel.decoder.layers, hgmodel.model.layers)):
             mglayer.input_layernorm.weight.copy_(hglayer.input_layernorm.weight)
             mglayer.pre_mlp_layernorm.weight.copy_(hglayer.post_attention_layernorm.weight)
-            mglayer.self_attention.linear_q_proj.weight.copy_(hglayer.self_attn.q_proj.weight)
+            if args.q_lora_rank is not None:
+                mglayer.self_attention.linear_q_a_proj.weight.copy_(hglayer.self_attn.q_a_proj.weight)
+                mglayer.self_attention.linear_q_b_proj.weight.copy_(hglayer.self_attn.q_b_proj.weight)
+                mglayer.self_attention.q_a_layernorm.weight.copy_(hglayer.self_attn.q_a_layernorm.weight)
+            else:
+                mglayer.self_attention.linear_q_proj.weight.copy_(hglayer.self_attn.q_proj.weight)
             mglayer.self_attention.linear_kv_a_proj_with_mqa.weight.copy_(hglayer.self_attn.kv_a_proj_with_mqa.weight)
             mglayer.self_attention.linear_kv_b_proj.weight.copy_(hglayer.self_attn.kv_b_proj.weight)
             mglayer.self_attention.kv_a_layernorm.weight.copy_(hglayer.self_attn.kv_a_layernorm.weight)
@@ -329,19 +334,19 @@ def save_mgmodel(mgmodel, args):
                 for k, v in full_model.items():
                     if not isinstance(v, torch.Tensor):
                         target_v = v
+                    elif 'linear_q_proj' in k or 'linear_q_a_proj' in k:
+                        seg = v.shape[0] // args.tensor_model_parallel_size
+                        target_v = v[seg * tp_rank: seg * (tp_rank + 1)]
+                    elif 'linear_q_b_proj' in k:
+                        seg_0 = v.shape[0] // args.tensor_model_parallel_size
+                        seg_1 = v.shape[1] // args.tensor_model_parallel_size
+                        target_v = v[seg_0 * tp_rank: seg_0 * (tp_rank + 1), seg_1 * tp_rank: seg_1 * (tp_rank + 1)]
                     elif 'q_a_layernorm' in k:
                         seg = v.shape[0] // args.tensor_model_parallel_size
                         target_v = v[seg * tp_rank: seg * (tp_rank + 1)]
-                    elif 'linear_q_proj' in k:
-                        viewed = v.view(args.num_attention_heads, -1, q_head_dim, args.hidden_size)
-                        viewed = viewed[group_per_split * tp_rank: group_per_split * (tp_rank + 1)]
-                        target_v = viewed.view(-1, args.hidden_size)
                     elif 'linear_kv_b_proj' in k:
-                        viewed = v.view(args.num_attention_heads, -1,
-                                        q_head_dim - args.qk_rope_head_dim + args.v_head_dim,
-                                        args.kv_lora_rank)
-                        viewed = viewed[group_per_split * tp_rank: group_per_split * (tp_rank + 1)]
-                        target_v = viewed.view(-1, args.kv_lora_rank)
+                        seg = v.shape[0] // args.tensor_model_parallel_size
+                        target_v = v[seg * tp_rank:seg* (tp_rank + 1)]
                     elif 'linear_proj' in k:
                         seg = v.shape[1] // args.tensor_model_parallel_size
                         target_v = v[:, seg * tp_rank: seg * (tp_rank + 1)]
@@ -494,11 +499,13 @@ def check_mg_eg_forward(mgmodel, hgmodel, mgargs):
 
         layer.register_forward_pre_hook(partial(print_input_hook, layer_idx=idx, mode='hg-layer_in'), with_kwargs=True)
 
-        layer.self_attn.q_proj.register_forward_pre_hook(partial(print_input_hook, layer_idx=idx, mode='hg-q_proj_in'),
-                                                         with_kwargs=True)
+        if mgargs.q_lora_rank is None:
 
-        layer.self_attn.q_proj.register_forward_hook(partial(print_output_hook, layer_idx=idx, mode='hg-q_proj_out'),
-                                                     with_kwargs=True)
+            layer.self_attn.q_proj.register_forward_pre_hook(partial(print_input_hook, layer_idx=idx, mode='hg-q_proj_in'),
+                                                             with_kwargs=True)
+
+            layer.self_attn.q_proj.register_forward_hook(partial(print_output_hook, layer_idx=idx, mode='hg-q_proj_out'),
+                                                         with_kwargs=True)
 
         layer.self_attn.kv_a_proj_with_mqa.register_forward_pre_hook(
             partial(print_input_hook, layer_idx=idx, mode='hg-kv_a_proj_in'), with_kwargs=True)
@@ -544,11 +551,12 @@ def check_mg_eg_forward(mgmodel, hgmodel, mgargs):
 
         layer.register_forward_pre_hook(partial(print_input_hook, layer_idx=idx, mode='mg-layer_in'), with_kwargs=True)
 
-        layer.self_attention.linear_q_proj.register_forward_pre_hook(
-            partial(print_input_hook, layer_idx=idx, mode='mg-q_proj_in'), with_kwargs=True)
+        if mgargs.q_lora_rank is None:
+            layer.self_attention.linear_q_proj.register_forward_pre_hook(
+                partial(print_input_hook, layer_idx=idx, mode='mg-q_proj_in'), with_kwargs=True)
 
-        layer.self_attention.linear_q_proj.register_forward_hook(
-            partial(print_output_hook, layer_idx=idx, mode='mg-q_proj_out'), with_kwargs=True)
+            layer.self_attention.linear_q_proj.register_forward_hook(
+                partial(print_output_hook, layer_idx=idx, mode='mg-q_proj_out'), with_kwargs=True)
 
         layer.self_attention.linear_kv_a_proj_with_mqa.register_forward_pre_hook(
             partial(print_input_hook, layer_idx=idx, mode='mg-kv_a_proj_in'), with_kwargs=True)
@@ -636,7 +644,8 @@ def main():
         hf_model = AutoModelForCausalLM.from_pretrained(args.load, trust_remote_code=True)
         mg_model = model_provider()
         convert_checkpoint_from_transformers_to_megatron(hf_model, mg_model, args)
-        check_mg_eg_forward(mg_model, hf_model, args)
+        if args.q_lora_rank is None:
+            check_mg_eg_forward(mg_model, hf_model, args)
         save_mgmodel(mg_model, args)
 
 
