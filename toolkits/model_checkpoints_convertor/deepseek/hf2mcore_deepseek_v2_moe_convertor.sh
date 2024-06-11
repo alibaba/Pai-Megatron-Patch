@@ -57,6 +57,47 @@ moe_options=" \
 cpu_options=" \
             --use-cpu-initialization"
 
+elif [ $MODEL_SIZE = A21B ]; then
+
+HIDDEN_SIZE=5120
+NUM_ATTN_HEADS=128
+NUM_LAYERS=60
+INTERMEDIATE_SIZE=12288
+MOE_INTERMEDIATE_SIZE=1536
+MAX_POSITION_EMBEDDINGS=163840
+EXTRA_VOCAB_SIZE=2400
+Q_LORA_RANK=1536
+KV_LORA_RANK=512
+QK_NOPE_HEAD_DIM=128
+QK_ROPE_HEAD_DIM=64
+V_HEAD_DIM=128
+ROPE_THETA=10000
+SCALE_FACTOR=40
+NUM_EXPERTS=160
+ROUTER_TOPK=6
+NUM_SHARED_EXPERTS=2
+MOE_LAYER_FREQ=1
+
+moe_options=" \
+    --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
+    --enable-shared-expert \
+    --moe-layer-freq ${MOE_LAYER_FREQ} \
+    --num-shared-experts ${NUM_SHARED_EXPERTS} \
+    --moe-router-topk ${ROUTER_TOPK} \
+    --num-experts ${NUM_EXPERTS} \
+    --moe-aux-loss-coeff 1e-2 \
+    --expert-model-parallel-size 1 \
+    --target-expert-model-parallel-size ${EP} \
+    --q-lora-rank ${Q_LORA_RANK} \
+    --kv-lora-rank ${KV_LORA_RANK} \
+    --qk-nope-head-dim ${QK_NOPE_HEAD_DIM} \
+    --qk-rope-head-dim ${QK_ROPE_HEAD_DIM} \
+    --v-head-dim ${V_HEAD_DIM} \
+    --moe-router-load-balancing-type aux_loss"
+
+cpu_options=" \
+            --use-cpu-initialization"
+
 fi
 
 

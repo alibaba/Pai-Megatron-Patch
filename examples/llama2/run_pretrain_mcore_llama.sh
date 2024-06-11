@@ -53,7 +53,7 @@ NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=11008
-MAX_POSITION_EMBEDDINGS=2048
+MAX_POSITION_EMBEDDINGS=4096
 
 gqa_options=""
 
@@ -63,7 +63,7 @@ NUM_LAYERS=40
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=13824
-MAX_POSITION_EMBEDDINGS=2048
+MAX_POSITION_EMBEDDINGS=4096
 
 gqa_options=""
 
@@ -73,7 +73,7 @@ NUM_LAYERS=80
 HIDDEN_SIZE=8192
 NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=28672
-MAX_POSITION_EMBEDDINGS=2048
+MAX_POSITION_EMBEDDINGS=4096
 
 gqa_options=" \
 		    --group-query-attention \
@@ -191,6 +191,8 @@ megatron_options="  \
         --weight-decay 0.1 \
         --clip-grad 1.0 \
         --init-method-std 0.006 \
+        --attention-dropout 0.0 \
+        --hidden-dropout 0.0  \
         --lr-decay-iters ${LR_DECAY_ITERS} \
         --lr-warmup-iters ${LR_WARMUP_ITERS} \
         --train-iters ${TRAIN_ITERS} \
