@@ -16,3 +16,6 @@
 [submodule "Megatron-LM-MegaBlocks"]
 	path = Megatron-LM-MegaBlocks
 	url = https://github.com/jerryli1981/Megatron-LM-MegaBlocks
+[submodule "Megatron-LM-240612"]
+	path = Megatron-LM-240612
+	url = https://github.com/NVIDIA/Megatron-LM.git
