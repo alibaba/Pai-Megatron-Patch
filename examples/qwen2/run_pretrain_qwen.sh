@@ -1,10 +1,12 @@
 #!/bin/bash
 set -e
-ENV=$1
-MEGATRON_PATCH_PATH=$2
-MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-240405
-export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
+
+CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-240612
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+
+ENV=$1
 if [ $ENV = dsw ]; then
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 MASTER_ADDR=localhost
@@ -23,106 +25,96 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$3
-BATCH_SIZE=$4
-GLOBAL_BATCH_SIZE=$5
-LR=$6
-MIN_LR=$7
-SEQ_LEN=$8
-PAD_LEN=$9
-EXTRA_VOCAB_SIZE=${10} # 293 for models smaller than 14b, 421 for the others
-PR=${11}
-TP=${12}
-PP=${13}
-AC=${14}
-DO=${15}
-FL=${16}
-SP=${17}
-TE=${18}
-MOE=${19}
-SAVE_INTERVAL=${20}
-DATASET_PATH=${21}
-PRETRAIN_CHECKPOINT_PATH=${22}
-TRAIN_TOKENS=${23}
-WARMUP_TOKENS=${24}
-OUTPUT_BASEPATH=${25}
+MODEL_SIZE=$2
+BATCH_SIZE=$3
+GLOBAL_BATCH_SIZE=$4
+LR=$5
+MIN_LR=$6
+SEQ_LEN=$7
+PAD_LEN=$8
+PR=$9
+TP=${10}
+PP=${11}
+EP=${12}
+AC=${13}
+DO=${14}
+FL=${15}
+SP=${16}
+TE=${17}
+SAVE_INTERVAL=${18}
+DATASET_PATH=${19}
+PRETRAIN_CHECKPOINT_PATH=${20}
+TRAIN_TOKENS=${21}
+WARMUP_TOKENS=${22}
+OUTPUT_BASEPATH=${23}
 
 if [ $MODEL_SIZE = 0.5B ]; then
 
-NUM_LAYERS=24
-HIDDEN_SIZE=1024
-NUM_ATTN_HEADS=16
-INTERMEDIATE_SIZE=2816
-MAX_POSITION_EMBEDDINGS=32768
-gqa_options=""
+HIDDEN_SIZE=896
+INTERMEDIATE_SIZE=4864
+MAX_POSITION_EMBEDDINGS=131072
+MAX_WINDOW_LAYERS=24
+NUM_ATTENTION_HEADS=14
+NUM_HIDDEN_LAYERS=24
+NUM_KEY_VALUE_HEADS=2
+RMS_NORM_EPS=1e-6
+ROPE_THETA=1000000
+SLIDING_WINDOW=131072
+EXTRA_VOCAB_SIZE=293
 
-elif [ $MODEL_SIZE = 1.8B ]; then
+moe_options=" \
+            "
 
-NUM_LAYERS=24
-HIDDEN_SIZE=2048
-NUM_ATTN_HEADS=16
-INTERMEDIATE_SIZE=5504
-MAX_POSITION_EMBEDDINGS=32768
-gqa_options=""
+elif [ $MODEL_SIZE = 1.5B ]; then
 
-elif [ $MODEL_SIZE = 4B ]; then
+HIDDEN_SIZE=1536
+INTERMEDIATE_SIZE=8960
+MAX_POSITION_EMBEDDINGS=131072
+MAX_WINDOW_LAYERS=28
+NUM_ATTENTION_HEADS=12
+NUM_HIDDEN_LAYERS=28
+NUM_KEY_VALUE_HEADS=2
+RMS_NORM_EPS=1e-6
+ROPE_THETA=1000000
+SLIDING_WINDOW=131072
+EXTRA_VOCAB_SIZE=293
 
-NUM_LAYERS=40
-HIDDEN_SIZE=2560
-NUM_ATTN_HEADS=20
-INTERMEDIATE_SIZE=6912
-MAX_POSITION_EMBEDDINGS=32768
-gqa_options=""
+moe_options=" \
+            "
 
 elif [ $MODEL_SIZE = 7B ]; then
 
-NUM_LAYERS=32
-HIDDEN_SIZE=4096
-NUM_ATTN_HEADS=32
-INTERMEDIATE_SIZE=11008
-MAX_POSITION_EMBEDDINGS=32768
-gqa_options=""
+HIDDEN_SIZE=3584
+INTERMEDIATE_SIZE=18944
+MAX_POSITION_EMBEDDINGS=131072
+MAX_WINDOW_LAYERS=28
+NUM_ATTENTION_HEADS=28
+NUM_HIDDEN_LAYERS=28
+NUM_KEY_VALUE_HEADS=4
+RMS_NORM_EPS=1e-6
+ROPE_THETA=1000000
+SLIDING_WINDOW=131072
+EXTRA_VOCAB_SIZE=293
 
-elif [ $MODEL_SIZE = 14B ]; then
-
-NUM_LAYERS=40
-HIDDEN_SIZE=5120
-NUM_ATTN_HEADS=40
-INTERMEDIATE_SIZE=13696
-MAX_POSITION_EMBEDDINGS=32768
-gqa_options=""
-
-elif [ $MODEL_SIZE = 32B ]; then
-
-NUM_LAYERS=64
-HIDDEN_SIZE=5120
-NUM_ATTN_HEADS=40
-INTERMEDIATE_SIZE=27392
-MAX_POSITION_EMBEDDINGS=32768
-
-gqa_options=" \
-		    --group-query-attention \
-		    --num-query-groups 8"
+moe_options=" \
+            "
 
 elif [ $MODEL_SIZE = 72B ]; then
 
-NUM_LAYERS=80
 HIDDEN_SIZE=8192
-NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=24576
-MAX_POSITION_EMBEDDINGS=32768
-gqa_options=""
+INTERMEDIATE_SIZE=29568
+MAX_POSITION_EMBEDDINGS=131072
+MAX_WINDOW_LAYERS=80
+NUM_ATTENTION_HEADS=64
+NUM_HIDDEN_LAYERS=80
+NUM_KEY_VALUE_HEADS=8
+RMS_NORM_EPS=1e-5
+ROPE_THETA=1000000
+SLIDING_WINDOW=131072
+EXTRA_VOCAB_SIZE=421
 
-elif [ $MODEL_SIZE = A2.7B ]; then
-
-HIDDEN_SIZE=2048
-NUM_ATTN_HEADS=16
-NUM_LAYERS=24
-INTERMEDIATE_SIZE=5632
-MOE_INTERMEDIATE_SIZE=1408
-SHARED_EXPERT_INTERMEDIATE_SIZE=5632
-MAX_POSITION_EMBEDDINGS=8192
-gqa_options=""
+moe_options=" \
+            "
 
 fi
 
@@ -141,7 +133,7 @@ fi
 if [ $PR = fp16 ]; then
     pr_options=" \
 		    --fp16 \
-            --apply-query-key-layer-scaling"
+        --apply-query-key-layer-scaling"
     export NVTE_APPLY_QK_LAYER_SCALING=1
 elif [ $PR = bf16 ]; then
     pr_options=" \
@@ -182,30 +174,6 @@ elif [ $TE = false ]; then
         --transformer-impl local"
 fi
 
-if [ $MOE = true ]; then
-    if [ $MODEL_SIZE = A2.7B ]; then
-        moe_options=" \
-            --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
-            --shared-moe-ffn-hidden-size ${SHARED_EXPERT_INTERMEDIATE_SIZE} \
-            --enable-shared-expert \
-            --moe-router-topk 4 \
-            --num-experts 60 \
-            --moe-aux-loss-coeff 1e-2 \
-            --expert-model-parallel-size 4 \
-            --moe-router-load-balancing-type aux_loss"
-    else
-        moe_options=" \
-            --moe-router-topk 2 \
-            --num-experts 8 \
-            --moe-aux-loss-coeff 1e-2 \
-            --expert-model-parallel-size 1 \
-            --moe-router-load-balancing-type aux_loss"
-    fi
-
-elif [ $MOE = false ]; then
-    moe_options=" \
-                    "
-fi
 
 if [ $SP = true ] && [ $TP -gt 1 ]; then
     sp_options=" \
@@ -225,7 +193,7 @@ TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 
-NAME="pretrain-mcore-qwen-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-moe-${MOE}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
+NAME="pretrain-mcore-qwen2-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
 mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
 mkdir -p "${OUTPUT_BASEPATH}/log/"
@@ -238,6 +206,7 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
         --data-path ${DATASET_PATH} \
+        --split 99,1,0 \
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style cosine \
@@ -251,12 +220,11 @@ megatron_options="  \
         --lr-decay-iters ${LR_DECAY_ITERS} \
         --lr-warmup-iters ${LR_WARMUP_ITERS} \
         --train-iters ${TRAIN_ITERS} \
-        --split 99,1,0 \
         --micro-batch-size ${BATCH_SIZE} \
         --global-batch-size ${GLOBAL_BATCH_SIZE} \
-        --num-layers ${NUM_LAYERS} \
+        --num-layers ${NUM_HIDDEN_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
-        --num-attention-heads ${NUM_ATTN_HEADS} \
+        --num-attention-heads ${NUM_ATTENTION_HEADS} \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
@@ -280,21 +248,22 @@ megatron_options="  \
         --dataset LLama-Pretrain-Idxmap \
         --swiglu \
         --normalization RMSNorm \
-        --norm-epsilon 1e-06 \
+        --norm-epsilon ${RMS_NORM_EPS} \
         --use-rotary-position-embeddings \
         --no-rope-fusion \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear \
         --add-qkv-bias \
-        --use-mcore-models \
+        --group-query-attention \
+        --num-query-groups ${NUM_KEY_VALUE_HEADS} \
         --rotary-percent 1.0 \
-        --rotary-base 1000000 \
-        --rotary-seq-len-interpolation-factor 1
+        --rotary-base ${ROPE_THETA} \
+        --rotary-seq-len-interpolation-factor 1 \
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_mcore_qwen.py
- ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options} ${moe_options}"
+run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${moe_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
