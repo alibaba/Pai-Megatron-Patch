@@ -3,6 +3,7 @@
    * [数据集&模型下载](#数据集和模型下载)
    * [Megatron-Core-Dense模型训练流程](#Megatron-Core-Dense模型训练流程)
       * [模型格式转换](#Megatron-Core-Dense模型格式转换)
+      * [模型评估验证](#Megatron-Core-Dense模型评估验证)
       * [继续预训练](#Megatron-Core-Dense继续预训练)
       * [指令微调](#Megatron-Core-Dense指令微调)
    * [下游任务评估](#下游任务评估)
@@ -119,9 +120,45 @@ true \
 false 
 ```
 
+## Megatron-Core-Dense模型评估验证
+
+Huggingface模型计算loss
+```bash
+cd /workspace/Pai-Megatron-Patch/examples/qwen2 \
+sh run_evaluate_huggingface_qwen.sh \
+0.5B \
+1 \
+256 \
+256 \
+bf16 \
+/mnt/qwen-datasets/alpaca_zh-qwen-valid.json \
+/mnt/qwen-ckpts/Qwen2-0.5B
+```
+
+Mcore模型计算loss
+```bash
+cd /workspace/Pai-Megatron-Patch/examples/qwen2 \
+sh run_evaluate_mcore_qwen.sh \
+0.5B \
+1 \
+256 \
+256 \
+bf16 \
+1 \
+1 \
+sel \
+true \
+false \
+false \
+false \
+/mnt/qwen-datasets/alpaca_zh-qwen-valid.json \
+/mnt/qwen-ckpts/Qwen2-0.5B-to-mcore-local-tp1-pp1/
+
+```
+
 ## Megatron-Core-Dense继续预训练
 ```bash
-cd /workspace/Pai-Megatron-Patch/examples/qwen2
+cd /workspace/Pai-Megatron-Patch/examples/qwen2 \
 sh run_pretrain_mcore_qwen.sh  \
 dsw  \
 0.5B   \
@@ -150,7 +187,7 @@ false   \
 
 ## Megatron-Core-Dense指令微调
 ```bash
-cd /workspace/Pai-Megatron-Patch/examples/qwen2
+cd /workspace/Pai-Megatron-Patch/examples/qwen2 \
 sh run_finetune_qwen.sh  \
 dsw  \
 0.5B   \
@@ -187,7 +224,7 @@ false   \
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen
 bash hf2mcore_qwen2_dense_convertor.sh \
 0.5B \
-/mnt/qwen-ckpts/Qwen2-0.5B-to-mcore-te-tp1-pp1/  \
+/mnt/qwen-ckpts/Qwen2-0.5B-hf-to-mcore-te-tp1-pp1  \
 /mnt/qwen-ckpts/Qwen2-0.5B-mcore-te-to-hf    \
 1  \
 1  \
