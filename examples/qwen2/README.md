@@ -150,16 +150,16 @@ sel \
 true \
 false \
 false \
-false \
+true \
 /mnt/qwen-datasets/alpaca_zh-qwen-valid.json \
-/mnt/qwen-ckpts/Qwen2-0.5B-to-mcore-local-tp1-pp1/
+/mnt/qwen-ckpts/Qwen2-0.5B-hf-to-mcore-te-tp1-pp1
 
 ```
 
 ## Megatron-Core-Dense继续预训练
 ```bash
 cd /workspace/Pai-Megatron-Patch/examples/qwen2 \
-sh run_pretrain_mcore_qwen.sh  \
+sh run_pretrain_qwen.sh  \
 dsw  \
 0.5B   \
 1    \
@@ -176,7 +176,7 @@ sel  \
 true   \
 false  \
 false   \
-false   \
+true   \
 100000  \
 /mnt/qwen-datasets/wudao_qwenbpe_text_document  \
 /mnt/qwen-ckpts/Qwen2-0.5B-hf-to-mcore-te-tp1-pp1   \
@@ -205,7 +205,7 @@ sel  \
 true   \
 false  \
 false   \
-false   \
+true   \
 100000  \
 /mnt/qwen-datasets/alpaca_zh-qwen-train.json   \
 /mnt/qwen-datasets/alpaca_zh-qwen-valid.json   \
