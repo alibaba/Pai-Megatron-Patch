@@ -65,7 +65,7 @@ class Encoder(object):
                     doc_ids[-1].append(Encoder.tokenizer.eod_id)
                 else:
                     doc_ids[-1].append(Encoder.tokenizer.eod)
-                    # doc_ids[-1].append(Encoder.tokenizer.pad_token_id)
+                #doc_ids[-1].append(Encoder.tokenizer.pad_token_id)
             ids[key] = doc_ids
         return ids, len(text)
 

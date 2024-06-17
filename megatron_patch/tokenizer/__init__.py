@@ -14,32 +14,29 @@
 
 from transformers import AutoTokenizer
 
-
 def _vocab_size_with_padding(orig_vocab_size, args):
     """Pad vocab size so it is divisible by model parallel size and
     still having GPU friendly size."""
 
     after = orig_vocab_size
     multiple = args.make_vocab_size_divisible_by * \
-               args.tensor_model_parallel_size
+        args.tensor_model_parallel_size
     while (after % multiple) != 0:
         after += 1
     if args.rank == 0:
         print(' > padded vocab (size: {}) with {} dummy tokens '
               '(new size: {})'.format(
-            orig_vocab_size, after - orig_vocab_size, after), flush=True)
+                  orig_vocab_size, after - orig_vocab_size, after), flush=True)
     return after
 
-
 _GLOBAL_TOKENIZER = None
-
 
 def get_tokenizer():
     """Return tokenizer."""
     return _GLOBAL_TOKENIZER
 
-
 def build_tokenizer(args):
+
     if args.rank == 0:
         print('> building {} tokenizer ...'.format(args.patch_tokenizer_type))
     # Select and instantiate the tokenizer.
@@ -301,7 +298,7 @@ def build_tokenizer(args):
     elif args.patch_tokenizer_type == 'MistralTokenizer':
         tokenizer = AutoTokenizer.from_pretrained(args.load,
                                                   padding_side='right',
-                                                  use_fast=False, )
+                                                  use_fast=False,)
         tokenizer.pad_token_id = 0
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
@@ -379,8 +376,11 @@ def build_tokenizer(args):
     else:
         raise NotImplementedError('{} tokenizer is not '
                                   'implemented.'.format(
-            args.patch_tokenizer_type))
+                                      args.patch_tokenizer_type))
+
 
     global _GLOBAL_TOKENIZER
     _GLOBAL_TOKENIZER = tokenizer
     return _GLOBAL_TOKENIZER
+
+
