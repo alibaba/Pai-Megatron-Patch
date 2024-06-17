@@ -75,7 +75,7 @@ class Encoder(object):
             doc_ids = []
             sentence_lens = []
             for sentence in sentences:
-                if self.args.patch_tokenizer_type == "DeepSeekV2Tokenizer":
+                if self.args.patch_tokenizer_type in ["DeepSeekV2Tokenizer", "Qwen2Tokenizer"]:
                     sentence_ids = Encoder.tokenizer.tokenizer(sentence, add_special_tokens=False)['input_ids']
                 else:
                     sentence_ids = Encoder.tokenizer(sentence, add_special_tokens=False)['input_ids']
@@ -295,7 +295,8 @@ def main():
             'output_prefix': args.output_prefix}
         in_ss_out_names.append(file_names)
     else:
-        in_file_names = glob.glob(args.input)
+        file_list = os.listdir(args.input)
+        in_file_names = [os.path.join(args.input, file) for file in file_list]
 
         # Count total number of lines across .jsonl files
         if args.keep_sequential_samples:
