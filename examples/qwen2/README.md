@@ -6,6 +6,10 @@
       * [模型评估验证](#Megatron-Core-Dense模型评估验证)
       * [继续预训练](#Megatron-Core-Dense继续预训练)
       * [指令微调](#Megatron-Core-Dense指令微调)
+   * [Megatron-Core-Moe模型训练流程](#Megatron-Core-MoE模型训练流程)
+      * [模型格式转换](#Megatron-Core-MoE模型格式转换)
+      * [继续预训练](#Megatron-Core-MoE继续预训练)
+      * [指令微调](#Megatron-Core-MoE指令微调)
    * [下游任务评估](#下游任务评估)
       * [Megatron-Core模型格式转换](#Megatron-Core-Dense模型转成Huggingface格式)
       * [运行评估工具](#运行评估工具)
@@ -39,16 +43,17 @@ wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models
 
 
 # Megatron-Core-Dense模型训练流程
-dense模式的格式转换命令如下，运行hf2mcore_qwen2_dense_convertor.sh脚本，需要传入的参数列表如下
+dense模式的格式转换命令如下，运行hf2mcore_qwen2_convertor.sh脚本，需要传入的参数列表如下
 ```
 MODEL_SIZE=$1                  # 模型参数：0.5B/1.8B
 SOURCE_CKPT_PATH=$2            # 源路径
 TARGET_CKPT_PATH=$3            # 目标路径
 TP=$4                          # 模型并行度
 PP=$5                          # 流水并行度
-USE_TE=$6                      # 是否使用Transformer Engine建模
-mg2hf=$7                       # 是否执行mcore2hf转换
-HG_CKPT_PATH=$8                # HF的CKPT的路径
+EP=$6                          # 专家并行度
+USE_TE=$7                      # 是否使用Transformer Engine建模
+mg2hf=$8                       # 是否执行mcore2hf转换
+HG_CKPT_PATH=$9                # HF的CKPT的路径
 ```
 
 
@@ -110,12 +115,13 @@ OUTPUT_BASEPATH=${24}           # 训练输出文件路径
 ## Megatron-Core-Dense模型格式转换
 ```bash
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen \
-sh hf2mcore_qwen2_dense_convertor.sh \
+sh hf2mcore_qwen2_convertor.sh \
 0.5B \
 /mnt/qwen-ckpts/Qwen2-0.5B \
 /mnt/qwen-ckpts/Qwen2-0.5B-hf-to-mcore-te-tp1-pp1  \
 1  \
 1  \
+1 \
 true \
 false 
 ```
@@ -215,6 +221,81 @@ true   \
 /mnt/output_mcore_qwen
 ```
 
+# Megatron-Core-MoE模型训练流程
+
+## Megatron-Core-MoE模型格式转换
+```bash
+cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen \
+sh hf2mcore_qwen2_convertor.sh \
+A14B \
+/mnt/qwen-ckpts/Qwen2-57B-A14B \
+/mnt/qwen-ckpts/Qwen2-57B-A14B-hf-to-mcore-te-tp4-pp1-ep4  \
+4  \
+1  \
+4 \
+true \
+false 
+```
+
+## Megatron-Core-MoE继续预训练
+```bash
+cd /workspace/Pai-Megatron-Patch/examples/qwen2 \
+sh run_pretrain_qwen.sh  \
+dsw  \
+A14B  \
+1    \
+8 \
+1e-5   \
+1e-6   \
+128  \
+128  \
+bf16  \
+4   \
+1  \
+4 \
+sel  \
+true   \
+false  \
+false   \
+true   \
+100000  \
+/mnt/qwen-datasets/wudao_qwenbpe_text_document  \
+/mnt/qwen-ckpts/Qwen2-57B-A14B-hf-to-mcore-te-tp4-pp1-ep4   \
+100000000   \
+10000   \
+/mnt/output_mcore_qwen
+```
+
+## Megatron-Core-MoE指令微调
+```bash
+cd /workspace/Pai-Megatron-Patch/examples/qwen2 \
+sh run_finetune_qwen.sh  \
+dsw  \
+A14B  \
+1    \
+8 \
+1e-5   \
+1e-6   \
+128  \
+128  \
+bf16  \
+4   \
+1  \
+4 \
+sel  \
+true   \
+false  \
+false   \
+true   \
+100000  \
+/mnt/qwen-datasets/alpaca_zh-qwen-train.json   \
+/mnt/qwen-datasets/alpaca_zh-qwen-valid.json   \
+/mnt/qwen-ckpts/Qwen2-57B-A14B-hf-to-mcore-te-tp4-pp1-ep4   \
+100000000   \
+10000   \
+/mnt/output_mcore_qwen
+```
+
 
 
 # 下游任务评估
@@ -222,7 +303,7 @@ true   \
 ## Megatron-Core-Dense模型转成Huggingface格式
 ```bash
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen
-bash hf2mcore_qwen2_dense_convertor.sh \
+bash hf2mcore_qwen2_convertor.sh \
 0.5B \
 /mnt/qwen-ckpts/Qwen2-0.5B-hf-to-mcore-te-tp1-pp1  \
 /mnt/qwen-ckpts/Qwen2-0.5B-mcore-te-to-hf    \

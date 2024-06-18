@@ -207,6 +207,7 @@ megatron_options=" \
         --add-qkv-bias \
         --group-query-attention \
         --num-query-groups ${NUM_KEY_VALUE_HEADS} \
+        --eod-mask-loss
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS evaluate_mcore_qwen.py

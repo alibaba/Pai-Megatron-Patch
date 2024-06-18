@@ -1,20 +1,32 @@
-# Copyright (c) 2023, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2023 Alibaba PAI and Nvidia Megatron-LM Team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from abc import ABC, abstractmethod
-
 import torch
+import torch.nn.functional as F
 
 from megatron.core import parallel_state, tensor_parallel
-from megatron.core.transformer.mlp import MLPSubmodules
 from megatron.core.transformer.module import MegatronModule
-from megatron.core.transformer.moe.experts import GroupedMLP, SequentialMLP
-from megatron.core.transformer.moe.router import TopKRouter
-from megatron.core.transformer.moe.token_dispatcher import (
+from megatron.core.transformer.transformer_config import TransformerConfig
+
+from .experts import GroupedMLP, SequentialMLP
+from .router import TopKRouter
+from .token_dispatcher import (
     MoEAllGatherTokenDispatcher,
     MoEAlltoAllTokenDispatcher,
 )
-from megatron.core.transformer.transformer_config import TransformerConfig
-
+from ..transformer.mlp import MLPSubmodules, MLP
 
 class BaseMoELayer(MegatronModule, ABC):
     """Base class for a mixture of experts layer.
@@ -70,6 +82,11 @@ class MoELayer(BaseMoELayer):
         self.submodules = submodules
         super(MoELayer, self).__init__(config=config, layer_number=layer_number)
         self.router = TopKRouter(config=self.config)
+        self.enable_shared_experts = config.enable_shared_expert
+        if config.enable_shared_expert:
+            self.shared_expert = MLP(self.config, submodules, is_expert=True, is_shared_expert=True)
+            self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
+
         if self.config.moe_grouped_gemm:
             self.experts = GroupedMLP(self.num_local_experts, self.config)
         else:
@@ -114,5 +131,10 @@ class MoELayer(BaseMoELayer):
             output, mlp_bias = tensor_parallel.checkpoint(custom_forward, False, hidden_states)
         else:
             output, mlp_bias = custom_forward(hidden_states)
+
+        if self.enable_shared_experts:
+            shared_expert_output, shared_bias = self.shared_expert(hidden_states)
+            shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states).view(-1, 1)) * shared_expert_output.view(-1, hidden_states.shape[-1])
+            output = output + shared_expert_output.view(-1, hidden_states.shape[-2], hidden_states.shape[-1])
 
         return output, mlp_bias

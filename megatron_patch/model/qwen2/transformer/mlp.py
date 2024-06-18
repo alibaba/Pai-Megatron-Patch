@@ -60,6 +60,7 @@ class MLP(MegatronModule):
         submodules: MLPSubmodules,
         is_expert: bool = False,
         input_size: int = None,
+        is_shared_expert: bool = False,
     ):
         super().__init__(config=config)
 
@@ -68,7 +69,14 @@ class MLP(MegatronModule):
         self.input_size = input_size if input_size != None else self.config.hidden_size
 
         # If this is a gated linear unit we double the output width, see https://arxiv.org/pdf/2002.05202.pdf
-        ffn_hidden_size = self.config.ffn_hidden_size
+        if self.config.moe_ffn_hidden_size is not None:
+            if not is_shared_expert:
+                ffn_hidden_size = self.config.moe_ffn_hidden_size
+            else:
+                ffn_hidden_size = self.config.shared_moe_ffn_hidden_size
+        else:
+            ffn_hidden_size = self.config.ffn_hidden_size
+
         if self.config.gated_linear_unit:
             ffn_hidden_size *= 2
 
@@ -87,9 +95,17 @@ class MLP(MegatronModule):
 
         self.activation_func = self.config.activation_func
 
+        if self.config.moe_ffn_hidden_size is not None:
+            if not is_shared_expert:
+                ffn_hidden_size = self.config.moe_ffn_hidden_size
+            else:
+                ffn_hidden_size = self.config.shared_moe_ffn_hidden_size
+        else:
+            ffn_hidden_size = self.config.ffn_hidden_size
+
         self.linear_fc2 = build_module(
             submodules.linear_fc2,
-            self.config.ffn_hidden_size,
+            ffn_hidden_size,
             self.config.hidden_size,
             config=self.config,
             init_method=self.config.output_layer_init_method,
