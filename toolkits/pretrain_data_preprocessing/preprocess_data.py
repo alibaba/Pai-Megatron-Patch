@@ -59,7 +59,12 @@ class Encoder(object):
             if len(text_ids) > 0:
                 doc_ids.append(text_ids)
             if self.args.append_eod:
-                doc_ids[-1].append(Encoder.tokenizer.eod)
+                if hasattr(Encoder.tokenizer, 'eos_token_id'):
+                    doc_ids[-1].append(Encoder.tokenizer.eos_token_id)
+                elif hasattr(Encoder.tokenizer, 'eod_id'):
+                    doc_ids[-1].append(Encoder.tokenizer.eod_id)
+                else:
+                    doc_ids[-1].append(Encoder.tokenizer.eod)
                 #doc_ids[-1].append(Encoder.tokenizer.pad_token_id)
             ids[key] = doc_ids
         return ids, len(text)

@@ -163,7 +163,8 @@ def build_tokenizer(args):
         )
         if tokenizer.pad_token is None:
             tokenizer.add_special_tokens(special_tokens_dict=dict(pad_token="<|extra_0|>"))
-        tokenizer.eos_token_id = tokenizer.eod_id
+        if hasattr(tokenizer, 'eod_id'):
+            tokenizer.eos_token_id = tokenizer.eod_id
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'Qwen2Tokenizer':
@@ -381,6 +382,5 @@ def build_tokenizer(args):
     global _GLOBAL_TOKENIZER
     _GLOBAL_TOKENIZER = tokenizer
     return _GLOBAL_TOKENIZER
-
 
 
