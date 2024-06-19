@@ -309,6 +309,7 @@ bash hf2mcore_qwen2_convertor.sh \
 /mnt/qwen-ckpts/Qwen2-0.5B-mcore-te-to-hf    \
 1  \
 1  \
+1 \
 true \
 true \
 /mnt/qwen-ckpts/Qwen2-0.5B
