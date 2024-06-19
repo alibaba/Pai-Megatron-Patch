@@ -132,7 +132,49 @@ def load_megatron_model(args):
             else:
                 raise ValueError
             state_dict[k] = target_v
-
+    elif (
+        args.tensor_model_parallel_size > 1
+        and args.pipeline_model_parallel_size > 1
+        and args.num_experts is None
+    ):  
+        num_layers = args.num_layers // args.pipeline_model_parallel_size
+        layers_to_copy = {}
+        for tp_rank in range(args.tensor_model_parallel_size):
+            for pp_rank in range(args.pipeline_model_parallel_size):
+                layer_offset = pp_rank * num_layers
+                for layer in range(num_layers):
+                    pp_layer_id = layer + layer_offset
+                    layers_to_copy[f"decoder.layers.{layer}"] = pp_layer_id
+                checkpoint_name = get_checkpoint_name(model_path, iteration, release, True, tp_rank, pp_rank, None, None)
+                print(f'load {checkpoint_name}')
+                split_state = torch.load(checkpoint_name, map_location="cpu")['model']
+                for k, v in split_state.items():
+                    try:
+                        pattern = re.compile(r'\d+')
+                        res = pattern.findall(k)
+                        k = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy["decoder.layers." + res[0]]), k)
+                        mid_state[k].append(v)
+                    except:
+                        mid_state[k].append(v)
+        for k, v in mid_state.items():
+            if not isinstance(v[0], torch.Tensor) or 'norm' in k:
+                target_v = v[0]
+            elif 'embedding' in k or 'output_layer' in k:
+                target_v = torch.cat(v, dim=0)
+            elif 'linear_proj' in k or 'linear_fc2' in k:
+                target_v = torch.cat(v, dim=1)
+            elif 'linear_qkv.weight' in k:
+                viewed = [x.view(group_per_split, -1, head_dim, args.hidden_size) for x in v]
+                target_v = torch.cat(viewed, dim=0).view(-1, args.hidden_size)
+            elif 'linear_qkv.bias' in k:
+                viewed = [x.view(group_per_split, -1) for x in v]
+                target_v = torch.cat(viewed, dim=0).view(-1)
+            elif 'linear_fc1' in k:
+                viewed = [x.view(2, -1, args.hidden_size) for x in v]
+                target_v = torch.cat(viewed, dim=1).view(-1, args.hidden_size)
+            else:
+                raise ValueError
+            state_dict[k] = target_v
     elif (
         args.tensor_model_parallel_size == 1
         and args.pipeline_model_parallel_size == 1
