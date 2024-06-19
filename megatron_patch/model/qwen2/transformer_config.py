@@ -20,6 +20,8 @@ class Qwen2TransformerConfig(TransformerConfig):
 
     moe_ffn_hidden_size: int = None
 
+    shared_moe_ffn_hidden_size: int = None
+
     enable_shared_expert: bool = False
 
     num_shared_experts: int = None
