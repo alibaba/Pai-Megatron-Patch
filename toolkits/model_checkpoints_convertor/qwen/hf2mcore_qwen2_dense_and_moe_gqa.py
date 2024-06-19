@@ -366,7 +366,7 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
                 mglayer.mlp.shared_expert.linear_fc1.weight.copy_(shared_fc1_weight)
                 mglayer.mlp.shared_expert.linear_fc2.weight.copy_(hflayer.mlp.shared_expert.down_proj.weight)
 
-            if use_te:
+            if use_te and not args.num_experts:
                 mglayer.mlp.linear_fc1.layer_norm_weight.copy_(hflayer.post_attention_layernorm.weight)
             else:
                 mglayer.pre_mlp_layernorm.weight.copy_(hflayer.post_attention_layernorm.weight)
