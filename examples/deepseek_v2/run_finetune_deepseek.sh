@@ -239,7 +239,7 @@ megatron_options="  \
         --no-load-rng \
         --num-workers 8 \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type LLamaTokenizer \
+        --patch-tokenizer-type DeepSeekV2Tokenizer \
         --dataset LLama-Pretrain-Raw \
         --swiglu \
         --normalization RMSNorm \
