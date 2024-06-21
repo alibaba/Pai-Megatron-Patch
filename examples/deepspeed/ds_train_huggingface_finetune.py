@@ -417,7 +417,7 @@ def main():
         model = AutoModelForCausalLM.from_pretrained(
             args.load,
             from_tf=False,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.float16 if args.fp16 else torch.bfloat16,
             trust_remote_code=True
         )
 

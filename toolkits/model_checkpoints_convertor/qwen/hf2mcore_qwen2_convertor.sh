@@ -11,9 +11,10 @@ TARGET_CKPT_PATH=$3
 TP=$4
 PP=$5
 EP=$6
-USE_TE=$7
-MG2HF=$8
-HF_CKPT_PATH=$9
+PR=$7
+USE_TE=$8
+MG2HF=$9
+HF_CKPT_PATH=${10}
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
@@ -148,6 +149,16 @@ elif [ $USE_TE = false ]; then
                 "
 fi
 
+if [ $PR = fp16 ]; then
+    pr_options=" \
+		    --fp16"
+
+elif [ $PR = bf16 ]; then
+    pr_options=" \
+        --bf16"
+
+fi
+
 
 DISTRIBUTED_ARGS="--nproc_per_node 1 --nnodes 1 --node_rank 0 --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
@@ -158,7 +169,6 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen2_dense_and_moe_gqa.py \
     --target-pipeline-model-parallel-size ${PP} \
     --micro-batch-size 1 \
     --save-interval 1 \
-    --bf16 \
     --swiglu \
     --num-layers ${NUM_HIDDEN_LAYERS} \
     --hidden-size ${HIDDEN_SIZE} \
@@ -185,6 +195,7 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen2_dense_and_moe_gqa.py \
     ${moe_options} \
     ${te_options} \
     ${convert_options} \
+    ${pr_options} \
     ${cpu_options}
 
 
