@@ -51,9 +51,10 @@ TARGET_CKPT_PATH=$3            # 目标路径
 TP=$4                          # 模型并行度
 PP=$5                          # 流水并行度
 EP=$6                          # 专家并行度
-USE_TE=$7                      # 是否使用Transformer Engine建模
-mg2hf=$8                       # 是否执行mcore2hf转换
-HG_CKPT_PATH=$9                # HF的CKPT的路径
+PR=$7                          # 转换精度
+USE_TE=$8                      # 是否使用Transformer Engine建模
+mg2hf=$9                       # 是否执行mcore2hf转换
+HG_CKPT_PATH=${10}                # HF的CKPT的路径
 ```
 
 
@@ -122,6 +123,7 @@ sh hf2mcore_qwen2_convertor.sh \
 1  \
 1  \
 1 \
+fp32 \
 true \
 false 
 ```
@@ -233,6 +235,7 @@ A14B \
 4  \
 1  \
 4 \
+fp32 \
 true \
 false 
 ```
@@ -310,6 +313,7 @@ bash hf2mcore_qwen2_convertor.sh \
 1  \
 1  \
 1 \
+fp32 \
 true \
 true \
 /mnt/qwen-ckpts/Qwen2-0.5B

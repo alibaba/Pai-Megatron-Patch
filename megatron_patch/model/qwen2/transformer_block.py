@@ -188,12 +188,20 @@ class TransformerBlock(MegatronModule):
         #     self.layers = torch.nn.ModuleList([build_layer(i + 1 + offset) for i in range(self.num_layers)])
 
         if self.post_process and self.post_layer_norm:
+            use_te = self.config.transformer_impl == "transformer_engine"
             # Final layer norm before output.
-            self.final_layernorm = Qwen2RMSNorm(
-                config=self.config,
-                hidden_size=self.config.hidden_size,
-                eps=self.config.layernorm_epsilon,
-            )
+            if use_te:
+                self.final_layernorm = TENorm(
+                    config=self.config,
+                    hidden_size=self.config.hidden_size,
+                    eps=self.config.layernorm_epsilon,
+                )
+            else:
+                self.final_layernorm = Qwen2RMSNorm(
+                    config=self.config,
+                    hidden_size=self.config.hidden_size,
+                    eps=self.config.layernorm_epsilon,
+                )
 
     def _get_layer(self, layer_number: int):
         return self.layers[layer_number]

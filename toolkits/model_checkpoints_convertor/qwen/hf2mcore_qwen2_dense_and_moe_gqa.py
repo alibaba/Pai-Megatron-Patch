@@ -26,6 +26,8 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
+torch.backends.cuda.enable_mem_efficient_sdp(False)
+torch.backends.cuda.enable_flash_sdp(False)
 
 def add_model_args(parser):
 
@@ -298,16 +300,18 @@ def load_megatron_model(args):
     else:
         raise ValueError('not support yet')
 
-    model.load_state_dict(state_dict)
+    model.load_state_dict(state_dict, strict=False)
     return model
 
 
 def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
 
     if args.fp16:
-        mgmodel = mgmodel.float16()
+        mgmodel = mgmodel.half()
+        hfmodel = hfmodel.half()
     elif args.bf16:
         mgmodel = mgmodel.bfloat16()
+        hfmodel = hfmodel.bfloat16()
 
     num_query_groups = args.num_query_groups
     hidden_size = args.hidden_size
@@ -376,9 +380,11 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
 def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
 
     if args.fp16:
-        mgmodel = mgmodel.float16()
+        mgmodel = mgmodel.half()
+        hfmodel = hfmodel.half()
     elif args.bf16:
         mgmodel = mgmodel.bfloat16()
+        hfmodel = hfmodel.bfloat16()
 
     assert args.num_query_groups >= args.target_tensor_model_parallel_size
 
@@ -828,25 +834,28 @@ def check_hf_mg_forward(hfmodel, mgmodel, mgargs):
                                                    with_kwargs=True)
 
 
-    input_ids = torch.tensor([[1, 2, 3]]).long().cuda()
+    input_ids = torch.tensor([[151644,   8506,  22564,  27608,  75188,   4344, 121395,  61991,  79554, 36689]]).long().cuda()
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(input_ids, -100, True, True, True)
     print(hfmodel)
     print(mgmodel)
+    is_oom = False
     with torch.inference_mode():
         try:
             hfmodel.cuda()
-            hfmodel(input_ids=input_ids)
+            hflogits = hfmodel(input_ids=input_ids).logits
         except torch.cuda.OutOfMemoryError:
             print('oom for huggingface model forward')
+            is_oom = True
         hfmodel.cpu()
         del hfmodel
 
     with torch.inference_mode():
         try:
             mgmodel.cuda()
-            mgmodel(input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids)
+            mglogits = mgmodel(input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids)
         except torch.cuda.OutOfMemoryError:
             print('oom for megatron model forward')
+            is_oom = True
         mgmodel.cpu()
         del mgmodel
 
@@ -859,6 +868,12 @@ def check_hf_mg_forward(hfmodel, mgmodel, mgargs):
             diff_num = ((hfv - mgv) > epsilon).sum()
             diff_max = (hfv - mgv).abs().max()
             print(f'layer:{idx}, {k}, diff: {same_num}, diff>{epsilon}:[{diff_num}/{hfv.numel()}] diff_max:{diff_max}')
+
+    if not is_oom:
+        same_num = (hflogits != mglogits).sum()
+        diff_num = ((hflogits - mglogits) > epsilon).sum()
+        diff_max = (hflogits - mglogits).abs().max()
+        print(f'logits: {same_num}, diff>{epsilon}:[{diff_num}/{hflogits.numel()}] diff_max:{diff_max}')
 
 
 def add_extra_args(parser):

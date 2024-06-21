@@ -18,6 +18,8 @@ from megatron.core.transformer import TransformerConfig
 @dataclass
 class Qwen2TransformerConfig(TransformerConfig):
 
+    transformer_impl: str = 'transformer_engine'
+
     moe_ffn_hidden_size: int = None
 
     shared_moe_ffn_hidden_size: int = None
