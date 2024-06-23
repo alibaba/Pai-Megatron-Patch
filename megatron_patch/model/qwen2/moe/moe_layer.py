@@ -84,7 +84,7 @@ class MoELayer(BaseMoELayer):
         self.router = TopKRouter(config=self.config)
         self.enable_shared_experts = config.enable_shared_expert
         if config.enable_shared_expert:
-            self.shared_expert = MLP(self.config, submodules, is_expert=True, is_shared_expert=True)
+            self.shared_expert = MLP(self.config, submodules, is_expert=False, is_shared_expert=True)
             self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
 
         if self.config.moe_grouped_gemm:

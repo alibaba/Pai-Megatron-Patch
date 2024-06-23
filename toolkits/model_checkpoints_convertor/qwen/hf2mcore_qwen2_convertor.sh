@@ -121,6 +121,8 @@ moe_options=" \
             --target-expert-model-parallel-size ${EP}\
             --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
             --shared-moe-ffn-hidden-size ${SHARED_EXPERT_INTERMEDIATE_SIZE} \
+            --moe-router-load-balancing-type aux_loss \
+            --moe-aux-loss-coeff 1e-2 \
             --enable-shared-expert"
 
 cpu_options=" \
@@ -189,6 +191,7 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen2_dense_and_moe_gqa.py \
     --num-query-groups ${NUM_KEY_VALUE_HEADS} \
     --normalization RMSNorm \
     --norm-epsilon ${RMS_NORM_EPS} \
+    --use-mcore-models \
     --attention-dropout 0.0 \
     --hidden-dropout 0.0 \
     --rotary-base ${ROPE_THETA} \
