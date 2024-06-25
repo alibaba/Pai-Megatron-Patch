@@ -16,7 +16,7 @@ from abc import ABC, abstractmethod
 from typing import Callable, List
 
 import torch
-
+import torch.distributed as dist
 from megatron.core.tensor_parallel.random import (
     get_cuda_rng_tracker,
     get_data_parallel_rng_tracker_name,
@@ -52,6 +52,7 @@ class Router(ABC, MegatronModule):
         with get_cuda_rng_tracker().fork(get_data_parallel_rng_tracker_name()):
             config.init_method(self.weight)
         setattr(self.weight, 'sequence_parallel', config.sequence_parallel)
+        setattr(self.weight, 'router', True)
 
     def gating(self, input: torch.Tensor):
         """Forward pass of the router gate.
@@ -244,7 +245,7 @@ class TopKRouter(Router):
             scores, indices = self.aux_loss_load_balancing(logits)
         elif self.routing_type is None:
             # A naive top-k routing without load balancing
-            top_logits, indices = torch.topk(logits, k=self.k, dim=1)
+            top_logits, indices = torch.topk(logits, k=self.topk, dim=1)
             scores = torch.softmax(top_logits, dim=-1, dtype=torch.float32).type_as(logits)
 
         return scores, indices
