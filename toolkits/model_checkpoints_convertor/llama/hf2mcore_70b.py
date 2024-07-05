@@ -637,6 +637,12 @@ def convert_checkpoint_from_megatron_to_transformers(args):
                 key_list = key.split('.')
                 layer_id = int(key_list[2]) + pp_rank * num_layers
                 dim = 1 if 'linear_fc2' in key else 0
+
+                if "linear_fc1.layer_norm_weight" in key:
+                    params = val.to(dtype)
+                    output_state_dict[f'model.layers.{layer_id}.post_attention_layernorm.weight'] = params
+                    continue
+
                 params = torch.cat(
                     [val]
                     + [
