@@ -19,3 +19,6 @@
 [submodule "Megatron-LM-240612"]
 	path = Megatron-LM-240612
 	url = https://github.com/NVIDIA/Megatron-LM.git
+[submodule "Megatron-LM-240705-Performance-Booster"]
+	path = Megatron-LM-240705-Performance-Booster
+	url = https://github.com/jerryli1981/Megatron-LM-240705-Performance-Booster

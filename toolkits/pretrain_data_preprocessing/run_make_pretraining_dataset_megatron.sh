@@ -48,6 +48,17 @@ elif [ $tokenizer = "LLamaTokenizer" ]; then
   --keep-sequential-samples \
   --append-eod
 
+elif [ $tokenizer = "LLama3Tokenizer" ]; then
+  python preprocess_data_megatron.py \
+  --input ${INPUT} \
+  --output-prefix ${output_data_dir}/mmap_llama3_datasets \
+  --patch-tokenizer-type LLama3Tokenizer \
+  --load ${load_dir} \
+  --workers 16 \
+  --partitions 1 \
+  --keep-sequential-samples \
+  --append-eod
+
 fi
 
 ELAPSED_TIME=$(($SECONDS - $START_TIME))
