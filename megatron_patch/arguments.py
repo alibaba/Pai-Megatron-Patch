@@ -29,8 +29,23 @@ def get_patch_args(parser):
 
     for action in vars(group)['_actions']:
         if isinstance(action, argparse._StoreAction):
+            if '--optimizer' in action.option_strings:
+                action.choices.append('hybridadam')
+
+    for action in vars(group)['_actions']:
+        if isinstance(action, argparse._StoreAction):
             if '--position-embedding-type' in action.option_strings:
                 action.choices.append('none')
+
+    has_rotary_base = False
+    for action in vars(group)['_actions']:
+        if isinstance(action, argparse._StoreAction):
+            if '--rotary-base' in action.option_strings:
+                has_rotary_base = True
+
+    if not has_rotary_base:
+        group.add_argument('--rotary-base', type=int, default=10000,
+                           help='Base to use for rotary positional embeddings, default 10000')
 
     group.add_argument('--local-rank',
                        type=int,
@@ -263,7 +278,7 @@ def get_patch_args(parser):
 
     group.add_argument('--sliding-window', type=int, default=None)
 
-    group.add_argument('--rotary-base', type=int, default=10000)
+
 
     group.add_argument('--rotary-scale-factor', type=int, default=1)
 
@@ -410,5 +425,13 @@ def get_patch_args(parser):
         type=int,
         default=1
     )
+
+    group.add_argument('--cpu-offload-policy', default='static', type=str,
+                        help='CPU Offload Policy used by OffloadDistributedOptimizer, '
+                        'valid if base optimizer is HybridAdam.')
+
+    group.add_argument('--cpu-offload-fraction', type=float, default=0.5,
+                       help='CPU Offload Fraction used by static offload policy, '
+                       'valid if base optimizer is HybridAdam')
 
     return parser
