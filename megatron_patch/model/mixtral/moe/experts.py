@@ -181,6 +181,8 @@ class SequentialMLP(MegatronModule):
         self.local_experts = torch.nn.ModuleList()
         for _ in range(self.num_local_experts):
             expert = MLP(self.config, submodules, is_expert=True)
+            setattr(expert.linear_fc1.weight, 'expert_id', [0, _])
+            setattr(expert.linear_fc2.weight, 'expert_id', [1, _])
             self.local_experts.append(expert)
 
     def forward(self, permuted_local_hidden_states, tokens_per_expert):
