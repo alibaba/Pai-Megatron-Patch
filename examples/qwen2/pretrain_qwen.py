@@ -23,7 +23,7 @@ from megatron.training.utils import (
 )
 from megatron.training.arguments import core_transformer_config_from_args
 
-from megatron_patch.data.utils import get_batch_on_this_tp_rank_original
+from megatron_patch.data.utils import get_batch_on_this_tp_rank_original, get_batch_on_this_tp_rank_idxmap_sft
 from megatron_patch.data import build_pretrain_dataset_from_original
 from megatron_patch.model.qwen2.layer_specs import get_gpt_layer_with_transformer_engine_spec,get_gpt_layer_local_spec
 from megatron_patch.model.qwen2.model import GPTModel
@@ -84,7 +84,10 @@ def get_batch(data_iterator):
 
     elif "-Idxmap" in args.dataset:
         # get batches based on the TP rank you are on
-        batch = get_batch_on_this_tp_rank(data_iterator)
+        if args.train_mode == "pretrain":
+            batch = get_batch_on_this_tp_rank(data_iterator)
+        else:
+            batch = get_batch_on_this_tp_rank_idxmap_sft(data_iterator)
         # slice batch along sequence dimension for context parallelism
         batch = get_batch_on_this_cp_rank(batch)
 
