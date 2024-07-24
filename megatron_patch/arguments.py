@@ -434,4 +434,7 @@ def get_patch_args(parser):
                        help='CPU Offload Fraction used by static offload policy, '
                        'valid if base optimizer is HybridAdam')
 
+    group.add_argument('--train-mode', default='pretrain', type=str,
+                        help='pretrain or finetune')
+
     return parser

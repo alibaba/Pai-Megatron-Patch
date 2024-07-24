@@ -230,11 +230,10 @@ mkdir -p ${TENSORBOARD_DIR}
 SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 megatron_options="  \
+        --train-mode finetune \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
-        --train-data-path ${DATASET_PATH} \
-        --valid-data-path ${VALID_DATASET_PATH} \
-        --test-data-path ${VALID_DATASET_PATH} \
-        --dataloader-type cyclic \
+        --data-path ${DATASET_PATH} \
+        --split 99,1,0 \
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style cosine \
@@ -273,7 +272,7 @@ megatron_options="  \
         --num-workers 8 \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type Qwen2Tokenizer \
-        --dataset LLama-Pretrain-Raw \
+        --dataset LLama-Pretrain-Idxmap \
         --swiglu \
         --normalization RMSNorm \
         --norm-epsilon ${RMS_NORM_EPS} \
