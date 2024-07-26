@@ -17,6 +17,7 @@ MPI_DISTRIBUTED_ARGS=(
   "-map-by" "slot"
   "-mca" "pml" "ob1"
   "-mca" "btl" "^openib"
+  "-mca" "btl_tcp_if_include" "eth0"
   "-mca" "orte_base_help_aggregate" "0"
   "-x" "LD_LIBRARY_PATH"
   "-x" "PATH"
@@ -305,6 +306,7 @@ megatron_options="  \
         --tp-comm-overlap \
         --overlap-grad-reduce \
         --overlap-param-gather \
+        --log-throughput \
         --context-parallel-size ${CP}
         "
 
