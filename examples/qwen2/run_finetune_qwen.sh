@@ -232,7 +232,7 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 megatron_options="  \
         --train-mode finetune \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
-        --data-path ${DATASET_PATH} \
+        --train-data-path ${DATASET_PATH} \
         --split 99,1,0 \
         --lr ${LR} \
         --min-lr ${MIN_LR} \
@@ -259,6 +259,7 @@ megatron_options="  \
         --log-interval 1 \
         --eval-interval 10000 \
         --eval-iters 10 \
+        --dataloader-type cyclic \
         --save-interval ${SAVE_INTERVAL} \
         --tensorboard-queue-size 1 \
         --tensorboard-dir ${TENSORBOARD_DIR} \
@@ -272,7 +273,7 @@ megatron_options="  \
         --num-workers 8 \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type Qwen2Tokenizer \
-        --dataset LLama-Pretrain-Idxmap \
+        --dataset LLama-Pretrain-Raw \
         --swiglu \
         --normalization RMSNorm \
         --norm-epsilon ${RMS_NORM_EPS} \
@@ -290,7 +291,7 @@ megatron_options="  \
         --eod-mask-loss
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
+run_cmd="torchrun $DISTRIBUTED_ARGS finetune_qwen.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${moe_options}"
 
 echo ${run_cmd}
