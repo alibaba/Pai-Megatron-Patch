@@ -1,0 +1,25 @@
+sh run_finetune_qwen.sh  \
+dsw  \
+7B   \
+2    \
+32 \
+1e-5   \
+1e-6   \
+512  \
+512  \
+bf16  \
+2   \
+2  \
+1 \
+sel  \
+true   \
+true  \
+true   \
+true   \
+200  \
+/mnt/workspace/alpaca_data1k.json \
+/mnt/workspace/alpaca_data1k.json   \
+/mnt/workspace/Qwen2-7B-Instruct-config   \
+2000   \
+200   \
+/mnt/workspace/output_mcore_qwen2 \
