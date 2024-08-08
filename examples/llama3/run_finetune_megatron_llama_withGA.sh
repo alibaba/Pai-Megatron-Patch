@@ -191,6 +191,7 @@ megatron_options="  \
         --use-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
+        --use-llama2-rotary-position-embeddings \
         --disable-bias-linear \
         --rotary-base 500000 \
         --attention-dropout 0.0 \
