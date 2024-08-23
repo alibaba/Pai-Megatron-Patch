@@ -62,6 +62,7 @@ ROPE_THETA=1000000
 SLIDING_WINDOW=131072
 EXTRA_VOCAB_SIZE=293
 
+tie_option=""
 moe_options=" \
             "
 
@@ -78,7 +79,7 @@ RMS_NORM_EPS=1e-6
 ROPE_THETA=1000000
 SLIDING_WINDOW=131072
 EXTRA_VOCAB_SIZE=293
-
+tie_option=""
 moe_options=" \
             "
 
@@ -98,7 +99,9 @@ EXTRA_VOCAB_SIZE=421
 
 moe_options=" \
             "
-
+tie_option=" \
+        --untie-embeddings-and-output-weights \
+        "
 elif [ $MODEL_SIZE = 72B ]; then
 
 HIDDEN_SIZE=8192
@@ -115,7 +118,9 @@ EXTRA_VOCAB_SIZE=421
 
 moe_options=" \
             "
-
+tie_option=" \
+        --untie-embeddings-and-output-weights \
+        "
 elif [ $MODEL_SIZE = A14B ]; then
 
 HIDDEN_SIZE=3584
@@ -133,7 +138,9 @@ ROPE_THETA=1000000
 SHARED_EXPERT_INTERMEDIATE_SIZE=20480
 SLIDING_WINDOW=131072
 EXTRA_VOCAB_SIZE=293
-
+tie_option=" \
+        --untie-embeddings-and-output-weights \
+        "
 moe_options=" \
             --moe-router-topk ${NUM_EXPERTS_PER_TOPK} \
             --num-experts ${NUM_EXPERTS} \
@@ -278,7 +285,6 @@ megatron_options="  \
         --use-rotary-position-embeddings \
         --no-rope-fusion \
         --position-embedding-type rope \
-        --untie-embeddings-and-output-weights \
         --disable-bias-linear \
         --add-qkv-bias \
         --group-query-attention \
@@ -289,7 +295,7 @@ megatron_options="  \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
- ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${moe_options}"
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${moe_options} ${tie_option}"
 
 echo ${run_cmd}
 eval ${run_cmd}

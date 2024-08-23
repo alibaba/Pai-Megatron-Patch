@@ -409,18 +409,18 @@ def get_patch_args(parser):
     group.add_argument("--rotary-scaling-factor", type=int, default=1)
 
     group.add_argument(
-        "--cpu-offload-policy",
+        "--optimizer-offload-policy",
         default="static",
         type=str,
-        help="CPU Offload Policy used by OffloadDistributedOptimizer, "
+        help="Optimizer Offload Policy used by OffloadDistributedOptimizer, "
         "valid if base optimizer is HybridAdam.",
     )
 
     group.add_argument(
-        "--cpu-offload-fraction",
+        "--optimizer-offload-fraction",
         type=float,
         default=0.5,
-        help="CPU Offload Fraction used by static offload policy, "
+        help="Optimizer Offload Fraction used by static offload policy, "
         "valid if base optimizer is HybridAdam",
     )
     group.add_argument(
@@ -428,19 +428,32 @@ def get_patch_args(parser):
     )
 
     group.add_argument(
-        "--auto-offload-threshold",
+        "--optimizer-offload-auto-threshold",
         type=int,
         default=2048 * 1024 * 1024,
-        help="CPU Offload Threshold currently used by auto offload policy, "
+        help="Optimizer Offload Threshold currently used by auto policy, "
         "tune larger if OOM occurs",
     )
 
     group.add_argument(
-        "--cpu-offload-chunk-size",
+        "--optimizer-offload-chunk-size",
         type=int,
         default=32 * 1024 * 1024,
-        help="Chunk size of Chunk Manager in Offload Optimizer,"
+        help="Chunk size of Chunk Manager in Optimizer Offload,"
         "keep zero to search for a optimal size",
     )
 
+    group.add_argument(
+        "--cpu-offloading",
+        default=False,
+        action="store_true",
+        help="Use activation checkpointing.",
+    )
+
+    group.add_argument(
+        "--cpu-offloading-num-layers",
+        type=int,
+        default=0,
+        help="The num of layers to be moved to CPU",
+    )
     return parser

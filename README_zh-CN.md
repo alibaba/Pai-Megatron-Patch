@@ -3,6 +3,7 @@
 
 |             |                                                  Megatron-LM-Dense                                                   |                                                  Megatron-Core-Dense                                                   |                                                    Megatron-Core-MoE                                                     |                                                  MegaBlocks-MoE                                                   |
 |:------------|:--------------------------------------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------------------:|:------------------------------------------------------------------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------------------------:|
+| LLama3.1      |  N/A | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama3_1/README.md#Megatron-Core-Dense模型训练流程)  |   N/A | N/A
 | LLama3      | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama3/README.md#Megatron-LM-Dense模型训练流程)  | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama3/README.md#Megatron-Core-Dense模型训练流程)  |                                                           N/A                                                            |                                                        N/A                                                        |
 | LLama2      | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama2/README.md#Megatron-LM-Dense模型训练流程)  | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama2/README.md#Megatron-Core-Dense模型训练流程)  |                                                           N/A                                                            |                                                        N/A                                                        |
 | Mistral     | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/mistral/README.md#Megatron-LM-Dense模型训练流程) | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/mistral/README.md#Megatron-Core-Dense模型训练流程) |   [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/mistral/README.md#Megatron-Core-MoE模型训练流程)   |                                                        N/A                                                        |
@@ -36,6 +37,8 @@ Pai-Megatron-Patch是各类开源大模型和Megatron训练加速引擎之间的
 - [阿里云PAI获得FewCLUE基于大模型的小样本学习双料冠军](https://developer.aliyun.com/article/788081?spm=a2c6h.12873639.article-detail.17.11c5383cHpFZks&tlog=yuekan_8)
 
 新功能：
+- **支持LLaMA-3.1系列模使用Flash-Attention3训练微调** [🔥🔥 2024.08.23]
+- **支持用Megatron-Core框架训练LLaMA-3.1系列模型** [🔥🔥 2024.08.23]
 - **支持自动优化器卸载.** [🔥🔥 2024.07.25]
 - **支持静态优化器卸载.** [🔥🔥 2024.07.15]
 - **支持用Megatron-Core框架训练qwen-2-MoE系列模型** [🔥🔥 2024.06.19]

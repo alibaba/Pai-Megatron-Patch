@@ -140,11 +140,17 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator):
         else:
             data = next(data_iterator)
 
-        tokens_ = data['tokens'].long()
-        tokens = tokens_[:, :-1].contiguous()
-        labels = tokens_[:, 1:].contiguous()
-        sep_index = (labels[0] == tokenizer.sep_token_id).nonzero(as_tuple=True)[0]
-        labels[:, :sep_index] = -100
+
+        tokens = data['tokens'].long()
+        labels = torch.roll(data['tokens'].long(), shifts=-1, dims=1)
+        labels[:, -1] = tokenizer.pad_token_id
+        # NOTE: assert lengths of tokens/labels are sequence-length
+        assert args.seq_length == labels.shape[-1]
+        
+        for i in range(labels.shape[0]):
+            sep_index = (labels[i] == tokenizer.sep_token_id).nonzero(as_tuple=True)[0]
+            labels[i, :sep_index] = -100
+        
         labels[labels == tokenizer.eos_token_id] = -100
         labels[labels == tokenizer.pad_token_id] = -100
         labels[labels == tokenizer.sep_token_id] = -100

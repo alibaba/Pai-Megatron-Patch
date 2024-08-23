@@ -29,7 +29,7 @@ from megatron_patch.tokenizer import build_tokenizer
 class Encoder(object):
     def __init__(self, args):
         self.args = args
-        self.seq_length = self.args.seq_length + 1
+        self.seq_length = self.args.seq_length
 
     def initializer(self):
         Encoder.tokenizer = build_tokenizer(self.args)
