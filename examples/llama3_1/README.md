@@ -3,8 +3,8 @@
 ## Table of Contents
    * [安装](#安装)
    * [数据集&模型下载](#预训练数据集和模型下载)
-   * [Megatron-Core-Dense模型训练流程](#Megatron-Core-Dense模型训练流程)
-      * [模型格式转换](#Megatron-Core-Dense模型格式转换)
+   * [Megatron-Core模型训练流程](#Megatron-Core模型训练流程)
+      * [模型格式转换](#Megatron-Core模型格式转换)
       * [继续预训练](#预训练示例)
       * [指令微调](#指令微调示例)
    * [下游任务评估](#下游任务评估)
@@ -48,8 +48,8 @@ wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models
 wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/llama3-datasets/alpaca_zh-llama3-valid.json
 ```
 
-## Megatron-Core-Dense模型训练流程
-### Megatron-Core-Dense模型格式转换
+## Megatron-Core模型训练流程
+### Megatron-Core模型格式转换
 运行`hf2mcore_convertor_llama3_1.sh`脚本，需要传入的参数列表如下
 ```bash
 MODEL_SIZE=$1                 # 模型参数：8B/70B
@@ -79,7 +79,7 @@ false \
 bf16
 ```
 
-### Megatron-Core-Dense预训练及指令微调
+### Megatron-Core预训练及指令微调
 在LLaMA3.1中，我们已将预训练和微调整合到`run_mcore_llama.sh`脚本，对于不同的使用场景，二者各参数的意义有所不同。
 
 #### 预训练&微调命令统一描述

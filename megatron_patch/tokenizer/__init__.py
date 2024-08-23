@@ -356,6 +356,10 @@ def build_tokenizer(args):
                     trust_remote_code=True
                 )
                 self.extra_vocab_size = extra_vocab_size
+                # NOTE: Add sep and pad token for LLaMA 3.1
+                if self.tokenizer.pad_token is None:
+                    self.tokenizer.add_special_tokens(special_tokens_dict=dict(pad_token="<|finetune_right_pad_id|>"))
+                    self.tokenizer.add_special_tokens(special_tokens_dict=dict(sep_token="<|reserved_special_token_0|>"))
 
             def __call__(self, text, return_tensors=None,
                          padding=None, max_length=None, truncation=None, add_special_tokens=None):
@@ -384,6 +388,10 @@ def build_tokenizer(args):
             @property
             def eod(self):
                 return self.tokenizer.eos_token_id
+
+            @property
+            def sep_token_id(self):
+                return self.tokenizer.sep_token_id
 
             @property
             def eos_token(self):
@@ -417,5 +425,4 @@ def build_tokenizer(args):
     global _GLOBAL_TOKENIZER
     _GLOBAL_TOKENIZER = tokenizer
     return _GLOBAL_TOKENIZER
-
 
