@@ -903,12 +903,14 @@ def main():
     args = get_args()
 
     if args.convert_checkpoint_from_megatron_to_transformers:
-        hf_model = AutoModelForCausalLM.from_pretrained(args.hf_ckpt_path)
+        config = AutoConfig.from_pretrained(args.hf_ckpt_path)
+        hf_model = AutoModelForCausalLM.from_pretrained(args.hf_ckpt_path, torch_dtype=config.torch_dtype)
         mg_model = load_megatron_model(args)
         convert_checkpoint_from_megatron_to_transformers(mg_model, hf_model, args)
         save_hfmodel(args, hf_model)
     else:
-        hf_model = AutoModelForCausalLM.from_pretrained(args.load)
+        config = AutoConfig.from_pretrained(args.load)
+        hf_model = AutoModelForCausalLM.from_pretrained(args.load, torch_dtype=config.torch_dtype)
         mg_model = model_provider()
         convert_checkpoint_from_transformers_to_megatron(hf_model, mg_model, args)
         check_hf_mg_forward(hf_model, mg_model, args)
