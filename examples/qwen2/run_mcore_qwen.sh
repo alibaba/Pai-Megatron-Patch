@@ -5,6 +5,7 @@ CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/PAI-Megatron-LM-240718:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Here are some configs controled by env
 if [ -z ${MP_DATASET_TYPE} ];then
@@ -26,6 +27,13 @@ elif [ $ENV = dlc ]; then
     NNODES=${WORLD_SIZE}
     NODE_RANK=${RANK}
     GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU}
+fi
+
+if [ -z ${MP_VP} ]; then
+    vp_options=""
+else
+    vp_options=" \
+        --num-layers-per-virtual-pipeline-stage ${MP_VP}"
 fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
@@ -188,6 +196,10 @@ tie_option=" \
 fi
 
 TP_COMM_OVERLAP=$(( ($TP > 1) ? 1 : 0 ))
+comm_overlap_option="\
+    --overlap-grad-reduce \
+    --overlap-param-gather"
+ 
 
 if [ $TP_COMM_OVERLAP -eq 1 ]; then
     comm_overlap_option="\
@@ -220,6 +232,9 @@ elif [ $AC = offload ]; then
         echo "Disable --overlap-grad-reduce and --overlap-param-gather when cpu offloading is on..."
         comm_overlap_option="\
             --tp-comm-overlap"
+    else
+        echo "Disable --overlap-grad-reduce and --overlap-param-gather when cpu offloading is on..."
+        comm_overlap_option=""
     fi
 fi
 
@@ -324,7 +339,7 @@ mkdir -p ${TENSORBOARD_DIR}
 SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 mkdir -p ${SAVED_PRETRAIN_CHECKPOINT_PATH}
-find ${PRETRAIN_CHECKPOINT_PATH} -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
+find ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
 
 
 megatron_options="  \
@@ -385,7 +400,7 @@ megatron_options="  \
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
  ${megatron_options} ${dataset_option} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} \
- ${do_options} ${sp_options} ${gqa_options} ${offload_option} ${comm_overlap_option} ${sft_option} ${moe_options} ${tie_option}"
+ ${do_options} ${sp_options} ${gqa_options} ${offload_option} ${comm_overlap_option} ${sft_option} ${moe_options} ${tie_option} ${vp_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
