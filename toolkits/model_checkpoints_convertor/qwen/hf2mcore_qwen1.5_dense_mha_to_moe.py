@@ -230,7 +230,8 @@ def add_extra_args(parser):
 def main():
     initialize_megatron(extra_args_provider=add_extra_args)
     args = get_args()
-    hf_model = AutoModelForCausalLM.from_pretrained(args.load, trust_remote_code=True)
+    config = AutoConfig.from_pretrained(args.load)
+    hf_model = AutoModelForCausalLM.from_pretrained(args.load, trust_remote_code=True, torch_dtype=config.torch_dtype)
     mg_model = model_provider()
     convert_checkpoint_from_transformers_to_megatron(hf_model, mg_model, args)
     save_mgmodel(mg_model, args)
