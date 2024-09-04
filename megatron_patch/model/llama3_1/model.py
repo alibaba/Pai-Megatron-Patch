@@ -15,20 +15,33 @@
 import logging
 import math
 from typing import Dict, Literal, Optional, Tuple, Union
-from torch import Tensor
+
 import torch
 
 from megatron.core import InferenceParams, parallel_state, tensor_parallel
 from megatron.core.dist_checkpointing.mapping import ShardedStateDict
-from megatron.core.models.common.embeddings.language_model_embedding import LanguageModelEmbedding
+from megatron.core.models.common.embeddings.language_model_embedding import (
+    LanguageModelEmbedding,
+)
 from megatron.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
 from megatron.core.models.common.language_module.language_module import LanguageModule
 from megatron.core.packed_seq_params import PackedSeqParams
+from megatron.core.transformer.custom_layers.transformer_engine import (
+    TEColumnParallelLinear,
+    TEDotProductAttention,
+    TELayerNormColumnParallelLinear,
+    TENorm,
+    TERowParallelLinear,
+)
 from megatron.core.transformer.enums import AttnMaskType, ModelType
 from megatron.core.transformer.spec_utils import ModuleSpec
+from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
+from megatron.core.utils import make_tp_sharded_tensor_for_checkpoint
+from torch import Tensor
 
-from .transformer_block import TransformerBlock
+from .rms_norm import LLamaRMSNorm
+
 
 class GPTModel(LanguageModule):
     """GPT Transformer language model.
@@ -63,6 +76,7 @@ class GPTModel(LanguageModule):
         position_embedding_type: Literal[
             "learned_absolute", "rope"
         ] = "learned_absolute",
+        rotary_scaling_config: Optional[dict] = None,
         rotary_percent: float = 1.0,
         rotary_base: int = 10000,
         seq_len_interpolation_factor: Optional[float] = None,
@@ -103,6 +117,42 @@ class GPTModel(LanguageModule):
                 seq_len_interpolation_factor=seq_len_interpolation_factor,
                 rotary_base=rotary_base,
             )
+            if rotary_scaling_config is not None:
+                raw_inv_freq = self.rotary_pos_emb.inv_freq
+                # `8` in the original implementation
+                factor = rotary_scaling_config.get("factor", 8)
+                # `1` in the original implementation
+                low_freq_factor = rotary_scaling_config.get("low_freq_factor", 1)
+                # `4` in the original implementation
+                high_freq_factor = rotary_scaling_config.get("high_freq_factor", 4)
+                # `8192` in the original implementation
+                old_context_len = rotary_scaling_config.get(
+                    "original_max_position_embeddings", 8192
+                )
+
+                low_freq_wavelen = old_context_len / low_freq_factor
+                high_freq_wavelen = old_context_len / high_freq_factor
+
+                wavelen = 2 * math.pi / raw_inv_freq
+                # wavelen < high_freq_wavelen: do nothing
+                # wavelen > low_freq_wavelen: divide by factor
+                inv_freq_new = torch.where(
+                    wavelen > low_freq_wavelen, raw_inv_freq / factor, raw_inv_freq
+                )
+                # otherwise: interpolate between the two, using a smooth factor
+                smooth_factor = (old_context_len / wavelen - low_freq_factor) / (
+                    high_freq_factor - low_freq_factor
+                )
+                smoothed_inv_freq = (
+                    1 - smooth_factor
+                ) * inv_freq_new / factor + smooth_factor * inv_freq_new
+                is_medium_freq = ~(wavelen < high_freq_wavelen) * ~(
+                    wavelen > low_freq_wavelen
+                )
+                inv_freq_new = torch.where(
+                    is_medium_freq, smoothed_inv_freq, inv_freq_new
+                )
+                self.rotary_pos_emb.inv_freq = inv_freq_new
 
         # Transformer.
         self.decoder = TransformerBlock(
@@ -110,6 +160,7 @@ class GPTModel(LanguageModule):
             spec=transformer_layer_spec,
             pre_process=self.pre_process,
             post_process=self.post_process,
+            post_layer_norm=False,
         )
 
         # Output
@@ -127,6 +178,12 @@ class GPTModel(LanguageModule):
             else:
                 self.embedding_activation_buffer = None
                 self.grad_output_buffer = None
+
+            self.final_layernorm = LLamaRMSNorm(
+                config=self.config,
+                hidden_size=self.config.hidden_size,
+                eps=self.config.layernorm_epsilon,
+            )
 
             self.output_layer = tensor_parallel.ColumnParallelLinear(
                 config.hidden_size,
@@ -158,7 +215,9 @@ class GPTModel(LanguageModule):
         if not isinstance(input_tensor, list):
             input_tensor = [input_tensor]
 
-        assert len(input_tensor) == 1, 'input_tensor should only be length 1 for gpt/bert'
+        assert (
+            len(input_tensor) == 1
+        ), "input_tensor should only be length 1 for gpt/bert"
         self.decoder.set_input_tensor(input_tensor[0])
 
     def forward(
@@ -185,7 +244,9 @@ class GPTModel(LanguageModule):
         if decoder_input is not None:
             pass
         elif self.pre_process:
-            decoder_input = self.embedding(input_ids=input_ids, position_ids=position_ids)
+            decoder_input = self.embedding(
+                input_ids=input_ids, position_ids=position_ids
+            )
         else:
             # intermediate stage of pipeline
             # decoder will get hidden_states from encoder.input_tensor
@@ -193,7 +254,7 @@ class GPTModel(LanguageModule):
 
         # Rotary positional embeddings (embedding is None for PP intermediate devices)
         rotary_pos_emb = None
-        if self.position_embedding_type == 'rope':
+        if self.position_embedding_type == "rope":
             rotary_seq_len = self.rotary_pos_emb.get_rotary_seq_len(
                 inference_params, self.decoder, decoder_input, self.config
             )
@@ -212,6 +273,7 @@ class GPTModel(LanguageModule):
         if not self.post_process:
             return hidden_states
 
+        hidden_states = self.final_layernorm(hidden_states)
         # logits and loss
         output_weight = None
         if self.share_embeddings_and_output_weights:
@@ -227,9 +289,12 @@ class GPTModel(LanguageModule):
         return loss
 
     def sharded_state_dict(
-        self, prefix: str = '', sharded_offsets: tuple = (), metadata: Optional[Dict] = None
+        self,
+        prefix: str = "",
+        sharded_offsets: tuple = (),
+        metadata: Optional[Dict] = None,
     ) -> ShardedStateDict:
-        """ Sharded state dict implementation for GPTModel backward-compatibility (removing extra state).
+        """Sharded state dict implementation for GPTModel backward-compatibility (removing extra state).
 
         Args:
             prefix (str): Module name prefix.
@@ -239,14 +304,16 @@ class GPTModel(LanguageModule):
         Returns:
             ShardedStateDict: sharded state dict for the GPTModel
         """
-        sharded_state_dict = super().sharded_state_dict(prefix, sharded_offsets, metadata)
-        output_layer_extra_state_key = f'{prefix}output_layer._extra_state'
+        sharded_state_dict = super().sharded_state_dict(
+            prefix, sharded_offsets, metadata
+        )
+        output_layer_extra_state_key = f"{prefix}output_layer._extra_state"
 
         # Old GPT checkpoints only stored the output layer weight key. So we remove the _extra_state key
         # but check that it doesn't contain any data anyway
         output_extra_state = sharded_state_dict.pop(output_layer_extra_state_key, None)
         assert not (
             output_extra_state and output_extra_state.data
-        ), f'Expected output layer extra state to be empty, got: {output_extra_state}'
+        ), f"Expected output layer extra state to be empty, got: {output_extra_state}"
 
         return sharded_state_dict

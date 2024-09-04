@@ -2,65 +2,51 @@
 """Pretrain GPT."""
 
 import os
+import torch
 from functools import partial
 from typing import Union
-
-import torch
-import torch._dynamo
+from megatron.training import get_args
+from megatron.training import print_rank_0
+from megatron.training import get_timers
 from megatron.core import mpu
-from megatron.core.datasets.blended_megatron_dataset_builder import (
-    BlendedMegatronDatasetBuilder,
-)
-from megatron.core.datasets.gpt_dataset import (
-    GPTDataset,
-    GPTDatasetConfig,
-    MockGPTDataset,
-)
-from megatron.core.datasets.utils import get_blend_from_list
 from megatron.core.enums import ModelType
-from megatron.training import get_args, get_timers, pretrain, print_rank_0
-from megatron.training.arguments import core_transformer_config_from_args
+from megatron.core.datasets.blended_megatron_dataset_builder import BlendedMegatronDatasetBuilder
+from megatron.core.datasets.utils import get_blend_from_list
+from megatron.core.datasets.gpt_dataset import GPTDatasetConfig
+from megatron.core.datasets.gpt_dataset import MockGPTDataset, GPTDataset
+import megatron.legacy.model
+from megatron.training import pretrain
 from megatron.training.utils import (
-    average_losses_across_data_parallel_group,
     get_batch_on_this_cp_rank,
     get_batch_on_this_tp_rank,
+    average_losses_across_data_parallel_group
 )
-from megatron_patch.arguments import get_patch_args
+from megatron.training.arguments import core_transformer_config_from_args
+
+from megatron_patch.data.utils import get_batch_on_this_tp_rank_original
 from megatron_patch.data import build_pretrain_dataset_from_original
-
-from megatron_patch.data.utils import get_batch_on_this_tp_rank_original, get_batch_on_this_tp_rank_idxmap_sft
-from megatron_patch.model.qwen2.layer_specs import (
-    get_gpt_layer_local_spec,
-    get_gpt_layer_with_transformer_engine_spec,
-)
-from megatron_patch.model.qwen2.model import GPTModel
-from megatron_patch.model.qwen2.transformer_config import Qwen2TransformerConfig
-from megatron_patch.tokenizer import build_tokenizer, get_tokenizer
-
+from megatron_patch.model.llama3.layer_specs import get_gpt_layer_with_transformer_engine_spec,get_gpt_layer_local_spec
+from megatron_patch.model.llama3.model import GPTModel
+from megatron_patch.model.llama3.transformer_config import LLama3TransformerConfig
+from megatron_patch.arguments import get_patch_args
+from megatron_patch.tokenizer import get_tokenizer, build_tokenizer
+import torch._dynamo
 torch._dynamo.config.suppress_errors = True
 
-
-def model_provider(
-    pre_process=True, post_process=True
-) -> Union[GPTModel]:
+def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megatron.legacy.model.GPTModel]:
 
     args = get_args()
     build_tokenizer(args)
-    print_rank_0("building qwen2 model ...")
+    print_rank_0('building llama3 model ...')
 
-    config = core_transformer_config_from_args(args, Qwen2TransformerConfig)
+    config = core_transformer_config_from_args(args, LLama3TransformerConfig)
     use_te = args.transformer_impl == "transformer_engine"
 
     if use_te:
-        print_rank_0("building qwen2 model in TE...")
-        transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
-            args.num_experts, args.moe_grouped_gemm, args.qk_layernorm
-        )
+        transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm,
+                                                                            args.qk_layernorm)
     else:
-        print_rank_0("building qwen2 model in Mcore...")
-        transformer_layer_spec = get_gpt_layer_local_spec(
-            args.num_experts, args.moe_grouped_gemm, args.qk_layernorm
-        )
+        transformer_layer_spec = get_gpt_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
 
     model = GPTModel(
         config=config,
@@ -75,7 +61,7 @@ def model_provider(
         position_embedding_type=args.position_embedding_type,
         rotary_percent=args.rotary_percent,
         rotary_base=args.rotary_base,
-        seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor,
+        seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
     )
 
     return model
@@ -91,18 +77,14 @@ def get_batch(data_iterator):
     args = get_args()
 
     if "-Raw" in args.dataset:
-        if args.train_mode == "pretrain":
-            raise ValueError('The LLama-Pretrain-Raw dataset should only be used for finetuning!')
         # get batches based on the TP rank you are on
         batch = get_batch_on_this_tp_rank_original(data_iterator)
         # slice batch along sequence dimension for context parallelism
         batch = get_batch_on_this_cp_rank(batch)
+
     elif "-Idxmap" in args.dataset:
         # get batches based on the TP rank you are on
-        if args.train_mode == "pretrain":
-            batch = get_batch_on_this_tp_rank(data_iterator)
-        else:
-            batch = get_batch_on_this_tp_rank_idxmap_sft(data_iterator)
+        batch = get_batch_on_this_tp_rank(data_iterator)
         # slice batch along sequence dimension for context parallelism
         batch = get_batch_on_this_cp_rank(batch)
 
@@ -110,7 +92,6 @@ def get_batch(data_iterator):
         raise ValueError("please set correct --dataset ")
 
     return batch.values()
-
 
 def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
     """Loss function.
@@ -124,9 +105,7 @@ def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
     losses = output_tensor.float()
     loss_mask = loss_mask.view(-1).float()
     if args.context_parallel_size > 1:
-        loss = torch.cat(
-            [torch.sum(losses.view(-1) * loss_mask).view(1), loss_mask.sum().view(1)]
-        )
+        loss = torch.cat([torch.sum(losses.view(-1) * loss_mask).view(1), loss_mask.sum().view(1)])
         torch.distributed.all_reduce(loss, group=mpu.get_context_parallel_group())
         loss = loss[0] / loss[1]
     else:
@@ -136,14 +115,14 @@ def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
     if args.check_for_nan_in_loss_and_grad:
         global_rank = torch.distributed.get_rank()
         assert not loss.isnan(), (
-            f"Rank {global_rank}: found NaN in local forward loss calculation. "
-            f"Device: {torch.cuda.current_device()}, node: {os.uname()[1]}"
+            f'Rank {global_rank}: found NaN in local forward loss calculation. '
+            f'Device: {torch.cuda.current_device()}, node: {os.uname()[1]}'
         )
 
     # Reduce loss for logging.
     averaged_loss = average_losses_across_data_parallel_group([loss])
 
-    return loss * args.context_parallel_size, {"lm loss": averaged_loss[0]}
+    return loss * args.context_parallel_size, {'lm loss': averaged_loss[0]}
 
 
 def forward_step(data_iterator, model: GPTModel):
@@ -157,18 +136,18 @@ def forward_step(data_iterator, model: GPTModel):
     args = get_args()
 
     # Get the batch.
-    timers("batch-generator", log_level=2).start()
-    tokens, labels, loss_mask, attention_mask, position_ids = get_batch(data_iterator)
-    timers("batch-generator").stop()
-    output_tensor = model(tokens, position_ids, attention_mask, labels=labels)
+    timers('batch-generator', log_level=2).start()
+    tokens, labels, loss_mask, attention_mask, position_ids = get_batch(
+        data_iterator)
+    timers('batch-generator').stop()
+    output_tensor = model(tokens, position_ids, attention_mask,
+                          labels=labels)
 
     return output_tensor, partial(loss_func, loss_mask)
 
 
 def is_dataset_built_on_rank():
-    return (
-        mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()
-    ) and mpu.get_tensor_model_parallel_rank() == 0
+    return (mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()) and mpu.get_tensor_model_parallel_rank() == 0
 
 
 def core_gpt_dataset_config_from_args(args):
@@ -181,7 +160,7 @@ def core_gpt_dataset_config_from_args(args):
         blend_per_split=[
             get_blend_from_list(args.train_data_path),
             get_blend_from_list(args.valid_data_path),
-            get_blend_from_list(args.test_data_path),
+            get_blend_from_list(args.test_data_path)
         ],
         split=args.split,
         num_dataset_builder_threads=args.num_dataset_builder_threads,
@@ -214,7 +193,10 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
         else:
             dataset_type = GPTDataset
         train_ds, valid_ds, test_ds = BlendedMegatronDatasetBuilder(
-            dataset_type, train_val_test_num_samples, is_dataset_built_on_rank, config
+            dataset_type,
+            train_val_test_num_samples,
+            is_dataset_built_on_rank,
+            config
         ).build()
 
         print_rank_0("> finished creating GPT datasets ...")
@@ -226,10 +208,8 @@ if __name__ == "__main__":
 
     train_valid_test_datasets_provider.is_distributed = True
 
-    pretrain(
-        train_valid_test_datasets_provider,
-        model_provider,
-        ModelType.encoder_or_decoder,
-        forward_step,
-        extra_args_provider=get_patch_args,
-    )
+    pretrain(train_valid_test_datasets_provider,
+             model_provider,
+             ModelType.encoder_or_decoder,
+             forward_step,
+             extra_args_provider=get_patch_args)

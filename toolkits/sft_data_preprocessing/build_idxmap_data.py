@@ -1,6 +1,17 @@
-# Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2023 Alibaba PAI and Nvidia Megatron-LM Team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-"""Processing large data for pretraining."""
 import argparse
 import math
 import json
@@ -10,87 +21,47 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.path.pardir)))
 import time
 import gzip
-import glob
-import torch
-import numpy as np
 import multiprocessing
-try:
-    import nltk
-    nltk_available = True
-except ImportError:
-    nltk_available = False
 
 from megatron.core.datasets import indexed_dataset
 from megatron_patch.tokenizer import build_tokenizer
 
-
-class IdentitySplitter(object):
-    def tokenize(self, *text):
-        return text
-
-
 class Encoder(object):
     def __init__(self, args):
         self.args = args
+        self.seq_length = self.args.seq_length
 
     def initializer(self):
-        # Use Encoder class as a container for global data
         Encoder.tokenizer = build_tokenizer(self.args)
-        if self.args.split_sentences:
-            if not nltk_available:
-                print("NLTK is not available to split sentences.")
-                exit()
-            if os.environ.get("NLTK_DATA"):
-                library = os.path.join(os.environ.get("NLTK_DATA"), "tokenizers", "punkt", f"{self.args.lang}.pickle")
-                url = f"file:{library}"
-            else:
-                library = os.path.join("tokenizers", "punkt", f"{self.args.lang}.pickle")
-                url = f"nltk:{library}"
-            splitter = nltk.load(url)
-            Encoder.splitter = splitter
-
-        else:
-            Encoder.splitter = IdentitySplitter()
-
-    def split(self, json_line):
-        data = json.loads(json_line)
-        output = {}
-        for key in self.args.json_keys:
-            text = data[key]
-            max_len = 1000000
-            tokens_list = [Encoder.splitter.tokenize(text[i:i+max_len]) for i in range(0, len(text), max_len)]
-            output[key] = [tokens for partial in tokens_list for tokens in partial]
-        return json.dumps(output), len(json_line)
 
     def encode(self, json_line):
         data = json.loads(json_line)
         ids = {}
         lens = {}
-        for key in self.args.json_keys:
-            text = data[key]
-            if isinstance(text, list):
-                sentences = text
-            else:
-                sentences = [text]
-            doc_ids = []
-            sentence_lens = []
-            for sentence in sentences:
-                if self.args.patch_tokenizer_type in ["DeepSeekV2Tokenizer", "Qwen2Tokenizer", "LLama3Tokenizer"]:
-                    sentence_ids = Encoder.tokenizer.tokenizer(sentence, add_special_tokens=False)['input_ids']
-                else:
-                    sentence_ids = Encoder.tokenizer(sentence, add_special_tokens=False)['input_ids']
-                if max(sentence_ids) >= Encoder.tokenizer.vocab_size:
-                    print(text)
-                    print(max(sentence_ids))
-                    continue
-                if len(sentence_ids) > 0:
-                    doc_ids.extend(sentence_ids)
-                    sentence_lens.append(len(sentence_ids))
-            if len(doc_ids) > 0 and self.args.append_eod:
-                doc_ids.append(Encoder.tokenizer.eod)
-                sentence_lens[-1] += 1
-            ids[key] = doc_ids
-            lens[key] = sentence_lens
+        input = data["instruction"]+data['input']
+        output = data['output']
+
+        doc_ids = []
+        sentence_lens = []
+        for input, output in zip([input], [output]):
+            input_ids = Encoder.tokenizer.tokenizer(input, add_special_tokens=False)['input_ids']
+            output_ids = Encoder.tokenizer.tokenizer(output, add_special_tokens=False)['input_ids']
+            sentence_ids = [Encoder.tokenizer.sep_token_id] + input_ids + [Encoder.tokenizer.sep_token_id] + output_ids + [Encoder.tokenizer.eod]
+            if max(input_ids) >= Encoder.tokenizer.vocab_size or max(output_ids) >= Encoder.tokenizer.vocab_size:
+                continue
+
+            # Need Padding
+            if self.seq_length > len(sentence_ids):
+                sentence_ids = sentence_ids + [Encoder.tokenizer.pad_token_id] * (self.seq_length-len(sentence_ids))
+            elif self.seq_length < len(sentence_ids):
+                sentence_ids = sentence_ids[:self.seq_length]
+
+            if len(sentence_ids) > 0:
+                doc_ids.extend(sentence_ids)
+                sentence_lens.append(len(sentence_ids))
+
+        ids['text'] = doc_ids
+        lens['text'] = sentence_lens
         return ids, lens, len(json_line)
 
 
@@ -98,6 +69,7 @@ class Partition(object):
     def __init__(self, args, workers):
         self.args = args
         self.workers = workers
+        self.args = get_args()
 
     def print_processing_stats(self, count, proc_start, total_bytes_processed):
         if count % self.args.log_interval == 0:
@@ -108,27 +80,6 @@ class Partition(object):
                   f"({count/elapsed} docs/s, {mbs} MB/s).",
                   file=sys.stderr)
 
-    def split_sentences(self, file_name):
-        input_file_name, output_file_name = file_name
-        print("Opening", input_file_name)
-        fin = open(input_file_name, 'r', encoding='utf-8')
-        fout = open(output_file_name, 'w')
-
-        encoder = Encoder(self.args)
-        pool = multiprocessing.Pool(self.workers, initializer=encoder.initializer)
-        split_docs = pool.imap(encoder.split, fin, 32)
-
-        proc_start = time.time()
-        total_bytes_processed = 0
-        for i, (doc, bytes_processed) in enumerate(split_docs, start=1):
-            total_bytes_processed += bytes_processed
-            fout.write(doc + "\n")
-            self.print_processing_stats(i, proc_start, total_bytes_processed)
-
-        fin.close()
-        fout.close()
-
-
     def process_json_file(self, file_name):
         input_file_name, output_prefix = file_name
         print("Opening", input_file_name)
@@ -137,17 +88,18 @@ class Partition(object):
         startup_start = time.time()
         encoder = Encoder(self.args)
         tokenizer = build_tokenizer(self.args)
-        pool = multiprocessing.Pool(self.workers, initializer=encoder.initializer)
-        encoded_docs = pool.imap(encoder.encode, fin, 32)
+
+        if self.args.debug:
+            encoder.initializer()
+            encoded_docs = (encoder.encode(doc) for doc in fin)
+        else:
+            pool = multiprocessing.Pool(self.workers, initializer=encoder.initializer)
+            encoded_docs = pool.imap(encoder.encode, fin, 32)
 
         level = "document"
-        if self.args.split_sentences:
-            level = "sentence"
-
         output_bin_files = {}
         output_idx_files = {}
         builders = {}
-
         for key in self.args.json_keys:
             output_bin_files[key] = "{}_{}_{}.bin".format(output_prefix,
                                                           key, level)
@@ -179,8 +131,6 @@ def get_args():
                        help='Path to input JSON')
     group.add_argument('--json-keys', nargs='+', default=['text'],
                        help='space separate listed of keys to extract from json')
-    group.add_argument('--split-sentences', action='store_true',
-                       help='Split documents into sentences.')
     group.add_argument('--keep-newlines', action='store_true',
                        help='Keep newlines between sentences when splitting.')
 
@@ -200,6 +150,8 @@ def get_args():
     group.add_argument('--merge-file', type=str, default=None,
                        help='Path to the BPE merge file (if necessary).')
     group.add_argument('--append-eod', action='store_true',
+                       help='Append an <eod> token to the end of a document.')
+    group.add_argument('--debug', action='store_true',
                        help='Append an <eod> token to the end of a document.')
     group.add_argument('--lang', type=str, default='english',
                        help='Language to use for NLTK-powered sentence splitting.')
@@ -278,13 +230,6 @@ def check_files_exist(in_ss_out_names, key, num_partitions):
 def main():
     args = get_args()
 
-    if args.split_sentences:
-        if nltk_available:
-            nltk.download("punkt", quiet=True, download_dir=os.environ.get("NLTK_DATA"))
-        else:
-            raise Exception(
-                "nltk library required for sentence splitting is not available.")
-
     in_ss_out_names = []
     if args.partitions == 1:
         file_name, extension = os.path.splitext(args.input)
@@ -352,33 +297,19 @@ def main():
     assert args.workers % args.partitions == 0
     partition = Partition(args, args.workers//args.partitions)
 
-    # check to see if paritions with split sentences already created
-    split_sentences_present = check_files_exist(in_ss_out_names, 'sentence_split', args.partitions)
-
-    # split sentences in partition files
-    if args.split_sentences and not split_sentences_present:
-        processes = []
-        for name in in_ss_out_names:
-            p = multiprocessing.Process(target=partition.split_sentences,
-                                        args=((name['partition'], name['sentence_split']),))
-            p.start()
-            processes.append(p)
-
-        for p in processes:
-            p.join()
-
-        if args.partitions == 1:
-            return
-
-
     # encode partition files in parallel
     processes = []
-    input_key = 'sentence_split' if args.split_sentences else 'partition'
+    input_key = 'partition'
+
     for name in in_ss_out_names:
-        p = multiprocessing.Process(target=partition.process_json_file,
-                                    args=((name[input_key], name['output_prefix']),))
-        p.start()
-        processes.append(p)
+        if args.debug:
+            partition.process_json_file((name[input_key], name['output_prefix']))
+        else:
+
+            p = multiprocessing.Process(target=partition.process_json_file,
+                                        args=((name[input_key], name['output_prefix']),))
+            p.start()
+            processes.append(p)
 
     for p in processes:
         p.join()
@@ -388,8 +319,6 @@ def main():
 
     # merge bin/idx partitions
     level = "document"
-    if args.split_sentences:
-        level = "sentence"
 
     output_bin_files = {}
     output_idx_files = {}

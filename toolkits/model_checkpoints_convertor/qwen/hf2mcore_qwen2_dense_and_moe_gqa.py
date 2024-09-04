@@ -2,6 +2,8 @@ import os
 import re
 import json
 import torch
+import copy
+import safetensors
 from collections import defaultdict
 from transformers import (
     AutoConfig,
@@ -52,6 +54,11 @@ def add_model_args(parser):
     parser.add_argument(
         "--hf-ckpt-path",
         type=str
+    )
+
+    parser.add_argument(
+        "--save-safetensors",
+        action='store_false',
     )
 
     return parser
@@ -744,9 +751,19 @@ def save_hfmodel(args, model):
     shards, index = shard_checkpoint(output_state_dict, max_shard_size=max_shard_size)
     os.makedirs(args.save, exist_ok=True)
     for shard_file, shard in shards.items():
-        target_file = os.path.join(args.save, shard_file)
-        print(f'huggingface model is save to {target_file}')
-        torch.save(shard, target_file)
+        if args.save_safetensors:
+            shard_file = shard_file.replace("pytorch_", "")
+            shard_file = shard_file.replace(".bin", ".safetensors")
+            target_file = os.path.join(args.save, shard_file)
+            print(f'huggingface model is save to {target_file}')
+            new_shard = {}
+            for k, v in shard.items():
+                new_shard[k] = copy.deepcopy(v)
+            safetensors.torch.save_file(new_shard, target_file, metadata={"format": "pt"})
+        else:
+            target_file = os.path.join(args.save, shard_file)
+            print(f'huggingface model is save to {target_file}')
+            torch.save(shard, target_file)
 
     if index is None:
         print(f"Model weights saved in {os.path.join(args.save, WEIGHTS_NAME)}")

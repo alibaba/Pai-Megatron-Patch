@@ -13,6 +13,9 @@
       * [Megatron-LM模型格式转换](#Megatron-LM-Dense模型转成Huggingface格式)
       * [运行评估工具](#运行评估工具)
 
+> Pai-Megatron-Patch 目前已支持[LLaMA3.1](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama3_1/README.md), 
+> 推荐您使用LLaMA3.1 代替 LLaMA3 以享受Pai-Megatron-Patch中最新集成的优化技术。
+
 # 安装
 推荐使用英伟达提供的官方镜像 nvcr.io/nvidia/pytorch:23.12-py3 来创建容器
 

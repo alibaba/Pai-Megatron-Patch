@@ -30,8 +30,9 @@ from megatron.core.transformer.identity_op import IdentityOp
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_layer import TransformerLayer, TransformerLayerSubmodules
 
-from .transformer.mlp import MLP, MLPSubmodules
-from .transformer.attention import SelfAttention, SelfAttentionSubmodules
+from megatron.core.transformer.mlp import MLP, MLPSubmodules
+from megatron.core.transformer.attention import SelfAttention, SelfAttentionSubmodules
+
 from .rms_norm import LLamaRMSNorm
 # Use this spec to use lower level Transformer Engine modules (required for fp8 training)
 def get_gpt_layer_with_transformer_engine_spec(
@@ -60,7 +61,6 @@ def get_gpt_layer_with_transformer_engine_spec(
             mlp_bda=get_bias_dropout_add,
         ),
     )
-
 
 # Use this spec for an implementation using only modules in megatron core
 def get_gpt_layer_local_spec(

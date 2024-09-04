@@ -29,12 +29,12 @@ from megatron_patch.arguments import get_patch_args
 from megatron_patch.data import build_pretrain_dataset_from_original
 
 from megatron_patch.data.utils import get_batch_on_this_tp_rank_original, get_batch_on_this_tp_rank_idxmap_sft
-from megatron_patch.model.qwen2.layer_specs import (
+from megatron_patch.model.llama3_1.layer_specs import (
     get_gpt_layer_local_spec,
     get_gpt_layer_with_transformer_engine_spec,
 )
-from megatron_patch.model.qwen2.model import GPTModel
-from megatron_patch.model.qwen2.transformer_config import Qwen2TransformerConfig
+from megatron_patch.model.llama3_1.model import GPTModel
+from megatron_patch.model.llama3_1.transformer_config import LLama3TransformerConfig
 from megatron_patch.tokenizer import build_tokenizer, get_tokenizer
 
 torch._dynamo.config.suppress_errors = True
@@ -46,18 +46,18 @@ def model_provider(
 
     args = get_args()
     build_tokenizer(args)
-    print_rank_0("building qwen2 model ...")
+    print_rank_0("building llama3.1 model ...")
 
-    config = core_transformer_config_from_args(args, Qwen2TransformerConfig)
+    config = core_transformer_config_from_args(args, LLama3TransformerConfig)
     use_te = args.transformer_impl == "transformer_engine"
 
     if use_te:
-        print_rank_0("building qwen2 model in TE...")
+        print_rank_0("building llama3.1 model in TE...")
         transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
             args.num_experts, args.moe_grouped_gemm, args.qk_layernorm
         )
     else:
-        print_rank_0("building qwen2 model in Mcore...")
+        print_rank_0("building llama3.1 model in Mcore...")
         transformer_layer_spec = get_gpt_layer_local_spec(
             args.num_experts, args.moe_grouped_gemm, args.qk_layernorm
         )
@@ -75,6 +75,7 @@ def model_provider(
         position_embedding_type=args.position_embedding_type,
         rotary_percent=args.rotary_percent,
         rotary_base=args.rotary_base,
+        rotary_scaling_config=dict(),  # The default scaling config used by llama3.1
         seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor,
     )
 
