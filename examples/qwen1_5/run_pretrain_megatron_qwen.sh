@@ -233,7 +233,7 @@ megatron_options="  \
         --num-workers 8 \
         --seed 1234 \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type QwenTokenizer \
+        --patch-tokenizer-type Qwen2Tokenizer \
         --swiglu \
         --normalization RMSNorm \
         --use-llama2-rotary-position-embeddings \

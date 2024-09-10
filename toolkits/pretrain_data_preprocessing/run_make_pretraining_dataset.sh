@@ -1,7 +1,7 @@
 #! /bin/bash
 START_TIME=$SECONDS
 MEGATRON_PATCH_PATH=$1
-MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-240126
+MEGATRON_PATH=${MEGATRON_PATCH_PATH}/Megatron-LM-240405
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATCH_PATH}:$PYTHONPATH
 input_data_dir=$2
 tokenizer=$3
@@ -109,7 +109,7 @@ elif [ $tokenizer = "qwenbpe" ]; then
   --input ${INPUT} \
   --output-prefix ${output_data_dir}/wudao_qwenbpe \
   --dataset-impl mmap \
-  --patch-tokenizer-type QwenTokenizer \
+  --patch-tokenizer-type Qwen2Tokenizer \
   --load ${load_dir} \
   --workers 16 \
   --append-eod
