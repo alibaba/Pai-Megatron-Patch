@@ -182,7 +182,7 @@ TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 
-NAME="${ENV}-pretrain-megatron-gpt3-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
+NAME="${ENV}-pretrain-megatron-qwen-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
 mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
 mkdir -p "${OUTPUT_BASEPATH}/log/"
@@ -233,7 +233,7 @@ megatron_options="  \
         --num-workers 8 \
         --seed 1234 \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type LLamaTokenizer \
+        --patch-tokenizer-type QwenTokenizer \
         --swiglu \
         --normalization RMSNorm \
         --use-llama2-rotary-position-embeddings \
