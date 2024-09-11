@@ -310,6 +310,10 @@ class LLamaIdxMapDataset(torch.utils.data.Dataset):
     def gpt_convert_example_to_feature(self, sample):
         input_ids, labels = sample
         loss_mask = np.ones(labels.shape, dtype=np.int64)
+        # Check and adjust loss mask only if bos_token_id is available qwenTokenizer and qwen2Tokenizer does not have bos_token_id
+        if hasattr(self.tokenizer, 'bos_token_id'):
+            loss_mask[labels == self.tokenizer.bos_token_id] = 0
+        # loss_mask[labels == self.tokenizer.bos_token_id] = 0
         loss_mask[labels == self.tokenizer.bos_token_id] = 0
         loss_mask[labels == self.tokenizer.pad_token_id] = 0
         train_sample = {
