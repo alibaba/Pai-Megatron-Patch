@@ -375,7 +375,7 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
                 hflayer.mlp.shared_expert.up_proj.weight.copy_(shared_expert_up_weight)
                 hflayer.mlp.shared_expert.down_proj.weight.copy_(mglayer.mlp.shared_expert.linear_fc2.weight)
 
-            if use_te:
+            if use_te and not args.num_experts:
                 hflayer.post_attention_layernorm.weight.copy_(mglayer.mlp.linear_fc1.layer_norm_weight)
             else:
                 hflayer.post_attention_layernorm.weight.copy_(mglayer.pre_mlp_layernorm.weight)
@@ -903,15 +903,18 @@ def main():
     args = get_args()
 
     if args.convert_checkpoint_from_megatron_to_transformers:
-        hf_model = AutoModelForCausalLM.from_pretrained(args.hf_ckpt_path)
+        config = AutoConfig.from_pretrained(args.hf_ckpt_path)
+        hf_model = AutoModelForCausalLM.from_pretrained(args.hf_ckpt_path, torch_dtype=config.torch_dtype)
         mg_model = load_megatron_model(args)
         convert_checkpoint_from_megatron_to_transformers(mg_model, hf_model, args)
         save_hfmodel(args, hf_model)
     else:
-        hf_model = AutoModelForCausalLM.from_pretrained(args.load)
+        config = AutoConfig.from_pretrained(args.load)
+        hf_model = AutoModelForCausalLM.from_pretrained(args.load, torch_dtype=config.torch_dtype)
         mg_model = model_provider()
         convert_checkpoint_from_transformers_to_megatron(hf_model, mg_model, args)
-        check_hf_mg_forward(hf_model, mg_model, args)
+        if not args.num_experts:
+            check_hf_mg_forward(hf_model, mg_model, args)
         save_mgmodel(mg_model, args)
 
 if __name__ == "__main__":
