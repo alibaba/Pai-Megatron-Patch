@@ -36,6 +36,7 @@ from megatron_patch.model.qwen2.layer_specs import (
 from megatron_patch.model.qwen2.model import GPTModel
 from megatron_patch.model.qwen2.transformer_config import Qwen2TransformerConfig
 from megatron_patch.tokenizer import build_tokenizer, get_tokenizer
+from megatron.core.packed_seq_params import PackedSeqParams
 
 torch._dynamo.config.suppress_errors = True
 
@@ -86,7 +87,7 @@ def get_batch(data_iterator):
 
     # TODO: this is pretty hacky, find a better way
     if (not mpu.is_pipeline_first_stage()) and (not mpu.is_pipeline_last_stage()):
-        return None, None, None, None, None
+        return None, None, None, None, None, None
 
     args = get_args()
 
@@ -97,19 +98,42 @@ def get_batch(data_iterator):
         batch = get_batch_on_this_tp_rank_original(data_iterator)
         # slice batch along sequence dimension for context parallelism
         batch = get_batch_on_this_cp_rank(batch)
+
+        return tuple([*batch.values(), None])
     elif "-Idxmap" in args.dataset:
         # get batches based on the TP rank you are on
         if args.train_mode == "pretrain":
             batch = get_batch_on_this_tp_rank(data_iterator)
         else:
             batch = get_batch_on_this_tp_rank_idxmap_sft(data_iterator)
+        
+        packed_seq_params = None
+        if args.reset_position_ids:
+            # sequence-packing, build cu_seqlens
+            position_ids = batch.get('position_ids', None)
+            if position_ids is not None:
+                # mbs = 1
+                position_ids = position_ids[0] # shape: [seq_length]
+                start_indices = (position_ids == 0).nonzero(as_tuple=True)[0]
+                seqlens = start_indices[1:] - start_indices[:-1]
+                # NOTE: cu_seqlens: [0, A1, A1+A2, A1+A2+A3, ..., seq_len]
+                cu_seqlens = torch.zeros(start_indices.shape[0] + 1, device=position_ids.device, dtype=torch.int)
+                cu_seqlens[1:-1] = torch.cumsum(seqlens, dim=0)
+                cu_seqlens[-1] = position_ids.shape[0]
+                packed_seq_params = PackedSeqParams(
+                    cu_seqlens_q=cu_seqlens,
+                    cu_seqlens_kv=cu_seqlens,
+                    qkv_format='thd'
+                )
+        
+        if packed_seq_params is not None and args.context_parallel_size > 1:
+            raise ValueError('Sequence Packing is not supported when CP>1 !')
         # slice batch along sequence dimension for context parallelism
         batch = get_batch_on_this_cp_rank(batch)
 
+        return tuple([*batch.values(), packed_seq_params])
     else:
         raise ValueError("please set correct --dataset ")
-
-    return batch.values()
 
 
 def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
@@ -158,9 +182,9 @@ def forward_step(data_iterator, model: GPTModel):
 
     # Get the batch.
     timers("batch-generator", log_level=2).start()
-    tokens, labels, loss_mask, attention_mask, position_ids = get_batch(data_iterator)
+    tokens, labels, loss_mask, attention_mask, position_ids, packed_seq_params = get_batch(data_iterator)
     timers("batch-generator").stop()
-    output_tensor = model(tokens, position_ids, attention_mask, labels=labels)
+    output_tensor = model(tokens, position_ids, attention_mask, labels=labels, packed_seq_params=packed_seq_params)
 
     return output_tensor, partial(loss_func, loss_mask)
 
