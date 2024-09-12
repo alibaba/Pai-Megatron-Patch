@@ -64,6 +64,64 @@ qwen-datasets
    └── mmap_qwen2_sft_datasets_text_document.idx
 ```
 
+#### Sequence Packing
+
+目前Pai-Megatron-Patch中的部分模型(LLaMA3.1, Qwen-2等)已支持基于mmap格式的Sequence-Packing训练，为此，您首先需要按照下列步骤准备打包后的数据集
+
+1. 下载json数据集
+2. 打包SFT样本
+
+为了实现Sequence Packing，在json格式的基础上，您需要决定每个Sequence包含的样本。具体而言，您需要进一步将训练时被packing的多个json文本放至同一列以实现打包。
+例如，下列代码将qwen_sft数据集按顺序分组，使得每组packing后的长度不超过2048。为了提高Packing的效率，您也可以自行拓展脚本来使用其他策略
+
+```python
+
+from transformers import AutoTokenizer
+import json
+import pdb
+tokenizer = AutoTokenizer.from_pretrained("/mnt/qwen-ckpts/Qwen2-0.5B")
+seqlen = 2048
+example_len_map = dict()
+with open("/mnt/qwen-datasets/qwen_sft.json") as f:
+    for line in f:
+        line = line.strip()
+        example = json.loads(line)
+        input = example["instruction"]+example['input']
+        output = example['output']
+        input_ids = tokenizer(input, add_special_tokens=False)['input_ids']
+        output_ids = tokenizer(output, add_special_tokens=False)['input_ids']
+        example_len_map[line] = len(input_ids) + len(output_ids) + 3
+
+example_group = []
+len_group = []
+with open("/mnt/qwen-datasets/packed_qwen_sft.json", 'w', encoding='utf8') as f:
+    for example, len in example_len_map.items():
+        example = json.loads(example)
+        if sum(len_group) <= seqlen:
+            example_group.append(example)
+            len_group.append(len)
+        else:
+            last_example = example_group[-1]
+            last_example_len = len_group[-1]
+            assert last_example_len <= seqlen
+            json_string = json.dumps(example_group[:-1], ensure_ascii=False)
+            f.write(json_string+"\n")
+            example_group = [last_example]+[example]
+            len_group = [last_example_len]+[len]
+```
+
+3. 在完成json格式数据打包后，运行下列命令来获得用于LLaMA3.1 SFT的packed mmap数据集
+```
+bash run_build_packed_idxmap_sft_dataset.sh \
+/workspace/llama-datasets/packed_qwen_sft.json \
+LLama3Tokenizer \
+2048 \
+/workspace/llama-datasets/packed_sft_dataset \
+/workspace/Meta-Llama-3.1-8B
+```
+
+4. 微调训练时，设置`SFT=true`，同时设置环境变量`MP_SFT_PACKING=true`即可使用Sequence Packing。
+
 #### 小规模预处理数据下载试用
 为方便用户试用，我们也提供了已经处理好的小规模数据，可直接下载使用
 ```bash

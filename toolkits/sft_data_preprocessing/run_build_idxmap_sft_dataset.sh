@@ -12,7 +12,7 @@ output_data_path=$4
 load_dir=$5
 
 if [ $tokenizer = "Qwen2Tokenizer" ]; then
-  python build_idxmap_data.py\
+  python build_idxmap_sft_dataset.py \
   --input ${input_data_path} \
   --output-prefix ${output_data_path} \
   --patch-tokenizer-type Qwen2Tokenizer \
@@ -22,7 +22,7 @@ if [ $tokenizer = "Qwen2Tokenizer" ]; then
   --partitions 1 \
 
 elif [ $tokenizer = "LLama3Tokenizer" ]; then
-  python build_idxmap_data.py\
+  python build_idxmap_sft_dataset.py \
   --input ${input_data_path} \
   --output-prefix ${output_data_path} \
   --patch-tokenizer-type LLama3Tokenizer \

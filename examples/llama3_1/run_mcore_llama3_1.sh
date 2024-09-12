@@ -36,6 +36,15 @@ else
         --num-layers-per-virtual-pipeline-stage ${MP_VP}"
 fi
 
+if [ ${MP_SFT_PACKING} = true ]; then
+    packing_options=" \
+        --reset-position-ids \
+        --no-create-attention-mask-in-dataloader
+    "
+else
+    packing_options=""
+fi
+
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 EXTRA_VOCAB_SIZE=256
 
@@ -312,7 +321,7 @@ megatron_options="  \
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_llama.py
  ${megatron_options} ${dataset_option} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} \
- ${do_options} ${sp_options} ${gqa_options} ${offload_option} ${comm_overlap_option} ${sft_option} ${vp_options}"
+ ${do_options} ${sp_options} ${gqa_options} ${offload_option} ${comm_overlap_option} ${sft_option} ${vp_options} ${packing_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

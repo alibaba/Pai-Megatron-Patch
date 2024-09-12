@@ -38,6 +38,7 @@ Pai-Megatron-Patch是各类开源大模型和Megatron训练加速引擎之间的
 - [阿里云PAI获得FewCLUE基于大模型的小样本学习双料冠军](https://developer.aliyun.com/article/788081?spm=a2c6h.12873639.article-detail.17.11c5383cHpFZks&tlog=yuekan_8)
 
 新功能：
+- **支持Qwen2及LLaMA-3.1系列模型SFT的Sequence Packing技术.** [🔥🔥 2024.09.13]
 - **升级Qwen2系列模使用Flash-Attention 3, Offloading, Comm-Overlapping训练微调** [🔥🔥 2024.08.23]
 - **支持LLaMA-3.1系列模使用Flash-Attention3训练微调** [🔥🔥 2024.08.23]
 - **支持用Megatron-Core框架训练LLaMA-3.1系列模型** [🔥🔥 2024.08.23]
