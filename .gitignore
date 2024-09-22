@@ -2,3 +2,5 @@
 Megatron-LM-*
 LM-Evaluation-Harness*
 Bigcode-Evaluation-Harness*
+**/__pycache__
+.vscode

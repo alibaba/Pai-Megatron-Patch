@@ -134,7 +134,7 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator):
             return
         torch.distributed.broadcast(item, mpu.get_tensor_model_parallel_src_rank(),
                                     group=mpu.get_tensor_model_parallel_group())
-
+        
     if mpu.get_tensor_model_parallel_rank() == 0:
 
         if isinstance(data_iterator, dict):
@@ -142,32 +142,14 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator):
         else:
             data = next(data_iterator)
 
-
-        tokens = data['tokens'].long()
-        labels = torch.roll(data['tokens'].long(), shifts=-1, dims=1)
-        labels[:, -1] = tokenizer.pad_token_id
-        # NOTE: assert lengths of tokens/labels are sequence-length
-        assert args.seq_length == labels.shape[-1]
-
-        # NOTE: mask labels on special tokens and input, only output_ids have labels
-        for i in range(labels.shape[0]):
-            sep_index = (tokens[i] == tokenizer.sep_token_id).nonzero(as_tuple=True)[0]
-            
-            if len(sep_index) % 2 != 0 or sep_index.numel() == 0:
-                try:
-                    input_str = tokenizer.decode(tokens[i])
-                except:
-                    input_str = tokenizer.tokenizer.decode(tokens[i])
-                raise ValueError(f'Got a input with invalid format, input "{input_str}"')
-            
-            for start_idx, end_idx in sep_index.tensor_split(len(sep_index) // 2):
-                labels[i, start_idx - 1:end_idx - 1] = -100        
-        labels[labels == tokenizer.pad_token_id] = -100
-        labels[labels == tokenizer.sep_token_id] = -100
-        loss_mask = torch.ones_like(labels, dtype=torch.float)
-        if args.eod_mask_loss:
-            loss_mask[labels == -100] = 0.0
-
+        # sanity check
+        assert data['tokens'].shape[-1] == 2 * args.seq_length
+        actual_seqlen = args.seq_length
+        data['tokens'] = data['tokens'].long()
+        tokens = data['tokens'][..., :actual_seqlen]
+        labels = data['tokens'][..., actual_seqlen:]
+        loss_mask = (labels != -100).float()
+        
         attention_mask, _, position_ids = get_ltor_masks_and_position_ids(
             tokens,
             tokenizer.eod,
@@ -176,7 +158,7 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator):
             False,
             args.create_attention_mask_in_dataloader
         )
-
+        # dtype: long, long, float, bool, long
         batch = {
             'tokens': tokens.cuda(non_blocking=True),
             'labels': labels.cuda(non_blocking=True),
@@ -203,7 +185,7 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator):
         _broadcast(batch['position_ids'])
 
     else:
-
+        # dtype: long, long, float, bool, long
         tokens = torch.empty((args.micro_batch_size, args.seq_length), dtype=torch.int64,
                              device=torch.cuda.current_device())
         labels = torch.empty((args.micro_batch_size, args.seq_length), dtype=torch.int64,
