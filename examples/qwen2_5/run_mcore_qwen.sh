@@ -58,27 +58,26 @@ PR=$9
 TP=${10}
 PP=${11}
 CP=${12}
-EP=${13}
-SP=${14}
-DO=${15}
-FL=${16}
-SFT=${17}
+SP=${13}
+DO=${14}
+FL=${15}
+SFT=${16}
 ### PARALLEL / BOOL OPTION ###
 
 ### OTHERS ###
-AC=${18}
-OPTIMIZER_OFFLOAD=${19}
-SAVE_INTERVAL=${20}
-DATASET_PATH=${21}
-VALID_DATASET_PATH=${22}
-PRETRAIN_CHECKPOINT_PATH=${23}
+AC=${17}
+OPTIMIZER_OFFLOAD=${18}
+SAVE_INTERVAL=${19}
+DATASET_PATH=${20}
+VALID_DATASET_PATH=${21}
+PRETRAIN_CHECKPOINT_PATH=${22}
 
 # the following two values will not be used when SFT is true
-TRAIN_TOKENS=${24}
-WARMUP_TOKENS=${25}
+TRAIN_TOKENS=${23}
+WARMUP_TOKENS=${24}
 ###############################
 
-OUTPUT_BASEPATH=${26}
+OUTPUT_BASEPATH=${25}
 ### OTHERS ###
 
 if [ $FL = true ]; then
@@ -94,7 +93,7 @@ HIDDEN_SIZE=896
 NUM_ATTN_HEADS=14
 INTERMEDIATE_SIZE=4864
 NUM_KEY_VALUE_HEADS=2
-MAX_POSITION_EMBEDDINGS=131072
+MAX_POSITION_EMBEDDINGS=32768
 EXTRA_VOCAB_SIZE=293
 RMS_NORM_EPS=1e-6
 gqa_options=" \
@@ -103,9 +102,6 @@ gqa_options=" \
 
 
 tie_option=""
-moe_options=" \
-            "
-
 
 elif [ $MODEL_SIZE = 1.5B ]; then
 
@@ -114,7 +110,7 @@ HIDDEN_SIZE=1536
 NUM_ATTN_HEADS=12
 INTERMEDIATE_SIZE=8960
 NUM_KEY_VALUE_HEADS=2
-MAX_POSITION_EMBEDDINGS=131072
+MAX_POSITION_EMBEDDINGS=32768
 EXTRA_VOCAB_SIZE=293
 RMS_NORM_EPS=1e-6
 gqa_options=" \
@@ -122,8 +118,22 @@ gqa_options=" \
 		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
 
 tie_option=""
-moe_options=" \
-            "
+
+elif [ $MODEL_SIZE = 3B ]; then
+
+NUM_LAYERS=36
+HIDDEN_SIZE=2048
+NUM_ATTN_HEADS=16
+INTERMEDIATE_SIZE=11008
+NUM_KEY_VALUE_HEADS=2
+MAX_POSITION_EMBEDDINGS=32768
+EXTRA_VOCAB_SIZE=293
+RMS_NORM_EPS=1e-6
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+
+tie_option=""
 
 elif [ $MODEL_SIZE = 7B ]; then
 
@@ -139,13 +149,44 @@ gqa_options=" \
 		    --group-query-attention \
 		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
 
-moe_options=" \
-            "
 tie_option=" \
         --untie-embeddings-and-output-weights \
         "
 
+elif [ $MODEL_SIZE = 14B ]; then
 
+NUM_LAYERS=48
+HIDDEN_SIZE=5120
+NUM_ATTN_HEADS=40
+INTERMEDIATE_SIZE=13824
+NUM_KEY_VALUE_HEADS=8
+MAX_POSITION_EMBEDDINGS=131072
+EXTRA_VOCAB_SIZE=421
+RMS_NORM_EPS=1e-5
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+
+tie_option=" \
+        --untie-embeddings-and-output-weights \
+        "
+elif [ $MODEL_SIZE = 32B ]; then
+
+NUM_LAYERS=64
+HIDDEN_SIZE=5120
+NUM_ATTN_HEADS=40
+INTERMEDIATE_SIZE=27648
+NUM_KEY_VALUE_HEADS=8
+MAX_POSITION_EMBEDDINGS=131072
+EXTRA_VOCAB_SIZE=421
+RMS_NORM_EPS=1e-5
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+
+tie_option=" \
+        --untie-embeddings-and-output-weights \
+        "
 elif [ $MODEL_SIZE = 72B ]; then
 
 NUM_LAYERS=80
@@ -159,40 +200,6 @@ RMS_NORM_EPS=1e-5
 gqa_options=" \
 		    --group-query-attention \
 		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
-
-moe_options=" \
-            "
-tie_option=" \
-        --untie-embeddings-and-output-weights \
-        "
-
-
-elif [ $MODEL_SIZE = A14B ]; then
-
-NUM_LAYERS=28
-HIDDEN_SIZE=3584
-NUM_ATTN_HEADS=28
-INTERMEDIATE_SIZE=18944
-NUM_KEY_VALUE_HEADS=4
-MAX_POSITION_EMBEDDINGS=131072
-EXTRA_VOCAB_SIZE=293
-RMS_NORM_EPS=1e-6
-gqa_options=" \
-		    --group-query-attention \
-		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
-
-NUM_EXPERTS=64
-NUM_EXPERTS_PER_TOPK=8
-MOE_INTERMEDIATE_SIZE=2560
-SHARED_EXPERT_INTERMEDIATE_SIZE=20480
-
-moe_options=" \
-            --moe-router-topk ${NUM_EXPERTS_PER_TOPK} \
-            --num-experts ${NUM_EXPERTS} \
-            --expert-model-parallel-size ${EP} \
-            --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
-            --shared-moe-ffn-hidden-size ${SHARED_EXPERT_INTERMEDIATE_SIZE} \
-            --enable-shared-expert"
 
 tie_option=" \
         --untie-embeddings-and-output-weights \
@@ -307,7 +314,7 @@ if [ $SFT = true ]; then
     TRAIN_ITERS=${23}
     LR_WARMUP_ITERS=${24}
     LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
-    PREFIX="finetune-mcore-qwen2-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
+    PREFIX="finetune-mcore-qwen2.5-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
     sft_option=" \
          --eod-mask-loss \
          --train-mode finetune"
@@ -315,7 +322,7 @@ else
     TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
     LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
     LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
-    PREFIX="pretrain-mcore-qwen2-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
+    PREFIX="pretrain-mcore-qwen2.5-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
     sft_option=" \
         --train-mode pretrain"
 fi
@@ -355,7 +362,6 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 mkdir -p ${SAVED_PRETRAIN_CHECKPOINT_PATH}
 find -L ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
 find -L ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "merges.txt" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
-
 
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
@@ -412,9 +418,9 @@ megatron_options="  \
         --no-save-optim \
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
+run_cmd="torchrun $DISTRIBUTED_ARGS ../qwen2/pretrain_qwen.py
  ${megatron_options} ${dataset_option} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} \
- ${do_options} ${sp_options} ${gqa_options} ${offload_option} ${comm_overlap_option} ${sft_option} ${moe_options} ${tie_option} ${vp_options} ${packing_options}"
+ ${do_options} ${sp_options} ${gqa_options} ${offload_option} ${comm_overlap_option} ${sft_option}  ${tie_option} ${vp_options} ${packing_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
