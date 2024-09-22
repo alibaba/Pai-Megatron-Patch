@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import argparse
+import pdb
+
 import math
 import json
 import os
@@ -35,33 +37,34 @@ class Encoder(object):
         Encoder.tokenizer = build_tokenizer(self.args)
 
     def encode(self, json_line):
-        data = json.loads(json_line)
+        packed_examples = json.loads(json_line)
         ids = {}
         lens = {}
-        input = data["instruction"]+data['input']
-        output = data['output']
 
         doc_ids = []
         sentence_lens = []
-        for input, output in zip([input], [output]):
+
+        for data in packed_examples:
+            input = data["instruction"]+data['input']
+            output = data['output']
+
             input_ids = Encoder.tokenizer.tokenizer(input, add_special_tokens=False)['input_ids']
             output_ids = Encoder.tokenizer.tokenizer(output, add_special_tokens=False)['input_ids']
             sentence_ids = [Encoder.tokenizer.sep_token_id] + input_ids + [Encoder.tokenizer.sep_token_id] + output_ids + [Encoder.tokenizer.eod]
+
             if max(input_ids) >= Encoder.tokenizer.vocab_size or max(output_ids) >= Encoder.tokenizer.vocab_size:
                 continue
-
-            # Need Padding
-            if self.seq_length > len(sentence_ids):
-                sentence_ids = sentence_ids + [Encoder.tokenizer.pad_token_id] * (self.seq_length-len(sentence_ids))
-            elif self.seq_length < len(sentence_ids):
-                sentence_ids = sentence_ids[:self.seq_length]
 
             if len(sentence_ids) > 0:
                 doc_ids.extend(sentence_ids)
                 sentence_lens.append(len(sentence_ids))
 
+        # Need Padding
+        if self.seq_length > sum(sentence_lens):
+            doc_ids = doc_ids + [Encoder.tokenizer.pad_token_id] * (self.seq_length - sum(sentence_lens))
+
         ids['text'] = doc_ids
-        lens['text'] = sentence_lens
+        lens['text'] = [len(doc_ids)]
         return ids, lens, len(json_line)
 
 
@@ -152,7 +155,7 @@ def get_args():
     group.add_argument('--append-eod', action='store_true',
                        help='Append an <eod> token to the end of a document.')
     group.add_argument('--debug', action='store_true',
-                       help='Append an <eod> token to the end of a document.')
+                       help='debug')
     group.add_argument('--lang', type=str, default='english',
                        help='Language to use for NLTK-powered sentence splitting.')
     group = parser.add_argument_group(title='output data')

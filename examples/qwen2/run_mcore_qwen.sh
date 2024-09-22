@@ -36,10 +36,14 @@ else
         --num-layers-per-virtual-pipeline-stage ${MP_VP}"
 fi
 
-if [ -z ${MP_SFT_PACKING} ]; then
-    MP_SFT_PACKING=false
+if [ ${MP_SFT_PACKING} = true ]; then
+    packing_options=" \
+        --reset-position-ids \
+        --no-create-attention-mask-in-dataloader
+    "
+else
+    packing_options=""
 fi
-
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
@@ -304,10 +308,10 @@ else
 fi
 
 if [ $SFT = true ]; then
-    TRAIN_ITERS=${23}
-    LR_WARMUP_ITERS=${24}
+    TRAIN_ITERS=${24}
+    LR_WARMUP_ITERS=${25}
     LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
-    PREFIX="finetune-mcore-qwen2-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
+    PREFIX="finetune-mcore-llama3-1-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
     sft_option=" \
          --eod-mask-loss \
          --train-mode finetune"
@@ -315,7 +319,7 @@ else
     TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
     LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
     LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
-    PREFIX="pretrain-mcore-qwen2-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
+    PREFIX="pretrain-mcore-llama3-1-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
     sft_option=" \
         --train-mode pretrain"
 fi
@@ -324,8 +328,7 @@ if [ ${MP_DATASET_TYPE} = "raw" ]; then
     dataset_option=" \
         --train-data-path ${DATASET_PATH} \
         --valid-data-path ${VALID_DATASET_PATH} \
-        --dataloader-type cyclic \
-        --dataset LLama-SFT-Raw"
+        --dataset LLama-Pretrain-Raw"
 else 
     dataset_option=" \
         --data-path ${DATASET_PATH} \
@@ -333,14 +336,6 @@ else
         --dataset LLama-Pretrain-Idxmap"
 fi
 
-if [ ${MP_SFT_PACKING} = true ]; then
-    packing_options=" \
-        --reset-position-ids \
-        --no-create-attention-mask-in-dataloader
-    "
-else
-    packing_options=""
-fi
 
 ##### Prepare logdirs #######
 NAME="${PREFIX}-pr-${PR}-tp-${TP}-pp-${PP}-cp-${CP}-ac-${AC}-do-${DO}-sp-${SP}-ti-${TRAIN_ITERS}-wi-${LR_WARMUP_ITERS}"
@@ -353,8 +348,7 @@ mkdir -p ${TENSORBOARD_DIR}
 SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 mkdir -p ${SAVED_PRETRAIN_CHECKPOINT_PATH}
-find -L ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
-find -L ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "merges.txt" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
+find ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
 
 
 megatron_options="  \
@@ -404,6 +398,7 @@ megatron_options="  \
         --norm-epsilon ${RMS_NORM_EPS} \
         --use-rotary-position-embeddings \
         --position-embedding-type rope \
+        --untie-embeddings-and-output-weights \
         --disable-bias-linear \
         --add-qkv-bias \
         --rotary-percent 1.0 \
