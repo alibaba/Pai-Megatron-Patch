@@ -25,6 +25,7 @@ from .llava.mm_pretrain_dataset import LazySupervisedDataset as LLavaSupervisedD
 from .qwen_vl import LazySupervisedDataset as QwenVLSupervisedDataset
 from .glm import ChatGLMRawDataset
 from .starcoder import StarcoderRawDataset
+from .llama_sft import LLamaSFTDataset
 
 def build_evaluation_dataset(dataset):
 
@@ -108,7 +109,10 @@ def build_pretrain_dataset_from_original(dataset):
         #test_dataset = StarcoderRawDataset(args.train_data_path, args.max_padding_length)
 
         return train_dataset, train_dataset, train_dataset
+    elif dataset == 'LLama-SFT-Raw':
+        train_dataset = LLamaSFTDataset(args.train_data_path, args.max_padding_length)
 
+        return train_dataset, train_dataset, train_dataset
     else:
         raise NotImplementedError('dataset {} is not implemented.'.format(dataset))
 

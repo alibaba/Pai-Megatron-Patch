@@ -34,37 +34,72 @@ class Encoder(object):
     def initializer(self):
         Encoder.tokenizer = build_tokenizer(self.args)
 
-    def encode(self, json_line):
-        data = json.loads(json_line)
+
+    def encode_blocked(self, datas):
+        return list(self.encode(datas))
+
+    def encode(self, datas):
+        if isinstance(datas, dict):
+            datas = [datas]
+        
         ids = {}
         lens = {}
-        input = data["instruction"]+data['input']
-        output = data['output']
-
         doc_ids = []
         sentence_lens = []
-        for input, output in zip([input], [output]):
-            input_ids = Encoder.tokenizer.tokenizer(input, add_special_tokens=False)['input_ids']
-            output_ids = Encoder.tokenizer.tokenizer(output, add_special_tokens=False)['input_ids']
-            sentence_ids = [Encoder.tokenizer.sep_token_id] + input_ids + [Encoder.tokenizer.sep_token_id] + output_ids + [Encoder.tokenizer.eod]
-            if max(input_ids) >= Encoder.tokenizer.vocab_size or max(output_ids) >= Encoder.tokenizer.vocab_size:
+        label_ids = []
+
+        pad_token_id = self.tokenizer.pad_token_id
+        # NOTE: in SFT, any tokenizer is required to:
+        # (1) have a conversation chat_template
+        # (2) the generated assistant input_ids are after the system/user input_ids
+        # With (2), input_mask will be genarated
+
+        # WARNING: the seqlen of built idxmap dataset is 2x of input seqlen!!!!
+        for data in datas:
+            text = [
+                {'role': 'user', 'content': data["instruction"]+data['input']},
+                {'role': 'assistant', 'content': data['output']}
+            ]
+            input_ids = self.tokenizer.apply_chat_template(text[:-1])
+            if len(input_ids) >= self.seq_length:
+                print('Extreme long user input, omitted...')
                 continue
+            all_ids = self.tokenizer.apply_chat_template(text)
+            if len(all_ids) >= self.seq_length:
+                print('Extreme long sequence, truncted...')
+                all_ids = all_ids[:self.seq_length]
 
-            # Need Padding
-            if self.seq_length > len(sentence_ids):
-                sentence_ids = sentence_ids + [Encoder.tokenizer.pad_token_id] * (self.seq_length-len(sentence_ids))
-            elif self.seq_length < len(sentence_ids):
-                sentence_ids = sentence_ids[:self.seq_length]
+            for t1, t2 in zip(input_ids, all_ids):
+                assert t1 == t2, "The user input_ids are not a prefix of the full input_ids!"
 
-            if len(sentence_ids) > 0:
-                doc_ids.extend(sentence_ids)
-                sentence_lens.append(len(sentence_ids))
+            y_ids = [-100] * (len(input_ids) - 1) + all_ids[len(input_ids):] + [-100]
 
-        ids['text'] = doc_ids
-        lens['text'] = sentence_lens
-        return ids, lens, len(json_line)
+            if sum(sentence_lens) + len(all_ids) > self.seq_length:
+                if self.seq_length > sum(sentence_lens):
+                    doc_ids = doc_ids + [pad_token_id] * (self.seq_length - sum(sentence_lens))
+                    label_ids = label_ids + [-100] * (self.seq_length - sum(sentence_lens))     
+                ids['text'] = doc_ids + label_ids
+                lens['text'] = [len(doc_ids) * 2]
+                yield ids, lens, len(json.dumps(ids))               
+                ids = {}
+                lens = {}
+                doc_ids = []
+                sentence_lens = []
+                label_ids = []
+            
+            doc_ids.extend(all_ids)
+            label_ids.extend(y_ids)
+            sentence_lens.append(len(all_ids))
 
-
+        # Need Padding
+        if self.seq_length > sum(sentence_lens):
+            doc_ids = doc_ids + [pad_token_id] * (self.seq_length - sum(sentence_lens))
+            label_ids = label_ids + [-100] * (self.seq_length - sum(sentence_lens))
+        ids['text'] = doc_ids + label_ids
+        lens['text'] = [len(doc_ids) * 2]
+        yield ids, lens, len(json.dumps(ids))
+    
+    
 class Partition(object):
     def __init__(self, args, workers):
         self.args = args
@@ -83,19 +118,43 @@ class Partition(object):
     def process_json_file(self, file_name):
         input_file_name, output_prefix = file_name
         print("Opening", input_file_name)
-        fin = open(input_file_name, 'r', encoding='utf-8')
 
+        # json or jsonl
+        try:
+            with open(input_file_name, 'r', encoding='utf-8') as f:
+                fin = json.load(f)
+        except Exception:
+            fin = []
+            with open(input_file_name, 'r', encoding='utf-8') as f:
+                fin = [json.loads(d) for d in f.readlines()]
+        
+        assert isinstance(fin, list)
+        # NOTE: each item in fin is a group (dict / list[dict]) of samples may be packed together
+    
         startup_start = time.time()
         encoder = Encoder(self.args)
-        tokenizer = build_tokenizer(self.args)
-
-        if self.args.debug:
+        if self.args.sequence_packing:
+            # collect
+            tmp = []
+            for d in fin:
+                if isinstance(d, dict):
+                    tmp.append(d)
+                else:
+                    tmp.extend(d)
+            fin = tmp
             encoder.initializer()
-            encoded_docs = (encoder.encode(doc) for doc in fin)
+            # NOTE: single thread for packing
+            print(f"Raw Dataset has {len(fin)} samples")
+            encoded_docs = (encoder.encode(fin),)
         else:
-            pool = multiprocessing.Pool(self.workers, initializer=encoder.initializer)
-            encoded_docs = pool.imap(encoder.encode, fin, 32)
+            if self.args.debug:
+                encoder.initializer()
+                encoded_docs = (encoder.encode_blocked(doc) for doc in fin)
+            else:
+                pool = multiprocessing.Pool(self.workers, initializer=encoder.initializer)
+                encoded_docs = pool.imap(encoder.encode_blocked, fin, 32)
 
+        tokenizer = build_tokenizer(self.args)
         level = "document"
         output_bin_files = {}
         output_idx_files = {}
@@ -114,15 +173,17 @@ class Partition(object):
         proc_start = time.time()
         total_bytes_processed = 0
         print("Time to startup:", startup_end - startup_start)
-        for i, (doc, sentence_lens, bytes_processed) in enumerate(encoded_docs, start=1):
-            total_bytes_processed += bytes_processed
-            for key in doc.keys():
-                builders[key].add_document(doc[key], sentence_lens[key])
-            self.print_processing_stats(i, proc_start, total_bytes_processed)
+        cnt = 1
+        for datas in encoded_docs:
+            for (doc, sentence_lens, bytes_processed) in datas:
+                total_bytes_processed += bytes_processed
+                for key in doc.keys():
+                    builders[key].add_document(doc[key], sentence_lens[key])
+                self.print_processing_stats(cnt, proc_start, total_bytes_processed)
+                cnt += 1
+        print(f"After pre-tokenizing, the idxmap dataset has {cnt - 1} samples")
 
-        fin.close()
         builders[key].finalize(output_idx_files[key])
-
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -141,6 +202,7 @@ def get_args():
                                 'GPTSentencePieceTokenizer', 'Llama2Tokenizer',
                                 'NullTokenizer'],
                        help='What type of tokenizer to use.')
+    group.add_argument('--sequence-packing',action='store_true', help='packing sequence')
     group.add_argument('--tokenizer-model', type=str, default=None,
                        help='YTTM tokenizer model.')
     group.add_argument('--vocab-file', type=str, default=None,
@@ -198,7 +260,9 @@ def get_args():
 
     if args.tokenizer_type.lower().startswith('bert') and not args.split_sentences:
         print("Are you sure you don't want to split sentences?")
-
+    
+    if args.sequence_packing:
+        print('Use internal single-threaded sequence packing..')
     # some default/dummy values for the tokenizer
     args.rank = 1
     args.make_vocab_size_divisible_by = 128

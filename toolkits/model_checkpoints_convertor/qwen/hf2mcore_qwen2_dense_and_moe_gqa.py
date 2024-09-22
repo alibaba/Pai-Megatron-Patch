@@ -381,7 +381,8 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
                 hflayer.post_attention_layernorm.weight.copy_(mglayer.pre_mlp_layernorm.weight)
 
         hfmodel.model.norm.weight.copy_(mgmodel.decoder.final_layernorm.weight)
-        hfmodel.lm_head.weight.copy_(mgmodel.output_layer.weight)
+        if args.untie_embeddings_and_output_weights:
+            hfmodel.lm_head.weight.copy_(mgmodel.output_layer.weight)
 
 
 def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
@@ -445,7 +446,8 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
                 mglayer.pre_mlp_layernorm.weight.copy_(hflayer.post_attention_layernorm.weight)
 
         mgmodel.decoder.final_layernorm.weight.copy_(hfmodel.model.norm.weight)
-        mgmodel.output_layer.weight.copy_(hfmodel.lm_head.weight)
+        if args.untie_embeddings_and_output_weights:
+            mgmodel.output_layer.weight.copy_(hfmodel.lm_head.weight)
 
 
 def save_state_dict(args, model, checkpoint_name):
@@ -817,11 +819,12 @@ def check_hf_mg_forward(hfmodel, mgmodel, mgargs):
         elif mode in ['mg-attn_out']:
             mg_hiddens[layer_idx][name] = output[0].reshape(-1, hidden_size)
 
-    hfmodel.lm_head.register_forward_hook(partial(print_output_hook, layer_idx=mgargs.num_layers - 1, mode='hf-lmhead'),
-                                          with_kwargs=True)
+    if mgargs.untie_embeddings_and_output_weights:
+        hfmodel.lm_head.register_forward_hook(partial(print_output_hook, layer_idx=mgargs.num_layers - 1, mode='hf-lmhead'),
+                                            with_kwargs=True)
 
-    mgmodel.output_layer.register_forward_hook(
-        partial(print_output_hook, layer_idx=mgargs.num_layers - 1, mode='mg-lmhead'), with_kwargs=True)
+        mgmodel.output_layer.register_forward_hook(
+            partial(print_output_hook, layer_idx=mgargs.num_layers - 1, mode='mg-lmhead'), with_kwargs=True)
 
     for idx, layer in enumerate(hfmodel.model.layers):
 

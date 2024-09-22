@@ -36,14 +36,10 @@ else
         --num-layers-per-virtual-pipeline-stage ${MP_VP}"
 fi
 
-if [ ${MP_SFT_PACKING} = true ]; then
-    packing_options=" \
-        --reset-position-ids \
-        --no-create-attention-mask-in-dataloader
-    "
-else
-    packing_options=""
+if [ -z ${MP_SFT_PACKING} ]; then
+    MP_SFT_PACKING=false
 fi
+
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 EXTRA_VOCAB_SIZE=256
@@ -243,12 +239,22 @@ if [ ${MP_DATASET_TYPE} = "raw" ]; then
     dataset_option=" \
         --train-data-path ${DATASET_PATH} \
         --valid-data-path ${VALID_DATASET_PATH} \
-        --dataset LLama-Pretrain-Raw"
+        --dataloader-type cyclic \
+        --dataset LLama-SFT-Raw"
 else 
     dataset_option=" \
         --data-path ${DATASET_PATH} \
         --split 99,1,0 \
         --dataset LLama-Pretrain-Idxmap"
+fi
+
+if [ ${MP_SFT_PACKING} = true ]; then
+    packing_options=" \
+        --reset-position-ids \
+        --no-create-attention-mask-in-dataloader
+    "
+else
+    packing_options=""
 fi
 
 
@@ -263,7 +269,7 @@ mkdir -p ${TENSORBOARD_DIR}
 SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 mkdir -p ${SAVED_PRETRAIN_CHECKPOINT_PATH}
-find ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
+find -L ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
 
 
 megatron_options="  \
