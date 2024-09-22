@@ -93,7 +93,7 @@ def get_batch(data_iterator):
 
     if "-Raw" in args.dataset:
         if args.train_mode == "pretrain":
-            raise ValueError('The LLama-Pretrain-Raw dataset should only be used for finetuning!')
+            raise ValueError('The LLama-SFT-Raw dataset should only be used for finetuning!')
         # get batches based on the TP rank you are on
         batch = get_batch_on_this_tp_rank_original(data_iterator)
         # slice batch along sequence dimension for context parallelism
@@ -233,6 +233,10 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     else:
         config = core_gpt_dataset_config_from_args(args)
 
+        # NOTE: in preparation scripts, the sequence is collect into (seq, labels)
+        # therefore we need to double the seqlen
+        config.sequence_length = config.sequence_length * 2
+        
         if config.mock:
             dataset_type = MockGPTDataset
         else:

@@ -69,46 +69,20 @@ qwen-datasets
 目前Pai-Megatron-Patch中的部分模型(LLaMA3.1, Qwen-2等)已支持基于mmap格式的Sequence-Packing训练，为此，您首先需要按照下列步骤准备打包后的数据集
 
 1. 下载json数据集
-2. 打包SFT样本
-
-为了实现Sequence Packing，在json格式的基础上，您需要决定每个Sequence包含的样本。具体而言，您需要进一步将训练时被packing的多个json文本放至同一列以实现打包。
-例如，下列代码将qwen_sft数据集按顺序分组，使得每组packing后的长度不超过2048。为了提高Packing的效率，您也可以自行拓展脚本来使用其他策略
-
-```python
-
-from transformers import AutoTokenizer
-import json
-import pdb
-tokenizer = AutoTokenizer.from_pretrained("/mnt/qwen-ckpts/Qwen2-0.5B")
-seqlen = 2048
-example_len_map = dict()
-with open("/mnt/qwen-datasets/qwen_sft.json") as f:
-    for line in f:
-        line = line.strip()
-        example = json.loads(line)
-        input = example["instruction"]+example['input']
-        output = example['output']
-        input_ids = tokenizer(input, add_special_tokens=False)['input_ids']
-        output_ids = tokenizer(output, add_special_tokens=False)['input_ids']
-        example_len_map[line] = len(input_ids) + len(output_ids) + 3
-
-example_group = []
-len_group = []
-with open("/mnt/qwen-datasets/packed_qwen_sft.json", 'w', encoding='utf8') as f:
-    for example, len in example_len_map.items():
-        example = json.loads(example)
-        if sum(len_group) <= seqlen:
-            example_group.append(example)
-            len_group.append(len)
-        else:
-            last_example = example_group[-1]
-            last_example_len = len_group[-1]
-            assert last_example_len <= seqlen
-            json_string = json.dumps(example_group[:-1], ensure_ascii=False)
-            f.write(json_string+"\n")
-            example_group = [last_example]+[example]
-            len_group = [last_example_len]+[len]
+2. 打包SFT样本: 为了实现Sequence Packing，在json格式的基础上，您需要决定每个Sequence包含的样本。具体而言，您需要进一步将训练时被packing的多个json文本放至同一个list以实现打包。例如对于下列数据
+```json
+{"instruction": "寻找两个二元分类问题的例子。", "input": "", "output": "1. 垃圾邮件过滤：将电子邮件分类为垃圾邮件或非垃圾邮件。\n2. 信用风险评估：将贷款申请人分类为高风险或低风险。"}
+{"instruction": "将给定的句子改写为修辞问题。", "input": "他以前从未见过大海。", "output": "他以前曾经见过大海吗？"}
+{"instruction": "用不同的词重新表达给定的句子。", "input": "他总是试图在生活中走在前面。", "output": "他不断努力追求成功。"}
 ```
+处理后的格式为
+```json
+[{"instruction": "寻找两个二元分类问题的例子。", "input": "", "output": "1. 垃圾邮件过滤：将电子邮件分类为垃圾邮件或非垃圾邮件。\n2. 信用风险评估：将贷款申请人分类为高风险或低风险。"},
+{"instruction": "将给定的句子改写为修辞问题。", "input": "他以前从未见过大海。", "output": "他以前曾经见过大海吗？"}]
+[{"instruction": "用不同的词重新表达给定的句子。", "input": "他总是试图在生活中走在前面。", "output": "他不断努力追求成功。"}]
+```
+
+转换脚本内置按顺序打包数据集的实现，你也可以使用`--sequence-packing`开关来生成packing数据集，此时无需提前打包SFT样本
 
 3. 在完成json格式数据打包后，运行下列命令来获得用于LLaMA3.1 SFT的packed mmap数据集
 ```
