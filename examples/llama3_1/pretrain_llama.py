@@ -236,7 +236,9 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
         config = core_gpt_dataset_config_from_args(args)
         # NOTE: in preparation scripts, the sequence is collect into (seq, labels)
         # therefore we need to double the seqlen
-        config.sequence_length = config.sequence_length * 2
+
+        if args.train_mode != "pretrain":
+            config.sequence_length = config.sequence_length * 2
 
         if config.mock:
             dataset_type = MockGPTDataset
