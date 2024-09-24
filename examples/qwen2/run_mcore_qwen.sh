@@ -304,8 +304,8 @@ else
 fi
 
 if [ $SFT = true ]; then
-    TRAIN_ITERS=${23}
-    LR_WARMUP_ITERS=${24}
+    TRAIN_ITERS=${24}
+    LR_WARMUP_ITERS=${25}
     LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
     PREFIX="finetune-mcore-qwen2-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
     sft_option=" \
