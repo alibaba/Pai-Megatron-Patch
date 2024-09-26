@@ -19,6 +19,7 @@ English | [简体中文](./README_zh-CN.md)
 Pai-Megatron-Patch (https://github.com/alibaba/Pai-Megatron-Patch) is a deep learning training toolkit built for developers to train and predict LLMs & VLMs by using Megatron framework easily. With the continuous development of LLMs, the model structure and scale are rapidly evolving. Although these models can be conveniently manufactured using Transformers or DeepSpeed training framework, the training efficiency is comparably low. This phenomenon becomes even severer when the model scale exceeds 10 billion. The primary objective of Pai-Megatron-Patch is to effectively utilize the computational power of GPUs for LLM. This tool allows convenient training of commonly used LLM with all the accelerating techniques provided by Megatron-LM.
 
 What's New:
+- **Upgrade deepseek-v2-moe models to support MLA via transformer engine and pipeline ckpts conversion.** [🔥🔥 2024.09.26]
 - **Support training Qwen2.5 models by using Megatron-Core.** [🔥🔥 2024.09.20]
 - **Support Sequence Packing in SFT for Qwen2 and LLaMA 3.1 models.** [🔥🔥 2024.09.13]
 - **Upgrade qwen2 dense and moe models to support Flash-Attention 3, Offloading, Comm-Overlapping features.** [🔥🔥 2024.08.26]

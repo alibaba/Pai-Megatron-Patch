@@ -360,12 +360,12 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
                 hflayer.mlp.down_proj.weight.copy_(mglayer.mlp.linear_fc2.weight)
             else:
                 hflayer.mlp.gate.weight.copy_(mglayer.mlp.router.weight)
-                for mgexpert, hgexpert in zip(mglayer.mlp.experts.local_experts, hflayer.mlp.experts):
+                for mgexpert, hfexpert in zip(mglayer.mlp.experts.local_experts, hflayer.mlp.experts):
                     gate_weight, up_weight = torch.split(mgexpert.linear_fc1.weight,
                                                          split_size_or_sections=args.moe_ffn_hidden_size)
-                    hgexpert.gate_proj.weight.copy_(gate_weight)
-                    hgexpert.up_proj.weight.copy_(up_weight)
-                    hgexpert.down_proj.weight.copy_(mgexpert.linear_fc2.weight)
+                    hfexpert.gate_proj.weight.copy_(gate_weight)
+                    hfexpert.up_proj.weight.copy_(up_weight)
+                    hfexpert.down_proj.weight.copy_(mgexpert.linear_fc2.weight)
 
                 hflayer.mlp.shared_expert_gate.weight.copy_(mglayer.mlp.shared_expert_gate.weight)
                 shared_expert_gate_weight, shared_expert_up_weight = \
@@ -686,8 +686,8 @@ def save_mgmodel(mgmodel, args):
                     print(f'tensor_parallel & pipeline_parallel & expert_parallel, save model to {checkpoint_name}')
                     for k, v in full_model.items():
                         if check_layer(layers_to_copy, k):
-                            pattern = re.compile(r'\d+')
-                            res = pattern.findall(k)
+                            layer_pattern = re.compile(r'\d+')
+                            res = layer_pattern.findall(k)
                             k = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy["decoder.layers." + res[0]]), k)
                         elif not ("word_embeddings" in k or "output_layer" in k or "final_layernorm" in k):
                             continue
@@ -743,7 +743,8 @@ def save_mgmodel(mgmodel, args):
                     save_state_dict(args, model_split, checkpoint_name)
 
     else:
-        raise ValueError('not support pp convert')
+        raise ValueError('Something is wrong, please check your tp/pp/ep size')
+
     print(f'megatron model is save to {args.save}')
 
 
