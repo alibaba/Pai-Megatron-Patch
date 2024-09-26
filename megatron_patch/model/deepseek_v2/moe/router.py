@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from abc import ABC, abstractmethod
-from typing import Callable, List
 
 import torch
 
+from megatron.core import parallel_state
 from megatron.core.tensor_parallel import (
     gather_from_sequence_parallel_region,
     get_cuda_rng_tracker,
@@ -32,12 +31,88 @@ from megatron.core.transformer.moe.moe_utils import (
     MoEAuxLossAutoScaler,
     save_to_aux_losses_tracker,
     sinkhorn,
+    get_capacity,
     switch_load_balancing_loss_func,
     z_loss_func,
 )
-
 from megatron.core.transformer.transformer_config import TransformerConfig
 
+
+def topk_softmax_with_capacity(
+        logits: torch.Tensor,
+        topk: int,
+        capacity_factor: float = None,
+        pad_to_capacity: bool = False,
+        drop_policy: str = "probs",
+):
+    """Apply capacity and padding to the top-k selection.
+        Args:
+            logits (torch.Tensor): Logits tensor.
+            topk (int): The number of experts to select for each token.
+            capacity_factor (int): The capacity factor of each expert. Will drop tokens if the number of tokens exceeds the capacity.
+            pad_to_capacity (bool): Whether to need padding in token drop mode.
+            drop_policy (str): The policy to drop tokens. Can be either "prob" or "position". If "prob", the tokens with the lowest probabilities will be dropped. If "position", tokens at the end of each batch will be dropped.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: Probs, indices and tokens_per_expert tensor.
+
+            (1) If there's no token padding, the shape of probs and indices is [tokens, top_k], indicating the selected experts for each token.
+            (2) If there's token padding, the shape of probs and indices is [num_expert, capacity], indicating the tokens selected for each expert.
+        """
+    # TODO: Add Pre softmax.
+    assert logits.dim() == 2, f"Expected 2D logits [num_tokens, num_experts], got {logits.dim()}."
+    num_tokens = logits.shape[0]
+    num_experts = logits.shape[1]
+
+    #scores, top_indices = torch.topk(logits, k=topk, dim=1)
+    #probs = torch.softmax(scores, dim=-1, dtype=torch.float32).type_as(logits)
+
+    routing_weights = torch.softmax(logits, dim=1, dtype=torch.float32).type_as(logits)
+    probs, top_indices = torch.topk(routing_weights, k=topk, dim=-1)
+
+    if capacity_factor is None:
+        # TopK without capacity
+        tokens_per_expert = torch.histc(top_indices, bins=num_experts, min=0, max=num_experts)
+        return probs, top_indices, tokens_per_expert
+    else:
+        # TopK with capacity
+        expert_capacity = get_capacity(
+            num_tokens=num_tokens * topk, num_experts=num_experts, capacity_factor=capacity_factor,
+        )
+        # TopK selection, Maskout unused experts
+        topk_masked_gates = torch.zeros_like(logits).scatter(1, top_indices, probs)
+        topk_mask = torch.zeros_like(logits).scatter(1, top_indices, 1)
+
+        # Maskout exceeded tokens
+        if drop_policy == "probs":
+            capacity_probs, capacity_indices = torch.topk(
+                topk_masked_gates, k=expert_capacity, dim=0, sorted=False
+            )
+            capacity_mask = torch.zeros_like(logits).scatter(0, capacity_indices, 1)
+        elif drop_policy == "position":
+            _, capacity_indices = torch.topk(topk_mask, k=expert_capacity, dim=0, sorted=False)
+            capacity_mask = torch.zeros_like(logits).scatter(0, capacity_indices, 1)
+            capacity_probs = torch.gather(topk_masked_gates, 0, capacity_indices)
+        else:
+            raise ValueError(f"Invalid drop_policy: {drop_policy}")
+
+        if pad_to_capacity:
+            final_probs, final_indices = (
+                capacity_probs.T.contiguous(),
+                capacity_indices.T.contiguous(),
+            )
+            tokens_per_expert_before_capacity = topk_mask.sum(dim=0)
+        else:
+            # Get exceed mask and maskout exceeded probs and indices
+            final_mask = torch.logical_and(topk_mask, capacity_mask)
+            drop_mask = torch.logical_not(final_mask)
+            exceed_mask = torch.gather(drop_mask, 1, top_indices)
+            final_probs = probs * torch.logical_not(exceed_mask)
+            final_indices = top_indices.clone().masked_fill_(
+                exceed_mask, torch.iinfo(torch.long).max
+            )
+            tokens_per_expert_before_capacity = topk_mask.sum(dim=0)
+        return final_probs, final_indices, tokens_per_expert_before_capacity
 
 class Router(ABC, MegatronModule):
     """Base Router class"""
@@ -151,42 +226,51 @@ class TopKRouter(Router):
     def aux_loss_load_balancing(self, logits: torch.Tensor):
         """Apply loss-based load balancing to the logits tensor.
 
-        Args:
-            logits (torch.Tensor): The logits tensor.
+            Args:
+                logits (torch.Tensor): the logits tensor after gating, shape: [num_tokens, num_experts].
 
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: The scores and the indices tensor after applying load balancing.
+            Returns:
+                probs (torch.Tensor): the probabilities tensor after load balancing.
+                indices (torch.Tensor): the indices tensor after top-k selection.
         """
-        #top_logits, indices = torch.topk(logits, k=self.topk, dim=1)
-        #scores = torch.softmax(top_logits, dim=-1, dtype=torch.float32).type_as(logits)
-
-        routing_weights = torch.softmax(logits, dim=1, dtype=torch.float32).type_as(logits)
-        scores, indices = torch.topk(routing_weights, k=self.topk, dim=-1)
+        probs, indices, tokens_per_expert = topk_softmax_with_capacity(
+            logits,
+            self.topk,
+            capacity_factor=self.config.moe_expert_capacity_factor,
+            pad_to_capacity=self.config.moe_pad_expert_input_to_capacity,
+            drop_policy=self.config.moe_token_drop_policy,
+        )
 
         # Apply load balancing loss
-        probs = torch.softmax(logits, dim=-1, dtype=torch.float32)
-        scores = self.apply_load_balancing_loss(probs, indices, activation=scores)
-        return scores, indices
+        scores = torch.softmax(logits, dim=-1, dtype=torch.float32)
+        probs = self.apply_load_balancing_loss(scores, tokens_per_expert, activation=probs)
+        return probs, indices
 
     def apply_load_balancing_loss(
-            self, probs: torch.Tensor, indices: torch.Tensor, activation: torch.Tensor,
+        self,
+        probs: torch.Tensor,
+        num_local_tokens_per_expert: torch.Tensor,
+        activation: torch.Tensor,
     ):
         """Applies auxiliary loss to the MoE layer.
 
         Args:
-            loss_func (callable): The loss function to be used.
-            probs (torch.Tensor): The probabilities output by the MoE layer.
-            indices (torch.Tensor): The indices of the selected experts.
+            probs (torch.Tensor): The probs output by the router for each token. [num_tokens, num_experts]
+            num_local_tokens_per_expert (torch.Tensor): The number of tokens per expert. [num_experts]
             activation (torch.Tensor): The activation tensor to attach the gradient function to.
 
         Returns:
             torch.Tensor: The activation tensor with the attached gradient function.
         """
-        mask = torch.nn.functional.one_hot(indices, num_classes=self.num_experts).sum(dim=1)
-        aux_loss = switch_load_balancing_loss_func(probs, mask, self.config.moe_aux_loss_coeff)
+        moe_aux_loss_coeff = (
+            self.config.moe_aux_loss_coeff / parallel_state.get_tensor_model_parallel_world_size()
+        )
+        aux_loss = switch_load_balancing_loss_func(
+            probs, num_local_tokens_per_expert, self.topk, moe_aux_loss_coeff
+        )
         save_to_aux_losses_tracker(
             "load_balancing_loss",
-            aux_loss / self.config.moe_aux_loss_coeff,
+            aux_loss / moe_aux_loss_coeff,
             self.layer_number,
             self.config.num_layers,
         )
@@ -204,7 +288,10 @@ class TopKRouter(Router):
             torch.Tensor: The logits after applying the z-loss.
         """
         if self.config.moe_z_loss_coeff is not None:
-            z_loss = z_loss_func(logits, self.config.moe_z_loss_coeff)
+            moe_z_loss_coeff = (
+                self.config.moe_z_loss_coeff / parallel_state.get_tensor_model_parallel_world_size()
+            )
+            z_loss = z_loss_func(logits, moe_z_loss_coeff)
             logits = MoEAuxLossAutoScaler.apply(logits, z_loss)
             save_to_aux_losses_tracker(
                 "z_loss",
@@ -239,10 +326,11 @@ class TopKRouter(Router):
         """Top-k routing function
 
         Args:
-            logits (torch.Tensor): Logits tensor.
+            logits (torch.Tensor): Logits tensor after gating.
 
         Returns:
-            Tuple[torch.Tensor, torch.Tensor]: Probs and the indices tensor.
+            probs (torch.Tensor): the probabilities tensor after load balancing.
+            indices (torch.Tensor): the indices tensor after top-k selection.
         """
         logits = logits.view(-1, self.config.num_moe_experts)
 
@@ -250,8 +338,8 @@ class TopKRouter(Router):
         logits = self.apply_z_loss(logits)
 
         if (
-                self.config.tensor_model_parallel_size > 1
-                and self.config.moe_token_dispatcher_type == "alltoall"
+            parallel_state.get_tensor_model_parallel_world_size() > 1
+            and self.config.moe_token_dispatcher_type == "alltoall"
         ):
             # Gather the logits from the TP region
             logits = gather_from_sequence_parallel_region(logits)
@@ -262,8 +350,13 @@ class TopKRouter(Router):
             scores, indices = self.aux_loss_load_balancing(logits)
         elif self.routing_type == "none":
             # A naive top-k routing without load balancing
-            top_logits, indices = torch.topk(logits, k=self.topk, dim=1)
-            scores = torch.softmax(top_logits, dim=-1, dtype=torch.float32).type_as(logits)
+            scores, indices, _ = topk_softmax_with_capacity(
+                logits,
+                self.topk,
+                capacity_factor=self.config.moe_expert_capacity_factor,
+                pad_to_capacity=self.config.moe_pad_expert_input_to_capacity,
+                drop_policy=self.config.moe_token_drop_policy,
+            )
         else:
             raise ValueError(f"Unsupported MoE routing type: {self.routing_type}")
 
@@ -275,9 +368,6 @@ class TopKRouter(Router):
 
         Args:
             input (torch.Tensor): Input tensor.
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: scores and indices.
         """
         self.hidden = input.shape[-1]
 

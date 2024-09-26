@@ -167,6 +167,78 @@ class Attention(MegatronModule, ABC):
 
         return hidden_states
 
+    def _adjust_key_value_for_inference(self, inference_params, key, value, rotary_pos_emb):
+        """
+        Saves the generated key and value tensors to the end of the buffers in inference_params.
+        Returns the full size keys and values from the provided inference_params, as well as
+        adjusted rotary_pos_emb.
+
+        Returns a tuple: (key, value, rotary_pos_emb)
+
+        """
+        attn_mask_type = self.attn_mask_type
+        if inference_params is None:
+            return key, value, rotary_pos_emb, attn_mask_type
+
+        # =================================================
+        # Pre-allocate memory for key-values for inference.
+        # =================================================
+        is_first_step = False
+        if self.layer_number not in inference_params.key_value_memory_dict:
+            inf_max_seq_length = inference_params.max_sequence_length
+            inf_max_batch_size = inference_params.max_batch_size
+            inference_key_memory = self._allocate_memory(
+                inf_max_seq_length, inf_max_batch_size, key.dtype
+            )
+            inference_value_memory = self._allocate_memory(
+                inf_max_seq_length, inf_max_batch_size, value.dtype
+            )
+            inference_params.key_value_memory_dict[self.layer_number] = (
+                inference_key_memory,
+                inference_value_memory,
+            )
+            is_first_step = True
+        else:
+            # Get the pre-allocated buffers for this layer
+            inference_key_memory, inference_value_memory = inference_params.key_value_memory_dict[
+                self.layer_number
+            ]
+            attn_mask_type = AttnMaskType.no_mask
+
+        batch_start = inference_params.batch_size_offset
+        batch_end = batch_start + key.size(1)
+        assert batch_end <= inference_key_memory.size(1)
+        sequence_start = inference_params.sequence_len_offset
+        sequence_end = sequence_start + key.size(0)
+        assert sequence_end <= inference_key_memory.size(0)
+        # Copy key and values.
+        inference_key_memory[sequence_start:sequence_end, batch_start:batch_end, ...] = key
+        inference_value_memory[sequence_start:sequence_end, batch_start:batch_end, ...] = value
+        key = inference_key_memory[:sequence_end, batch_start:batch_end, ...]
+        value = inference_value_memory[:sequence_end, batch_start:batch_end, ...]
+
+        # adjust the key rotary positional embedding
+        if rotary_pos_emb is not None:
+            q_pos_emb, k_pos_emb = rotary_pos_emb
+            # need to cross check this condition during inference
+            # if not set_inference_key_value_memory:
+            if not is_first_step:
+                # In inference, we compute one token at a time.
+                # Select the correct positional embedding
+                # (only the last token in the sequence)
+                q_pos_emb = q_pos_emb[sequence_end - 1 : sequence_end]
+            else:
+                # In the first forward pass of inference,
+                # we use the entire provided prefix.
+                # q_pos_emb here has the rope embeddings of the entire
+                # prefix + to-be-generated output so
+                # we slice to just the prefix.
+                q_pos_emb = q_pos_emb[:sequence_end, :, :, :]
+            k_pos_emb = k_pos_emb[:sequence_end, :, :, :]
+            rotary_pos_emb = (q_pos_emb, k_pos_emb)
+
+        return key, value, rotary_pos_emb, attn_mask_type
+
     @abstractmethod
     def get_query_key_value_tensors(self, hidden_states, key_value_states, position_ids):
         """
@@ -191,35 +263,47 @@ class Attention(MegatronModule, ABC):
         # Get the query, key and value tensors based on the type of attention -
         # self or cross attn.
         # query: [1, 8, 96, 192], key:[1, 8, 96, 192], value:[1, 8, 96, 128]
-        query_states, key_states, value_states = self.get_query_key_value_tensors(hidden_states, key_value_states, position_ids)
+        query, key, value = self.get_query_key_value_tensors(hidden_states, key_value_states, position_ids)
 
-        bsz, _, q_len, _ = query_states.size()
+        if packed_seq_params is not None:
+            query = query.squeeze(1)
+            key = key.squeeze(1)
+            value = value.squeeze(1)
 
-        attn_weights = (
-            torch.matmul(query_states, key_states.transpose(2, 3)) * self.softmax_scale
-        )
+        # ==================================
+        # core attention computation
+        # ==================================
 
-        if attention_mask is not None:
-            attention_mask = attention_mask.to(torch.bfloat16)
-            attention_mask[attention_mask > 0] = -3.3895e+38
-            attn_weights = attn_weights + attention_mask
+        if self.checkpoint_core_attention and self.training:
+            core_attn_out = self._checkpointed_attention_forward(
+                query,
+                key,
+                value,
+                attention_mask,
+                attn_mask_type=self.attn_mask_type,
+                packed_seq_params=packed_seq_params,
+            )
+        else:
+            core_attn_out = self.core_attention(
+                query,
+                key,
+                value,
+                attention_mask,
+                attn_mask_type=self.attn_mask_type,
+                packed_seq_params=packed_seq_params,
+            )
 
-        attn_weights = torch.nn.functional.softmax(
-            attn_weights, dim=-1, dtype=torch.float32
-        ).to(query_states.dtype)
+        if packed_seq_params is not None:
+            # reshape to same output shape as unpacked case
+            # (t, np, hn) -> (t, b=1, h=np*hn)
+            # t is the pack size = sum (sq_i)
+            # note that batch is a dummy dimension in the packed case
+            core_attn_out = core_attn_out.reshape(core_attn_out.size(0), 1, -1)
 
-        attn_weights = torch.nn.functional.dropout(
-            attn_weights, p=self.config.attention_dropout, training=self.training
-        )
+        # =================
+        # Output. [sq, b, h]
+        # =================
 
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        attn_output = attn_output.transpose(0, 2).transpose(1, 2).contiguous()
-
-        # [96, 1, 2048]
-        core_attn_out = attn_output.reshape(q_len, bsz, self.num_attention_heads_per_partition * self.config.v_head_dim)
-
-        # output: [48, 1, 2048]
         output, bias = self.linear_proj(core_attn_out)
 
         return output, bias
@@ -369,8 +453,8 @@ class SelfAttention(Attention):
         )
 
         # [96, 1, 8, 128] -> [1, 8, 96, 128]
-        value_states = value_states.transpose(0, 1).transpose(1, 2)
-        kv_seq_len = value_states.shape[-2]
+        #value_states = value_states.transpose(0, 1).transpose(1, 2)
+        kv_seq_len = value_states.shape[0]
 
         #cos: [96, 64], sin:[96, 64]
         cos, sin = self.rotary_pos_emb(value_states, seq_len=kv_seq_len)
@@ -402,6 +486,9 @@ class SelfAttention(Attention):
 
         key_states[:, :, :, : self.config.qk_nope_head_dim] = k_nope
         key_states[:, :, :, self.config.qk_nope_head_dim :] = k_pe
+
+        query_states = query_states.transpose(1, 2).transpose(0, 1)
+        key_states = key_states.transpose(1, 2).transpose(0, 1)
 
         return query_states, key_states, value_states
 

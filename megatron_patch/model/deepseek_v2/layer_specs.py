@@ -13,20 +13,19 @@
 # limitations under the License.
 
 from megatron.core.fusions.fused_bias_dropout import get_bias_dropout_add
-from megatron.core.fusions.fused_layer_norm import FusedLayerNorm
+
 from megatron.core.tensor_parallel.layers import ColumnParallelLinear, RowParallelLinear
 
 from megatron.core.transformer.custom_layers.transformer_engine import (
     TEDotProductAttention,
+    TEDotProductAttentionMLA,
     TELayerNormColumnParallelLinear,
     TENorm,
     TERowParallelLinear,
     TEColumnParallelLinear,
 )
-from megatron.core.transformer.dot_product_attention import DotProductAttention
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.identity_op import IdentityOp
-
 from megatron.core.transformer.spec_utils import ModuleSpec
 
 
@@ -46,7 +45,7 @@ def get_gpt_layer_with_transformer_engine_spec(
     )
 
     mlp_dense = _get_mlp_module_spec(
-        use_te=False, num_experts=None, moe_grouped_gemm=moe_grouped_gemm
+        use_te=True, num_experts=None, moe_grouped_gemm=moe_grouped_gemm
     )
 
     return ModuleSpec(
@@ -56,20 +55,20 @@ def get_gpt_layer_with_transformer_engine_spec(
                 module=SelfAttention,
                 params={"attn_mask_type": AttnMaskType.causal},
                 submodules=SelfAttentionSubmodules(
-                    linear_q_proj=ColumnParallelLinear,
-                    linear_q_a_proj=ColumnParallelLinear,
+                    linear_q_proj=TEColumnParallelLinear,
+                    linear_q_a_proj=TEColumnParallelLinear,
                     linear_q_b_proj=ColumnParallelLinear,
-                    linear_kv_a_proj_with_mqa=ColumnParallelLinear,
+                    linear_kv_a_proj_with_mqa=TEColumnParallelLinear,
                     linear_kv_b_proj=ColumnParallelLinear,
-                    linear_proj=RowParallelLinear,
-                    q_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
-                    kv_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
-                    core_attention=TEDotProductAttention,
+                    linear_proj=TERowParallelLinear,
+                    q_a_layernorm=TENorm if qk_layernorm else IdentityOp,
+                    kv_a_layernorm=TENorm if qk_layernorm else IdentityOp,
+                    core_attention=TEDotProductAttentionMLA,
                 ),
             ),
             self_attn_bda=get_bias_dropout_add,
-            pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+            pre_mlp_layernorm=TENorm if num_experts else IdentityOp,
+            input_layernorm=TENorm if num_experts else IdentityOp,
             mlp=mlp,
             mlp_dense=mlp_dense,
             mlp_bda=get_bias_dropout_add,
@@ -86,8 +85,8 @@ def _get_mlp_module_spec(
         return ModuleSpec(
             module=MLP,
             submodules=MLPSubmodules(
-                linear_fc1=ColumnParallelLinear,
-                linear_fc2=RowParallelLinear,
+                linear_fc1=TEColumnParallelLinear if use_te else ColumnParallelLinear,
+                linear_fc2=TERowParallelLinear if use_te else RowParallelLinear,
             ),
         )
     else:
