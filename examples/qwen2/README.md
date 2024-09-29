@@ -136,7 +136,7 @@ OUTPUT_BASEPATH=${26}           # 训练输出日志文件路径
 cd /workspace/Pai-Megatron-Patch/examples/qwen2
 sh run_mcore_qwen.sh  \
 dsw  \
-7B   \
+0.5B   \
 1    \
 8 \
 1e-5   \
@@ -144,8 +144,8 @@ dsw  \
 128  \
 128  \
 bf16  \
-4   \
-2  \
+1   \
+1  \
 1 \
 1 \
 true \
