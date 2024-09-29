@@ -40,6 +40,8 @@ moe_options=" \
 
 cpu_options=""
 
+tie_option=""
+
 elif [ $MODEL_SIZE = 1.5B ]; then
 
 HIDDEN_SIZE=1536
@@ -58,6 +60,8 @@ moe_options=" \
             "
 
 cpu_options=""
+
+tie_option=""
 
 elif [ $MODEL_SIZE = 7B ]; then
 
@@ -78,6 +82,10 @@ moe_options=" \
 
 cpu_options=""
 
+tie_option=" \
+        --untie-embeddings-and-output-weights \
+        "
+
 elif [ $MODEL_SIZE = 72B ]; then
 
 HIDDEN_SIZE=8192
@@ -96,6 +104,10 @@ moe_options=" \
             "
 cpu_options=" \
             --use-cpu-initialization"
+
+tie_option=" \
+        --untie-embeddings-and-output-weights \
+        "
 
 elif [ $MODEL_SIZE = A14B ]; then
 
@@ -127,6 +139,10 @@ moe_options=" \
 
 cpu_options=" \
             --use-cpu-initialization"
+
+tie_option=" \
+        --untie-embeddings-and-output-weights \
+        "
 
 fi
 
@@ -181,7 +197,6 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen2_dense_and_moe_gqa.py \
     --no-async-tensor-model-parallel-allreduce \
     --patch-tokenizer-type Qwen2Tokenizer \
     --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-    --untie-embeddings-and-output-weights \
     --no-bias-swiglu-fusion \
     --no-rope-fusion \
     --use-rotary-position-embeddings \
@@ -199,7 +214,8 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen2_dense_and_moe_gqa.py \
     ${te_options} \
     ${convert_options} \
     ${pr_options} \
-    ${cpu_options}
+    ${cpu_options} \
+    ${tie_option}
 
 
 ELAPSED_TIME=$(($SECONDS - $START_TIME))
