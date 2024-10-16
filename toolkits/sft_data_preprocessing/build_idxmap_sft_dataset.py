@@ -91,12 +91,13 @@ class Encoder(object):
             label_ids.extend(y_ids)
             sentence_lens.append(len(all_ids))
 
-        # Need Padding
-        if self.seq_length > sum(sentence_lens):
-            doc_ids = doc_ids + [pad_token_id] * (self.seq_length - sum(sentence_lens))
-            label_ids = label_ids + [-100] * (self.seq_length - sum(sentence_lens))
-        ids['text'] = doc_ids + label_ids
-        lens['text'] = [len(doc_ids) * 2]
+        if sum(sentence_lens) > 0:
+            # Need Padding
+            if self.seq_length > sum(sentence_lens):
+                doc_ids = doc_ids + [pad_token_id] * (self.seq_length - sum(sentence_lens))
+                label_ids = label_ids + [-100] * (self.seq_length - sum(sentence_lens))
+            ids['text'] = doc_ids + label_ids
+            lens['text'] = [len(doc_ids) * 2]
         yield ids, lens, len(json.dumps(ids))
     
     
