@@ -106,11 +106,13 @@ def load_megatron_model(args):
 
     os.makedirs(args.save, exist_ok=True)
     os.system("cp -rf " + args.hf_ckpt_path + "/config*.json " + args.save)
+    os.system("cp -rf " + args.hf_ckpt_path + "/generation_config.json " + args.save)
     os.system("cp -rf " + args.hf_ckpt_path+ "/tokenizer* " + args.save)
     os.system("cp -rf " + args.hf_ckpt_path + "/vocab.json " + args.save)
     os.system("cp -rf " + args.hf_ckpt_path + "/merges.txt " + args.save)
 
     os.system("cp -rf " + args.hf_ckpt_path + "/config*.json " + args.load)
+    os.system("cp -rf " + args.hf_ckpt_path + "/generation_config.json " + args.load)
     os.system("cp -rf " + args.hf_ckpt_path+ "/tokenizer* " + args.load)
     os.system("cp -rf " + args.hf_ckpt_path + "/vocab.json " + args.load)
     os.system("cp -rf " + args.hf_ckpt_path + "/merges.txt " + args.load)

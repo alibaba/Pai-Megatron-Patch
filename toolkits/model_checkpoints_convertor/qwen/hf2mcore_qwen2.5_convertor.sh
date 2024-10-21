@@ -204,6 +204,7 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen2_dense_and_moe_gqa.py \
     --attention-dropout 0.0 \
     --hidden-dropout 0.0 \
     --rotary-base 1000000 \
+    --save-safetensors \
     ${moe_options} \
     ${te_options} \
     ${convert_options} \
