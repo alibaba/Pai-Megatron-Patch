@@ -30,6 +30,28 @@ from safetensors.torch import load_file
 from transformers import AutoTokenizer, GPT2Config, LlamaConfig
 from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint
 
+import numpy as np
+from collections.abc import Mapping, Sequence
+@torch.inference_mode()
+def clone_state_dict(elem):
+    """clone all tensors in the elem to cpu device.
+    """
+    elem_type = type(elem)
+    if isinstance(elem, torch.Tensor):
+        elem = elem.clone()
+    elif isinstance(elem, (np.ndarray, str)):
+        pass
+    elif isinstance(elem, Mapping):
+        elem = dict(elem)
+        for k, v in elem.items():
+            elem[k] = clone_state_dict(v)
+        elem = elem_type(elem)
+    elif isinstance(elem, Sequence):
+        elem = list(elem)
+        for i in range(len(elem)):
+            elem[i] = clone_state_dict(elem[i])
+        elem = elem_type(elem)
+    return elem
 
 def add_checkpointing_args(parser):
     parser.add_argument("--megatron-path", type=str, default=None, help="Base directory of Megatron repository")
@@ -742,7 +764,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                     f" {pp_rank}:"
                 )
                 recursive_print(None, output_state_dict[tp_rank])
-            torch.save(output_state_dict[tp_rank], checkpoint_path)
+            torch.save(clone_state_dict(output_state_dict[tp_rank]), checkpoint_path)
 
 
 def convert_checkpoint_from_megatron_to_transformers(args):
@@ -1081,7 +1103,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     if not os.path.exists(args.save_path):
         os.system(f'mkdir -p {args.save_path}')
     for shard_file, shard in shards.items():
-        torch.save(shard, os.path.join(args.save_path, shard_file))
+        torch.save(clone_state_dict(shard), os.path.join(args.save_path, shard_file))
 
     if index is None:
         print(f"Model weights saved in {os.path.join(args.save_path, WEIGHTS_NAME)}")

@@ -24,6 +24,29 @@ torch.backends.cudnn.benchmark = False
 torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
 
+import numpy as np
+from collections.abc import Mapping, Sequence
+@torch.inference_mode()
+def clone_state_dict(elem):
+    """clone all tensors in the elem to cpu device.
+    """
+    elem_type = type(elem)
+    if isinstance(elem, torch.Tensor):
+        elem = elem.clone()
+    elif isinstance(elem, (np.ndarray, str)):
+        pass
+    elif isinstance(elem, Mapping):
+        elem = dict(elem)
+        for k, v in elem.items():
+            elem[k] = clone_state_dict(v)
+        elem = elem_type(elem)
+    elif isinstance(elem, Sequence):
+        elem = list(elem)
+        for i in range(len(elem)):
+            elem[i] = clone_state_dict(elem[i])
+        elem = elem_type(elem)
+    return elem
+
 def add_model_args(parser):
 
     parser.add_argument(
@@ -195,7 +218,7 @@ def save_state_dict(args, model, checkpoint_name):
     state_dict['model'] = model
     os.makedirs(os.path.dirname(checkpoint_name), exist_ok=True)
     print(f'save model part {checkpoint_name}')
-    torch.save(state_dict, checkpoint_name)
+    torch.save(clone_state_dict(state_dict), checkpoint_name)
 
 
 def save_mgmodel(mgmodel, args):
@@ -271,7 +294,7 @@ def save_hgmodel(args, model):
     for shard_file, shard in shards.items():
         target_file = os.path.join(args.save, shard_file)
         print(f'huggingface model is save to {target_file}')
-        torch.save(shard, target_file)
+        torch.save(clone_state_dict(shard), target_file)
 
     if index is None:
         print(f"Model weights saved in {os.path.join(args.save, WEIGHTS_NAME)}")
