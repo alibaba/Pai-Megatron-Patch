@@ -139,6 +139,9 @@ tie_option=" \
         --untie-embeddings-and-output-weights \
         "
 
+cpu_options=" \
+            --use-cpu-initialization"
+
 fi
 
 if [ $MG2HF = true ]; then
@@ -196,8 +199,6 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen2_dense_and_moe_gqa.py \
     --use-rotary-position-embeddings \
     --disable-bias-linear \
     --add-qkv-bias \
-    --group-query-attention \
-    --num-query-groups ${NUM_KEY_VALUE_HEADS} \
     --normalization RMSNorm \
     --norm-epsilon ${RMS_NORM_EPS} \
     --use-mcore-models \
@@ -205,12 +206,12 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen2_dense_and_moe_gqa.py \
     --hidden-dropout 0.0 \
     --rotary-base 1000000 \
     --save-safetensors \
-    ${moe_options} \
     ${te_options} \
     ${convert_options} \
     ${pr_options} \
     ${cpu_options} \
-    ${tie_option}
+    ${tie_option} \
+    ${gqa_options}
 
 
 ELAPSED_TIME=$(($SECONDS - $START_TIME))
