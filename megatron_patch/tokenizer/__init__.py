@@ -247,6 +247,7 @@ def build_tokenizer(args):
                 super().__init__(tokenizer_path)
                 self.tokenizer = AutoTokenizer.from_pretrained(
                     tokenizer_path,
+                    padding_side="right",
                     trust_remote_code=True
                 )
                 self.extra_vocab_size = extra_vocab_size
