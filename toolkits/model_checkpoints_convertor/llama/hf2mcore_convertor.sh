@@ -57,6 +57,9 @@ gqa_options=" \
 		    --group-query-attention \
 		    --num-query-groups 8"
 
+cpu_options=" \
+            --use-cpu-initialization"
+
 elif [ $MODEL_SIZE = 8B ]; then
 
 NUM_LAYERS=32
@@ -146,7 +149,7 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore.py \
     --hidden-dropout 0.0 \
     ${expert_options} \
     ${convert_options} \
-    ${gqa_options}
+    ${gqa_options} \
 
 else
 python hf2mcore_70b.py \
@@ -158,6 +161,7 @@ python hf2mcore_70b.py \
   --target_tensor_model_parallel_size ${TP} \
   --target_pipeline_model_parallel_size ${PP} \
 ${convert_options} \
+${cpu_options}
 
 fi
 

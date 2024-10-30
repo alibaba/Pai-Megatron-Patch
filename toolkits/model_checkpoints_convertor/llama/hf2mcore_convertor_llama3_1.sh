@@ -46,6 +46,9 @@ gqa_options=" \
 		    --num-query-groups 8"
 EXTRA_VOCAB_SIZE=256
 
+cpu_options=" \
+            --use-cpu-initialization"
+
 elif [ $MODEL_SIZE = 8B ]; then
 
 NUM_LAYERS=32
@@ -60,6 +63,8 @@ gqa_options=" \
 		    --group-query-attention \
 		    --num-query-groups 8"
 EXTRA_VOCAB_SIZE=256
+
+cpu_options=""
 
 fi
 
