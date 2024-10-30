@@ -40,6 +40,7 @@ Pai-Megatron-Patch是各类开源大模型和Megatron训练加速引擎之间的
 - [阿里云PAI获得FewCLUE基于大模型的小样本学习双料冠军](https://developer.aliyun.com/article/788081?spm=a2c6h.12873639.article-detail.17.11c5383cHpFZks&tlog=yuekan_8)
 
 新功能：
+- **添加大模型训练最优吞吐参数自动配置以及针对qwen2/2.5系列模型优化微调per seq sft loss.** [🔥🔥 2024.10.30]
 - **升级Deepseek-V2-MoE系列模型支持TE版的MLA以及流水并行CKPT转换** [🔥🔥 2024.09.26]
 - **支持用Megatron-Core框架训练Qwen2.5系列模型** [🔥🔥 2024.09.20]
 - **支持Qwen2及LLaMA-3.1系列模型SFT的Sequence Packing技术.** [🔥🔥 2024.09.13]

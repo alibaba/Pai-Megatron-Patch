@@ -410,6 +410,7 @@ megatron_options="  \
         --rotary-base 1000000 \
         --rotary-seq-len-interpolation-factor 1 \
         --no-save-optim \
+        --calculate-per-token-loss \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
