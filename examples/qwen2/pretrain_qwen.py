@@ -87,7 +87,7 @@ def get_batch(data_iterator):
 
     # TODO: this is pretty hacky, find a better way
     if (not mpu.is_pipeline_first_stage()) and (not mpu.is_pipeline_last_stage()):
-        return None, None, None, None, None, None
+        return None, None, None, None, None, None, None
 
     args = get_args()
 
