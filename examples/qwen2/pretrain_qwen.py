@@ -87,7 +87,7 @@ def get_batch(data_iterator):
 
     # TODO: this is pretty hacky, find a better way
     if (not mpu.is_pipeline_first_stage()) and (not mpu.is_pipeline_last_stage()):
-        return None, None, None, None, None, None
+        return None, None, None, None, None, None, None
 
     args = get_args()
 
@@ -185,6 +185,8 @@ def loss_func(loss_mask: torch.Tensor, num_seqs: torch.Tensor, output_tensor: to
     # NOTE: The grad will be scaled down by CP size later, should not remove this multilication factor
     # LINK: https://github.com/NVIDIA/Megatron-LM/issues/906
     # The issue is solved since 0926
+    if num_seqs is None:
+        return loss[0] * args.context_parallel_size, {"lm loss": averaged_loss}
     return loss[0] * args.context_parallel_size, num_seqs.sum(), {"lm loss": averaged_loss}
 
 
