@@ -137,7 +137,7 @@ def get_batch_on_this_tp_rank_original(data_iterator, per_seq_average=False):
             _broadcast(batch['loss_mask'])
             _broadcast(batch['attention_mask'])
             _broadcast(batch['position_ids'])
-            _broadcast(num_seqs)
+            _broadcast(batch['num_seqs'])
 
         elif mpu.is_pipeline_first_stage():
             _broadcast(batch['tokens'])
