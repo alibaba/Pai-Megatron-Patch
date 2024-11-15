@@ -148,6 +148,7 @@ def get_batch_on_this_tp_rank_original(data_iterator, per_seq_average=False):
             _broadcast(batch['labels'])
             _broadcast(batch['loss_mask'])
             _broadcast(batch['attention_mask'])
+            _broadcast(batch['num_seqs'])
 
     else:
 
@@ -157,7 +158,8 @@ def get_batch_on_this_tp_rank_original(data_iterator, per_seq_average=False):
                              device=torch.cuda.current_device())
         loss_mask = torch.empty((args.micro_batch_size, args.seq_length), dtype=torch.float32,
                                 device=torch.cuda.current_device())
-        attention_mask = torch.empty((args.micro_batch_size, 1, args.seq_length, args.seq_length), dtype=torch.bool,
+        mbs = args.micro_batch_size if args.reset_attention_mask else 1
+        attention_mask = torch.empty((mbs, 1, args.seq_length, args.seq_length), dtype=torch.bool,
                                      device=torch.cuda.current_device())
         position_ids = torch.empty((args.micro_batch_size, args.seq_length), dtype=torch.int64,
                                    device=torch.cuda.current_device())
@@ -178,6 +180,7 @@ def get_batch_on_this_tp_rank_original(data_iterator, per_seq_average=False):
         elif mpu.is_pipeline_first_stage():
             labels = None
             loss_mask = None
+            num_seqs = None
 
             _broadcast(tokens)
             _broadcast(attention_mask)
@@ -190,6 +193,7 @@ def get_batch_on_this_tp_rank_original(data_iterator, per_seq_average=False):
             _broadcast(labels)
             _broadcast(loss_mask)
             _broadcast(attention_mask)
+            _broadcast(num_seqs)
 
         batch = {
             'tokens': tokens,
@@ -265,7 +269,7 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator, per_seq_average=False):
             _broadcast(batch['labels'])
             _broadcast(batch['loss_mask'])
             _broadcast(batch['attention_mask'])
-            _broadcast(num_seqs)
+            _broadcast(batch['num_seqs'])
 
         elif mpu.is_pipeline_first_stage():
             _broadcast(batch['tokens'])
@@ -275,6 +279,7 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator, per_seq_average=False):
             _broadcast(batch['labels'])
             _broadcast(batch['loss_mask'])
             _broadcast(batch['attention_mask'])
+            _broadcast(batch['num_seqs'])
         
         _broadcast(batch['position_ids'])
 
@@ -289,7 +294,8 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator, per_seq_average=False):
         
         attention_mask = None
         if args.create_attention_mask_in_dataloader:
-            attention_mask = torch.empty((args.micro_batch_size, 1, args.seq_length, args.seq_length), dtype=torch.bool,
+            mbs = args.micro_batch_size if args.reset_attention_mask else 1
+            attention_mask = torch.empty((mbs, 1, args.seq_length, args.seq_length), dtype=torch.bool,
                                         device=torch.cuda.current_device())
         position_ids = torch.empty((args.micro_batch_size, args.seq_length), dtype=torch.int64,
                                    device=torch.cuda.current_device())
@@ -309,6 +315,7 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator, per_seq_average=False):
         elif mpu.is_pipeline_first_stage():
             labels = None
             loss_mask = None
+            num_seqs = None
 
             _broadcast(tokens)
             _broadcast(attention_mask)
@@ -319,6 +326,7 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator, per_seq_average=False):
             _broadcast(labels)
             _broadcast(loss_mask)
             _broadcast(attention_mask)
+            _broadcast(num_seqs)
 
         _broadcast(position_ids)
         batch = {
@@ -326,7 +334,8 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator, per_seq_average=False):
             'labels': labels,
             'loss_mask': loss_mask,
             'attention_mask': attention_mask,
-            'position_ids': position_ids
+            'position_ids': position_ids,
+            'num_seqs': num_seqs
         }
 
     return batch
