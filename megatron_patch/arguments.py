@@ -12,7 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Union
 import argparse
+
+
+def patch_if_not_exist(
+        group_or_parser: Union[argparse._ArgumentGroup, argparse.ArgumentParser],
+        keyname, type=None, default=None, help=None
+):
+    has_keyname = False
+    for action in vars(group_or_parser)["_actions"]:
+        if isinstance(action, argparse._StoreAction):
+            if keyname in action.option_strings:
+                has_keyname = True
+
+    if not has_keyname:
+        return group_or_parser.add_argument(
+            keyname,
+            type=type,
+            default=default,
+            help=help,
+        )
+    return None
 
 
 def get_patch_args(parser):
@@ -44,15 +65,16 @@ def get_patch_args(parser):
             if "--rotary-base" in action.option_strings:
                 has_rotary_base = True
 
-    if not has_rotary_base:
-        group.add_argument(
-            "--rotary-base",
-            type=int,
-            default=10000,
-            help="Base to use for rotary positional embeddings, default 10000",
-        )
+    patch_if_not_exist(
+        group,
+        "--rotary-base",
+        type=int,
+        default=10000,
+        help="Base to use for rotary positional embeddings, default 10000",
+    )
 
-    group.add_argument(
+    patch_if_not_exist(
+        group,
         "--local-rank",
         type=int,
         default=None,
@@ -392,21 +414,30 @@ def get_patch_args(parser):
         "--enable-shared-expert", action="store_true", help="enable-shared-expert"
     )
 
-    group.add_argument("--q-lora-rank", type=int, default=None)
+    patch_if_not_exist(
+        group,
+        "--q-lora-rank", type=int, default=None
+    )
 
-    group.add_argument("--kv-lora-rank", type=int, default=None)
+    patch_if_not_exist(
+        group,
+        "--kv-lora-rank", type=int, default=None
+    )
+
+    patch_if_not_exist(
+        group,
+        "--v-head-dim", type=int, default=None
+    )
 
     group.add_argument("--qk-nope-head-dim", type=int, default=None)
-
     group.add_argument("--qk-rope-head-dim", type=int, default=None)
-
-    group.add_argument("--v-head-dim", type=int, default=None)
-
     group.add_argument("--num-shared-experts", type=int, default=None)
-
     group.add_argument("--moe-layer-freq", type=int, default=1)
 
-    group.add_argument("--rotary-scaling-factor", type=int, default=1)
+    patch_if_not_exist(
+        group,
+        "--rotary-scaling-factor", type=int, default=1
+    )
 
     group.add_argument(
         "--optimizer-offload-policy",
@@ -456,4 +487,64 @@ def get_patch_args(parser):
         default=0,
         help="The num of layers to be moved to CPU",
     )
+
+    group.add_argument('--dataset-config', type=str, default=None)
+    group.add_argument("--prompt-path", type=str, default=None)
+    group.add_argument('--freeze-LM', action='store_true', default=False)
+    group.add_argument('--freeze-ViT', action='store_true', default=False)
+    group.add_argument('--language-model-type', type=str, required=False)
+    group.add_argument('--vision-model-type', type=str, default="clip")
+    group.add_argument("--disable-vision-class-token", action="store_true", default=False)
+    group.add_argument(
+        "--allow-missing-vision-projection-checkpoint", action="store_true", default=False
+    )
+
+    group.add_argument(
+        "--dataloader-save", type=str, default=None, help="Energon dataloader state save path"
+    )
+    group.add_argument(
+        "--use-tiling", action="store_true", default=False, help="Use input image tiling"
+    )
+    group.add_argument("--max-num-tiles", type=int, default=1, help="Maximum number of image tiles")
+    group.add_argument(
+        "--use-thumbnail", action="store_true", default=False, help="Add image thumbnail as a tile"
+    )
+    group.add_argument(
+        "--dataloader-seq-length",
+        type=int,
+        help="Make dataloader to produce sequences of specific length.",
+    )
+    group.add_argument(
+        "--num-frames",
+        type=int,
+        default=1,
+        help="Number of frames to regularly sample from the video as input to the model.",
+    )
+    group.add_argument(
+        "--online-evaluation-config", type=str, help="Config file for online evaluation."
+    )
+
+    group.add_argument(
+        "--tokenizer-prompt-format",
+        type=str,
+        choices=["mistral", "llama3", "chatml"],
+        required=False,
+        help="Prompt format to use with the tokenizer.",
+    )
+
+    group.add_argument(
+        "--special-tokens",
+        nargs="*",
+        default=["<image>"],
+        help="Special tokens used in the multimodal model",
+    )
+
+    group.add_argument(
+        "--image-tag-type",
+        type=str,
+        choices=["nvlm", "internvl", ""],
+        default="",  # Default: Image tag not used.
+        help="Surround image tokens with tags.",
+    )
+
     return parser
