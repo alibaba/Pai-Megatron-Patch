@@ -26,7 +26,7 @@ path_dir = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 )
 sys.path.append(os.path.join(path_dir, "examples"))
-from llama3_1.pretrain_llama import model_provider
+from mistral.pretrain_mcore_mistral import model_provider
 from megatron_patch.arguments import get_patch_args
 
 torch.backends.cudnn.deterministic = True
@@ -603,9 +603,7 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
                 )
 
         # 4. final layernorm
-        # NOTE: we move the final layernorm out of decoder to apply LLaMARMSNorm
-        # mgmodel.decoder.final_layernorm.weight.copy_(hfmodel.model.norm.weight)
-        mgmodel.final_layernorm.weight.copy_(hfmodel.model.norm.weight)
+        mgmodel.decoder.final_layernorm.weight.copy_(hfmodel.model.norm.weight)
         # 5. output layer
         mgmodel.output_layer.weight.copy_(hfmodel.lm_head.weight)
 
@@ -730,7 +728,7 @@ def convert_clip(download_root, output_path, tensor_parallel_size, use_te):
 
     for i in range(tensor_parallel_size):
         output_dir_tp = os.path.join(output_path, "clip_release", f"mp_rank_0{i}")
-        os.makedirs(output_dir_tp)
+        os.makedirs(output_dir_tp, exist_ok=True)
         output_path_tp = os.path.join(output_dir_tp, "model_optim_rng.pt")
         torch.save(new_state_dicts[i], output_path_tp)
 

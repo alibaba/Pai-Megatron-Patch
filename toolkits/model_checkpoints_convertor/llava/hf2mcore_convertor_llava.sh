@@ -91,7 +91,7 @@ run_cmd="torchrun ${DISTRIBUTED_ARGS} hf2mcore_llava.py \
     --no-bias-swiglu-fusion \
     --seq-length 1 \
     --no-async-tensor-model-parallel-allreduce \
-    --patch-tokenizer-type LLamaTokenizer \
+    --patch-tokenizer-type MistralTokenizer \
     --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
     --untie-embeddings-and-output-weights \
     --no-rope-fusion \

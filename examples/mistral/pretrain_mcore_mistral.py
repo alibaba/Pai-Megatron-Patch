@@ -18,12 +18,10 @@ from torch import Tensor
 from functools import partial
 from typing import Union
 
-from megatron import get_args
-from megatron import get_timers
+from megatron.training import get_args, get_timers
 from megatron.core import mpu, tensor_parallel
 from megatron.core.enums import ModelType
-import megatron.model
-from megatron.utils import (
+from megatron.training.utils import (
     get_batch_on_this_tp_rank,
     get_batch_on_this_cp_rank,
     average_losses_across_data_parallel_group
@@ -32,7 +30,7 @@ from megatron.core.datasets.blended_megatron_dataset_builder import BlendedMegat
 from megatron.training import pretrain
 from megatron.core.datasets.gpt_dataset import GPTDatasetConfig
 from megatron.core.datasets.gpt_dataset import GPTDataset
-from megatron.arguments import core_transformer_config_from_args
+from megatron.training.arguments import core_transformer_config_from_args
 
 from megatron_patch.data import build_pretrain_dataset_from_original
 from megatron_patch.data.utils import get_batch_on_this_tp_rank_original
@@ -42,7 +40,10 @@ from megatron_patch.model.mixtral.model import GPTModel
 from megatron_patch.model.mixtral.layer_specs import get_gpt_layer_with_transformer_engine_spec
 
 
-def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megatron.model.GPTModel]:
+def model_provider(
+    pre_process=True, post_process=True
+) -> Union[GPTModel]:
+
     args = get_args()
     build_tokenizer(args)
     config = core_transformer_config_from_args(get_args())
