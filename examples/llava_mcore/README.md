@@ -126,9 +126,9 @@ sh run_mcore_llava.sh  \
 dsw  \
 7B   \
 1    \
-64 \
+256 \
+0.00015   \
 1e-5   \
-1e-6   \
 576  \
 1024  \
 bf16  \
@@ -143,7 +143,7 @@ false \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
 /mnt/mistral-clip-ckpts/Mistral-7B-Instruct-v0.3-to-mcore-tp4-pp1 \
-10000  \
-100   \
+20000  \
+200   \
 /workspace/output_mcore_llava_pretrain
 ```

@@ -191,7 +191,7 @@ megatron_options="  \
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style cosine \
-        --weight-decay 0.1 \
+        --weight-decay 1e-2 \
         --adam-beta1 0.9 \
         --adam-beta2 0.95 \
         --clip-grad 1.0 \
@@ -225,7 +225,7 @@ megatron_options="  \
         --no-load-optim \
         --no-load-rng \
         --num-workers 2 \
-        --patch-tokenizer-type LLama3Tokenizer \
+        --patch-tokenizer-type MistralTokenizer \
         --swiglu \
         --normalization RMSNorm \
         --norm-epsilon 1e-05 \
