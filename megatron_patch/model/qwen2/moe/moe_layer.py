@@ -20,13 +20,23 @@ from megatron.core import parallel_state, tensor_parallel
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import TransformerConfig
 
-from .experts import GroupedMLP, SequentialMLP
+from .experts import GroupedMLP, SequentialMLP, TEGroupedMLP
 from .router import TopKRouter
 from .token_dispatcher import (
     MoEAllGatherTokenDispatcher,
     MoEAlltoAllTokenDispatcher,
 )
 from ..transformer.mlp import MLPSubmodules, MLP
+
+try:
+    from megatron.core.transformer.custom_layers.transformer_engine import (
+        TELayerNormColumnParallelLinear,
+        TERowParallelLinear,
+    )
+
+    HAVE_TE = True
+except ImportError:
+    HAVE_TE = False
 
 class BaseMoELayer(MegatronModule, ABC):
     """Base class for a mixture of experts layer.
@@ -84,14 +94,22 @@ class MoELayer(BaseMoELayer):
         self.router = TopKRouter(config=self.config)
         self.enable_shared_experts = config.enable_shared_expert
         if config.enable_shared_expert:
-            self.shared_expert = MLP(self.config, submodules, is_expert=False, is_shared_expert=True)
+            mlpSubmodules=MLPSubmodules(
+                linear_fc1=TELayerNormColumnParallelLinear,
+                linear_fc2=TERowParallelLinear,
+            )
+            self.shared_expert = MLP(self.config, mlpSubmodules, is_expert=False, is_shared_expert=True)
             self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
 
         if self.config.moe_grouped_gemm:
-            self.experts = GroupedMLP(self.num_local_experts, self.config)
+            if isinstance(self.submodules, MLPSubmodules):
+                self.experts = TEGroupedMLP(self.num_local_experts, self.config, self.submodules)
+            else:
+                self.experts = GroupedMLP(self.num_local_experts, self.config)
         else:
             assert isinstance(self.submodules, MLPSubmodules)
             self.experts = SequentialMLP(self.num_local_experts, self.config, self.submodules)
+
         if config.moe_token_dispatcher_type == "allgather":
             self.token_dispatcher = MoEAllGatherTokenDispatcher(
                 self.num_local_experts, self.local_expert_indices, config=self.config
