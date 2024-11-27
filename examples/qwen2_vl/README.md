@@ -77,9 +77,9 @@ cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen
 bash hf2mcore_qwen2_vl_convertor.sh \
 7B \
 /mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct \
-/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct-tp1pp1 \
-1  \
-1  \
+/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct-tp2pp2 \
+2  \
+2  \
 false \
 bf16
 ```
@@ -129,8 +129,8 @@ dsw  \
 1024  \
 1024  \
 bf16  \
-1   \
-1  \
+2   \
+2  \
 1 \
 true \
 true   \
@@ -139,7 +139,7 @@ false \
 100000  \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
-/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct-tp1pp1 \
+/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct-tp2pp2 \
 20000  \
 200   \
 /workspace/output_mcore_qwen2vl_pretrain

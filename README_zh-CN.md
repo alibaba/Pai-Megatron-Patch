@@ -2,6 +2,7 @@
 
 |             |                                                  Megatron-LM-Dense                                                   |                                                   Megatron-Core-Dense                                                   |                                                    Megatron-Core-MoE                                                     |                                                  MegaBlocks-MoE                                                   |
 |:------------|:--------------------------------------------------------------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------------------------------:|:------------------------------------------------------------------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------------------------:|
+| Qwen2-VL      |  N/A |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen2_vl/README.md#Megatron-Core模型训练流程)   |                                                           N/A                                                            | N/A
 | LLaVA       |  N/A |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llava_mcore/README.md#Megatron-Core模型训练流程)   |                                                           N/A                                                            | N/A
 | Qwen2.5     |  N/A | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen2_5/README.md#Megatron-Core-Dense模型训练流程)  |                                                           N/A                                                            | N/A
 | LLama3.1    |  N/A | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/llama3_1/README.md#Megatron-Core-Dense模型训练流程) |                                                           N/A                                                            | N/A
@@ -40,6 +41,7 @@ Pai-Megatron-Patch是各类开源大模型和Megatron训练加速引擎之间的
 - [阿里云PAI获得FewCLUE基于大模型的小样本学习双料冠军](https://developer.aliyun.com/article/788081?spm=a2c6h.12873639.article-detail.17.11c5383cHpFZks&tlog=yuekan_8)
 
 新功能：
+- **支持用Megatron-Core框架训练Qwen2-VL模型** [🔥🔥 2024.11.27]
 - **支持用Megatron-Core框架训练LLaVA模型** [🔥🔥 2024.11.20]
 - **添加大模型训练最优吞吐参数自动配置以及针对qwen2/2.5系列模型优化微调per seq sft loss.** [🔥🔥 2024.10.30]
 - **升级Deepseek-V2-MoE系列模型支持TE版的MLA以及流水并行CKPT转换** [🔥🔥 2024.09.26]
