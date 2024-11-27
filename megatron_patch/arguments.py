@@ -81,6 +81,27 @@ def get_patch_args(parser):
         help="local rank passed from distributed launcher",
     )
 
+    patch_if_not_exist(
+        group,
+        "--spatial-merge-size",
+        type=int,
+        default=2,
+    )
+
+    patch_if_not_exist(
+        group,
+        "--temporal-patch-size",
+        type=int,
+        default=2,
+    )
+
+    patch_if_not_exist(
+        group,
+        "--patch-size",
+        type=int,
+        default=14,
+    )
+
     group.add_argument("--n-head-kv", type=int, default=None, help="n-head-kv")
 
     group.add_argument(
@@ -264,7 +285,6 @@ def get_patch_args(parser):
 
     group.add_argument("--image-size", type=int, default=None, help="image-size")
 
-    group.add_argument("--patch-size", type=int, default=None, help="patch-size")
 
     group.add_argument("--sliding-window", type=int, default=None)
 
@@ -498,7 +518,7 @@ def get_patch_args(parser):
     group.add_argument(
         "--allow-missing-vision-projection-checkpoint", action="store_true", default=False
     )
-
+    group.add_argument("--use-te", action="store_true", default=False)
     group.add_argument(
         "--dataloader-save", type=str, default=None, help="Energon dataloader state save path"
     )
