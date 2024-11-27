@@ -1,4 +1,4 @@
-# LLaVA模型在Pai-Megatron-Patch的最佳实践
+# Qwen2-VL模型在Pai-Megatron-Patch的最佳实践
 
 ## Table of Contents
    * [安装](#安装)
@@ -21,10 +21,10 @@ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 
 ```bash
 cd /mnt
-mkdir mistral-clip-ckpts
-cd mistral-clip-ckpts
-git clone https://modelscope.cn/models/rubraAI/Mistral-7B-Instruct-v0.3
-git clone https://modelscope.cn/models/AI-ModelScope/clip-vit-large-patch14-336
+mkdir qwen2-vl-ckpts
+cd qwen2-vl-ckpts
+git clone https://www.modelscope.cn/Qwen/Qwen2-VL-7B-Instruct.git
+cd ..
 
 mkdir llava-datasets
 cd llava-datasets
@@ -59,28 +59,26 @@ tar -zxf wds.tgz
 
 ## Megatron-Core模型训练流程
 ### Megatron-Core模型格式转换
-运行`hf2mcore_convertor_llava.sh`脚本，需要传入的参数列表如下
+运行`hf2mcore_qwen2_vl_convertor.sh`脚本，需要传入的参数列表如下
 ```bash
-MODEL_SIZE=$1                 # 模型参数：7B
-SOURCE_LLM_CKPT_PATH=$2       # 源llm checkpoint路径
-SOURCE_CLIP_CKPT_PATH=$3      # 源clip checkpoint路径
-TARGET_CKPT_PATH=$4           # 目标checkpoint路径
-TP=$5                         # 模型并行度
-PP=$6                         # 流水并行度
-mg2hf=$7                      # 是否执行mcore2hf转换
-PR=$8                      # 精度设置，fp16/bf16/fp32     
-HF_CKPT_PATH=$9            # HF的CKPT的路径【可选，mg2hf=true时必须提供】
+MODEL_SIZE=$1                 # 模型参数：2B/7B/72B
+SOURCE_CKPT_PATH=$2           # 源llm checkpoint路径
+TARGET_CKPT_PATH=$3           # 目标checkpoint路径
+TP=$4                         # 解码器模型并行度(目前仅支持1)
+PP=$5                         # 解码器流水并行度(目前仅支持1)
+mg2hf=$6                      # 是否执行mcore2hf转换
+PR=$7                         # 精度设置，fp16/bf16/fp32     
+HF_CKPT_PATH=$8               # HF的CKPT的路径【可选，mg2hf=true时必须提供】
 ```
 例如，使用下述脚本将checkpoint转换到MCore-Dense并检查输出
 
 ```bash
-cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/llava
-bash hf2mcore_convertor_llava.sh \
+cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen
+bash hf2mcore_qwen2_vl_convertor.sh \
 7B \
-/mnt/mistral-clip-ckpts/Mistral-7B-Instruct-v0.3 \
-/mnt/mistral-clip-ckpts/clip-vit-large-patch14-336  \
-/mnt/mistral-clip-ckpts/Mistral-7B-Instruct-v0.3-to-mcore-tp4-pp1 \
-4  \
+/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct \
+/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct-tp1pp1 \
+1  \
 1  \
 false \
 bf16
@@ -92,13 +90,13 @@ bf16
 需要传入的参数列表如下：
 ```bash
 ENV=$1                          # 运行环境配置开关: dsw单机训练训练，dlc表示多机训练环境
-MODEL_SIZE=$2                   # 模型结构参数量级: 0.5B/1.5B/3B/7B/14B/32B/72B
+MODEL_SIZE=$2                   # 模型结构参数量级: 2B/7B/72B
 BATCH_SIZE=$3                   # 一次迭代一个数据并行内的样本数
 GLOBAL_BATCH_SIZE=$4            # 一次迭代多个数据并行的总样本数
 LR=$5                           # 学习率
 MIN_LR=$6                       # 最小学习率
 SEQ_LEN=$7                      # 序列长度
-DECODER_SEQ_LEN=$8              # 解码序列长度
+PAD_LEN=$8                      # Padding后长度
 PR=${9}                         # 训练精度: fp16, bf16, fp8
 TP=${10}                        # 模型并行度
 PP=${11}                        # 流水并行度
@@ -111,28 +109,27 @@ SAVE_INTERVAL=${17}             # 保存ckpt的间隔
 DATASET_PATH=${18}              # 训练数据集路径
 VALID_DATASET_PATH=${19}        # 验证数据集路径
 PRETRAIN_CHECKPOINT_PATH=${20}  # 预训练模型路径
-TRAIN_ITERS=${21}               # 训练TOKEN或者Iter数
-LR_WARMUP_ITERS=${22}           # 预热TOKEN或者Iter数        
+TRAIN_ITERS=${21}               # Iter数
+LR_WARMUP_ITERS=${22}           # 预热Iter数        
 OUTPUT_BASEPATH=${23}           # 训练输出日志文件路径
 ```
 
 #### 预训练示例
-使用以下命令启动对llaVA的继续预训练。
-备注：当加载mcore模型时出现无法加载`extra_states`时，可设置`Megatron-LM-241113/megatron/training/checkpointing`的1168行的`strict`为`False`。
+使用以下命令启动对Qwen2-VL的继续预训练。
 
 ```bash
-cd /workspace/Pai-Megatron-Patch/examples/llava_mcore
-sh run_mcore_llava.sh  \
+cd /workspace/Pai-Megatron-Patch/examples/qwen2_vl
+sh run_mcore_qwen.sh  \
 dsw  \
 7B   \
 1    \
 256 \
 0.00015   \
 1e-5   \
-576  \
+1024  \
 1024  \
 bf16  \
-4   \
+1   \
 1  \
 1 \
 true \
@@ -142,13 +139,8 @@ false \
 100000  \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
-/mnt/mistral-clip-ckpts/Mistral-7B-Instruct-v0.3-to-mcore-tp4-pp1 \
+/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct-tp1pp1 \
 20000  \
 200   \
-/workspace/output_mcore_llava_pretrain
+/workspace/output_mcore_qwen2vl_pretrain
 ```
-
-使用上述命令训练20k iters后，您应当能在tensorboard内看到如下loss曲线：
-<div align=center>
-<img src=lm_loss.png width=1200 height=400 />
-</div>

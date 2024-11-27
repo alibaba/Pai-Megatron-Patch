@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+ENV=$1
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-241113:$PYTHONPATH
@@ -8,7 +9,10 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export NVTE_APPLY_QK_LAYER_SCALING=0
 export NVTE_ALLOW_NONDETERMINISTIC_ALGO=1
 
-ENV=$1
+if [ -z ${MP_AC_LAYERS} ];then
+    MP_AC_LAYERS=1
+fi
+
 if [ $ENV = dsw ]; then
     export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
     MASTER_ADDR=localhost
@@ -22,6 +26,13 @@ elif [ $ENV = dlc ]; then
     GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU}
 fi
 
+if [ ${MP_VP} ]; then
+    echo "No Virtual Pipeline Parallel Support for Multimodel Model"
+fi
+
+MP_SFT_PACKING=false
+
+DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
 ### BASE CONFIG ###
 MODEL_SIZE=$2
@@ -30,8 +41,8 @@ GLOBAL_BATCH_SIZE=$4
 LR=$5
 MIN_LR=$6
 SEQ_LEN=$7
-DECODER_SEQ_LEN=$8
-PR=${9}
+PAD_LEN=$8
+PR=$9
 ### BASE CONFIG ###
 
 ### PARALLEL / BOOL OPTION ###
@@ -56,32 +67,81 @@ LR_WARMUP_ITERS=${22}
 
 OUTPUT_BASEPATH=${23}
 ### OTHERS ###
-
 if [ $FL = true ]; then
     export NVTE_FLASH_ATTN=1 NVTE_FUSED_ATTN=0
-    flash_options=" \
-          --use-flash-attn"
-
 elif [ $FL = false ]; then
     export NVTE_FLASH_ATTN=0 NVTE_FUSED_ATTN=1
-    flash_options=""
 fi
 
-if [ $MODEL_SIZE = 7B ]; then
+if [ $MODEL_SIZE = 2B ]; then
 
-NUM_LAYERS=32
-HIDDEN_SIZE=4096
-NUM_ATTN_HEADS=32
-INTERMEDIATE_SIZE=14336
-MAX_POSITION_EMBEDDINGS=4096
-NUM_KEY_VALUE_HEADS=8
+NUM_LAYERS=28 # num_hidden_layers
+HIDDEN_SIZE=1536 # hidden_size
+NUM_ATTN_HEADS=12 # num_attention_heads
+INTERMEDIATE_SIZE=8960 # intermediate_size
+NUM_KEY_VALUE_HEADS=2 # num_key_value_heads
+MAX_POSITION_EMBEDDINGS=32768 # max_position_embeddings
+EXTRA_VOCAB_SIZE=293 # 151643 + 293 = 151936
+RMS_NORM_EPS=1e-6 # rms_norm_eps
+
 
 gqa_options=" \
 		    --group-query-attention \
 		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
 
-language_model_type="mistral_7b"
 
+tie_option="" # tie_word_embeddings
+
+
+elif [ $MODEL_SIZE = 7B ]; then
+
+NUM_LAYERS=28
+HIDDEN_SIZE=3584
+NUM_ATTN_HEADS=28
+INTERMEDIATE_SIZE=18944
+NUM_KEY_VALUE_HEADS=4
+MAX_POSITION_EMBEDDINGS=131072
+EXTRA_VOCAB_SIZE=421  # 151643 + 421 = 152064
+RMS_NORM_EPS=1e-6
+
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+
+
+tie_option=" \
+        --untie-embeddings-and-output-weights \
+        "
+
+elif [ $MODEL_SIZE = 72B ]; then
+
+NUM_LAYERS=80
+HIDDEN_SIZE=8192
+NUM_ATTN_HEADS=64
+INTERMEDIATE_SIZE=29568
+NUM_KEY_VALUE_HEADS=8
+MAX_POSITION_EMBEDDINGS=131072
+EXTRA_VOCAB_SIZE=421
+RMS_NORM_EPS=1e-5
+
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+
+
+tie_option=" \
+        --untie-embeddings-and-output-weights \
+        "
+
+
+fi
+
+if [ $PP -gt 1 ]; then
+    ETP=$TP
+    EPP=1
+else
+    ETP=0
+    EPP=0
 fi
 
 if [ $AC = full ]; then
@@ -104,14 +164,6 @@ elif [ $AC = offload ]; then
     activation_checkpoint_options=" \
 		    --cpu-offloading \
 		    --cpu-offloading-num-layers ${MP_AC_LAYERS}"
-    if [ $TP_COMM_OVERLAP -eq 1 ]; then
-        echo "Disable --overlap-grad-reduce and --overlap-param-gather when cpu offloading is on..."
-        comm_overlap_option="\
-            --tp-comm-overlap"
-    else
-        echo "Disable --overlap-grad-reduce and --overlap-param-gather when cpu offloading is on..."
-        comm_overlap_option=""
-    fi
 fi
 
 if [ $PR = fp16 ]; then
@@ -144,29 +196,29 @@ elif [ $DO = false ]; then
                     "
 fi
 
+te_options=" \
+        --transformer-impl transformer_engine"
+SP=false
+if [ $SP = true ] && [ $TP -gt 1 ]; then
+    echo "VLM Sequence Parallel Not Support Yet..."
+fi
 
 if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
     load_options=" \
-            --pretrained-checkpoint $PRETRAIN_CHECKPOINT_PATH"
+            --load $PRETRAIN_CHECKPOINT_PATH"
 fi
-
-if [ $OPTIMIZER_OFFLOAD = 'static' ]; then
-    offload_option=" \
-        --optimizer hybridadam \
-        --optimizer-offload-policy static \
-        --optimizer-offload-fraction 1.0"
-elif [ $OPTIMIZER_OFFLOAD = 'auto' ]; then
-    offload_option=" \
-        --optimizer hybridadam \
-        --optimizer-offload-policy auto"
-else
-    offload_option=""
-fi
-
 
 LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
-PREFIX="finetune-mcore-llava-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
+PREFIX="finetune-mcore-qwen2-vl-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
 
+if [ ${MP_SFT_PACKING} = true ]; then
+    packing_options=" \
+        --reset-position-ids \
+        --no-create-attention-mask-in-dataloader
+    "
+else
+    packing_options=""
+fi
 
 ##### Prepare logdirs #######
 NAME="${PREFIX}-pr-${PR}-tp-${TP}-pp-${PP}-cp-${CP}-ac-${AC}-do-${DO}-sp-${SP}-ti-${TRAIN_ITERS}-wi-${LR_WARMUP_ITERS}"
@@ -180,24 +232,23 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 mkdir -p ${SAVED_PRETRAIN_CHECKPOINT_PATH}
 find -L ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
-
+find -L ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "merges.txt" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
 
 megatron_options="  \
         --train-data-path ${DATASET_PATH} \
         --valid-data-path ${VALID_DATASET_PATH} \
         --split 100,0,0 \
-        --transformer-impl transformer_engine \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style cosine \
-        --weight-decay 1e-2 \
+        --weight-decay 0.01 \
         --adam-beta1 0.9 \
         --adam-beta2 0.95 \
         --clip-grad 1.0 \
-        --init-method-std 0.014 \
+        --init-method-std 0.02 \
         --attention-dropout 0.0 \
-        --hidden-dropout 0.1 \
+        --hidden-dropout 0.0 \
         --lr-decay-iters ${LR_DECAY_ITERS} \
         --lr-warmup-iters ${LR_WARMUP_ITERS} \
         --train-iters ${TRAIN_ITERS} \
@@ -208,11 +259,11 @@ megatron_options="  \
         --num-attention-heads ${NUM_ATTN_HEADS} \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
-        --decoder-seq-length ${DECODER_SEQ_LEN} \
         --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
+        --max-padding-length ${PAD_LEN} \
         --log-interval 1 \
         --log-throughput \
-        --eval-interval 10000 \
+        --eval-interval 1000 \
         --eval-iters 10 \
         --save-interval ${SAVE_INTERVAL} \
         --tensorboard-queue-size 1 \
@@ -224,41 +275,27 @@ megatron_options="  \
         --context-parallel-size ${CP} \
         --no-load-optim \
         --no-load-rng \
-        --num-workers 2 \
-        --patch-tokenizer-type MistralTokenizer \
+        --num-workers 8 \
+        --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
+        --patch-tokenizer-type Qwen2VLTokenizer \
         --swiglu \
         --normalization RMSNorm \
-        --norm-epsilon 1e-05 \
+        --norm-epsilon ${RMS_NORM_EPS} \
         --use-rotary-position-embeddings \
         --position-embedding-type rope \
-        --untie-embeddings-and-output-weights \
         --disable-bias-linear \
+        --add-qkv-bias \
         --rotary-percent 1.0 \
         --rotary-base 1000000 \
-        --allow-missing-vision-projection-checkpoint \
+        --rotary-seq-len-interpolation-factor 1 \
+        --no-save-optim \
         --disable-vision-class-token \
         --dataloader-type external \
-        --freeze-LM \
-        --freeze-ViT \
-        --patch-dim 14 \
-        --img-h 336 \
-        --img-w 336 \
-        --eod-mask-loss \
-        --language-model-type ${language_model_type} \
-        --tokenizer-type MultimodalTokenizer \
-        --tokenizer-model ${PRETRAIN_CHECKPOINT_PATH} \
-        --tokenizer-prompt-format mistral \
-        --apply-layernorm-1p \
-        --attention-softmax-in-fp32 \
-        --no-masked-softmax-fusion \
-        --eod-mask-loss
         "
 
-
-DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
-run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_llava.py
- ${megatron_options} ${pr_options} ${load_options} ${activation_checkpoint_options} \
- ${do_options} ${gqa_options} ${offload_option} ${vp_options} ${flash_options}"
+run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
+ ${megatron_options} ${dataset_option} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} \
+ ${do_options} ${gqa_options} ${sft_option} ${tie_option} ${packing_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
