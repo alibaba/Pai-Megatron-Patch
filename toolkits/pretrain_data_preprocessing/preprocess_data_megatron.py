@@ -13,6 +13,7 @@ import gzip
 import glob
 import torch
 import numpy as np
+#import ftfy
 import multiprocessing
 try:
     import nltk
@@ -72,6 +73,7 @@ class Encoder(object):
         lens = {}
         for key in self.args.json_keys:
             text = data[key]
+            #text = ftfy.fix_text(text)
             if isinstance(text, list):
                 sentences = text
             else:
@@ -79,16 +81,18 @@ class Encoder(object):
             doc_ids = []
             sentence_lens = []
             for sentence in sentences:
-                if self.args.patch_tokenizer_type in ["DeepSeekV2Tokenizer", "Qwen2Tokenizer", "LLama3Tokenizer"]:
+                if self.args.patch_tokenizer_type in ["DeepSeekV2Tokenizer", "Qwen2Tokenizer", "LLama3Tokenizer", "LLama2Tokenizer"]:
                     sentence_ids = Encoder.tokenizer.tokenizer(sentence, add_special_tokens=False)['input_ids']
                 else:
                     sentence_ids = Encoder.tokenizer(sentence, add_special_tokens=False)['input_ids']
                 if not sentence_ids:
                     print(f"tokenizer error sentence_ids is empty :\n {text} \n")
                     continue
+
                 if max(sentence_ids) >= Encoder.tokenizer.vocab_size:
                     print(f"tokenizer error max(sentence_ids) >= Encoder.tokenizer.vocab_size :\n {text}\n {max(sentence_ids)}")
                     continue
+                
                 if len(sentence_ids) > 0:
                     self.total_token_count += len(sentence_ids)  # increase total token
                     doc_ids.extend(sentence_ids)
@@ -202,7 +206,7 @@ def get_args():
     group.add_argument('--tokenizer-type', type=str, required=False, default='GPT2BPETokenizer',
                        choices=['BertWordPieceLowerCase','BertWordPieceCase',
                                 'GPT2BPETokenizer', 'SentencePieceTokenizer',
-                                'GPTSentencePieceTokenizer', 'Llama2Tokenizer',
+                                'GPTSentencePieceTokenizer', 'LLama2Tokenizer',
                                 'NullTokenizer'],
                        help='What type of tokenizer to use.')
     group.add_argument('--tokenizer-model', type=str, default=None,
@@ -237,7 +241,7 @@ def get_args():
         '--patch-tokenizer-type',
         type=str,
         required=True,
-        choices=['Qwen2Tokenizer', 'LLamaTokenizer', 'DeepSeekV2Tokenizer', 'LLama3Tokenizer'],
+        choices=['Qwen2Tokenizer', 'LLamaTokenizer', 'DeepSeekV2Tokenizer', 'LLama3Tokenizer', 'LLama2Tokenizer'],
         help='What type of tokenizer to use.',
     )
     group.add_argument('--load',
