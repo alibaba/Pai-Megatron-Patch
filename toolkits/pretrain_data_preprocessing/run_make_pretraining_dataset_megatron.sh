@@ -42,6 +42,19 @@ elif [ $tokenizer = "LLamaTokenizer" ]; then
   --input ${INPUT} \
   --output-prefix ${output_data_dir}/mmap_llama_datasets \
   --patch-tokenizer-type LLamaTokenizer \
+  --json-keys ${json_keys} \
+  --load ${load_dir} \
+  --workers 16 \
+  --partitions 1 \
+  --keep-sequential-samples \
+  --append-eod
+  
+elif [ $tokenizer = "LLama2Tokenizer" ]; then
+  python preprocess_data_megatron.py \
+  --input ${INPUT} \
+  --output-prefix ${output_data_dir}/mmap_llama2_datasets \
+  --patch-tokenizer-type LLama2Tokenizer \
+  --json-keys ${json_keys} \
   --load ${load_dir} \
   --workers 16 \
   --partitions 1 \

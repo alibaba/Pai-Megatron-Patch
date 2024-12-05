@@ -45,7 +45,8 @@ class Encoder(object):
         for key in self.args.jsonl_keys:
             doc_ids = []
             try:
-                text_ids = Encoder.tokenizer(text, add_special_tokens=False, padding='do_not_pad',max_length=32768,truncation=True)['input_ids']                """
+                text_ids = Encoder.tokenizer(text, add_special_tokens=False, padding='do_not_pad',max_length=32768,truncation=True)['input_ids']
+                """
                 text_ids = Encoder.tokenizer(text, add_special_tokens=False, padding='max_length',
                                              max_length=2047, truncation=True)['input_ids']
                 """
