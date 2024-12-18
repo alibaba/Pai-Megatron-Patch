@@ -435,7 +435,7 @@ def build_tokenizer(args):
         from megatron import get_tokenizer
         tokenizer = get_tokenizer()
         
-    elif args.patch_tokenizer_type == 'LLama2Tokenizer':
+    elif args.patch_tokenizer_type == 'LLama2Tokenizer' or args.patch_tokenizer_type == 'MixtralTokenizer':
         from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
         class _LLama2Tokenizer(MegatronTokenizer):
             def __init__(self, tokenizer_path, extra_vocab_size):

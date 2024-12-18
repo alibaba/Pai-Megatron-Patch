@@ -3,8 +3,9 @@ set -e
 ENV=$1
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/PAI-Megatron-LM-240718:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-241113:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export CUDA_LAUNCH_BLOCKING=1
 
 # Here are some configs controled by env
 if [ -z ${MP_DATASET_TYPE} ];then
@@ -41,7 +42,6 @@ fi
 
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
-EXTRA_VOCAB_SIZE=256
 
 ### BASE CONFIG ###
 MODEL_SIZE=$2
@@ -51,33 +51,34 @@ LR=$5
 MIN_LR=$6
 SEQ_LEN=$7
 PAD_LEN=$8
-PR=${9}
+PR=$9
 ### BASE CONFIG ###
 
 ### PARALLEL / BOOL OPTION ###
 TP=${10}
 PP=${11}
 CP=${12}
-SP=${13}
-DO=${14}
-FL=${15}
-SFT=${16}
+EP=${13}
+SP=${14}
+DO=${15}
+FL=${16}
+SFT=${17}
 ### PARALLEL / BOOL OPTION ###
 
 ### OTHERS ###
-AC=${17}
-OPTIMIZER_OFFLOAD=${18}
-SAVE_INTERVAL=${19}
-DATASET_PATH=${20}
-VALID_DATASET_PATH=${21}
-PRETRAIN_CHECKPOINT_PATH=${22}
+AC=${18}
+OPTIMIZER_OFFLOAD=${19}
+SAVE_INTERVAL=${20}
+DATASET_PATH=${21}
+VALID_DATASET_PATH=${22}
+PRETRAIN_CHECKPOINT_PATH=${23}
 
 # the following two values will not be used when SFT is true
-TRAIN_TOKENS=${23}
-WARMUP_TOKENS=${24}
+TRAIN_TOKENS=${24}
+WARMUP_TOKENS=${25}
 ###############################
 
-OUTPUT_BASEPATH=${25}
+OUTPUT_BASEPATH=${26}
 ### OTHERS ###
 
 if [ $FL = true ]; then
@@ -86,39 +87,69 @@ elif [ $FL = false ]; then
     export NVTE_FLASH_ATTN=0 NVTE_FUSED_ATTN=1
 fi
 
-if [ $MODEL_SIZE = 8B ]; then
+if [ $MODEL_SIZE = 7B ]; then
 
 NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=14336
 NUM_KEY_VALUE_HEADS=8
-MAX_POSITION_EMBEDDINGS=131072
+MAX_POSITION_EMBEDDINGS=32768
+EXTRA_VOCAB_SIZE=0
+RMS_NORM_EPS=1e-5
+ROPE_THETA=1000000
+SLW=4096
 
 gqa_options=" \
 		    --group-query-attention \
 		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
 
+moe_options=" \
+            "
 
-elif [ $MODEL_SIZE = 70B ]; then
+tie_option=" \
+        --untie-embeddings-and-output-weights \
+        "
 
-NUM_LAYERS=80
-HIDDEN_SIZE=8192
-NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=28672
+elif [ $MODEL_SIZE = 8x7B ]; then
+
+NUM_LAYERS=32
+HIDDEN_SIZE=4096
+NUM_ATTN_HEADS=32
+INTERMEDIATE_SIZE=14336
 NUM_KEY_VALUE_HEADS=8
-MAX_POSITION_EMBEDDINGS=131072
+MAX_POSITION_EMBEDDINGS=32768
+EXTRA_VOCAB_SIZE=0
+RMS_NORM_EPS=1e-5
+ROPE_THETA=1000000
+SLW=4096
+
 gqa_options=" \
 		    --group-query-attention \
 		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+
+NUM_EXPERTS=8
+NUM_EXPERTS_PER_TOPK=2
+
+moe_options=" \
+		    --moe-router-topk ${NUM_EXPERTS_PER_TOPK} \
+		    --num-experts ${NUM_EXPERTS} \
+		    --moe-aux-loss-coeff 1e-2 \
+		    --expert-model-parallel-size ${EP} \
+            --moe-token-dispatcher-type alltoall \
+		    --moe-router-load-balancing-type aux_loss"
+
+tie_option=" \
+        --untie-embeddings-and-output-weights \
+        "
 
 fi
 
 TP_COMM_OVERLAP=$(( ($TP > 1) ? 1 : 0 ))
-
 comm_overlap_option="\
     --overlap-grad-reduce \
     --overlap-param-gather"
+
 
 if [ $TP_COMM_OVERLAP -eq 1 ]; then
     comm_overlap_option="\
@@ -218,10 +249,10 @@ else
 fi
 
 if [ $SFT = true ]; then
-    TRAIN_ITERS=${23}
-    LR_WARMUP_ITERS=${24}
+    TRAIN_ITERS=${24}
+    LR_WARMUP_ITERS=${25}
     LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
-    PREFIX="finetune-mcore-llama3-1-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
+    PREFIX="finetune-mcore-mistral-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
     sft_option=" \
          --eod-mask-loss \
          --train-mode finetune"
@@ -229,7 +260,7 @@ else
     TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
     LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
     LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
-    PREFIX="pretrain-mcore-llama3-1-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
+    PREFIX="pretrain-mcore-qwen2-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
     sft_option=" \
         --train-mode pretrain"
 fi
@@ -240,7 +271,7 @@ if [ ${MP_DATASET_TYPE} = "raw" ]; then
         --valid-data-path ${VALID_DATASET_PATH} \
         --dataloader-type cyclic \
         --dataset LLama-SFT-Raw"
-else 
+else
     dataset_option=" \
         --data-path ${DATASET_PATH} \
         --split 99,1,0 \
@@ -255,7 +286,6 @@ if [ ${MP_SFT_PACKING} = true ]; then
 else
     packing_options=""
 fi
-
 
 ##### Prepare logdirs #######
 NAME="${PREFIX}-pr-${PR}-tp-${TP}-pp-${PP}-cp-${CP}-ac-${AC}-do-${DO}-sp-${SP}-ti-${TRAIN_ITERS}-wi-${LR_WARMUP_ITERS}"
@@ -295,6 +325,7 @@ megatron_options="  \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
         --max-padding-length ${PAD_LEN} \
+        --sliding-window ${SLW} \
         --log-interval 1 \
         --log-throughput \
         --eval-interval 10000 \
@@ -303,30 +334,28 @@ megatron_options="  \
         --tensorboard-queue-size 1 \
         --tensorboard-dir ${TENSORBOARD_DIR} \
         --log-timers-to-tensorboard \
-        --log-batch-size-to-tensorboard \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
         --context-parallel-size ${CP} \
         --no-load-optim \
         --no-load-rng \
+        --no-save-optim \
         --num-workers 8 \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type LLama3Tokenizer \
+        --patch-tokenizer-type MixtralTokenizer \
         --swiglu \
         --normalization RMSNorm \
-        --norm-epsilon 1e-05 \
+        --norm-epsilon ${RMS_NORM_EPS} \
         --use-rotary-position-embeddings \
         --position-embedding-type rope \
-        --untie-embeddings-and-output-weights \
+        --rotary-base ${ROPE_THETA}
         --disable-bias-linear \
-        --rotary-base 500000 \
-        --no-save-optim \
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_llama.py
+run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_mcore_mistral.py
  ${megatron_options} ${dataset_option} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} \
- ${do_options} ${sp_options} ${gqa_options} ${offload_option} ${comm_overlap_option} ${sft_option} ${vp_options} ${packing_options}"
+ ${do_options} ${sp_options} ${gqa_options} ${offload_option} ${comm_overlap_option} ${sft_option} ${moe_options} ${tie_option} ${vp_options} ${packing_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
