@@ -11,28 +11,50 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Optional
 
 from megatron.core.fusions.fused_bias_dropout import get_bias_dropout_add
-from megatron.core.fusions.fused_layer_norm import FusedLayerNorm
 from megatron.core.tensor_parallel.layers import ColumnParallelLinear, RowParallelLinear
-
-from megatron.core.transformer.custom_layers.transformer_engine import (
-    TEDotProductAttention,
-    TELayerNormColumnParallelLinear,
-    TENorm,
-    TERowParallelLinear,
-)
+from megatron.core.transformer.moe.shared_experts import SharedExpertMLP
 from megatron.core.transformer.dot_product_attention import DotProductAttention
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.identity_op import IdentityOp
-
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_layer import TransformerLayer, TransformerLayerSubmodules
 
 from .transformer.mlp import MLP, MLPSubmodules
 from .transformer.attention import SelfAttention, SelfAttentionSubmodules
-from .moe.moe_layer import MoELayer
+from .moe.moe_layer import MoELayer, MoESubmodules
 
+try:
+    from megatron.core.extensions.transformer_engine import (
+        TEColumnParallelGroupedLinear,
+        TEColumnParallelLinear,
+        TEDotProductAttention,
+        TELayerNormColumnParallelLinear,
+        TENorm,
+        TERowParallelGroupedLinear,
+        TERowParallelLinear,
+    )
+
+    HAVE_TE = True
+except ImportError:
+    HAVE_TE = False
+
+try:
+    import apex  # pylint: disable=unused-import
+
+    from megatron.core.fusions.fused_layer_norm import FusedLayerNorm
+
+    HAVE_APEX = True
+    LNImpl = FusedLayerNorm
+except ImportError:
+    import warnings
+
+    from megatron.core.transformer.torch_layer_norm import WrappedTorchLayerNorm
+
+    warnings.warn('Apex is not installed. Falling back to Torch LayerNorm')
+    LNImpl = WrappedTorchLayerNorm
 
 # Use this spec to use lower level Transformer Engine modules (required for fp8 training)
 def get_gpt_layer_with_transformer_engine_spec(
@@ -117,22 +139,13 @@ def get_gpt_layer_local_spec(num_experts: int = None, moe_grouped_gemm: bool = F
     )
 
 
-# Helper function to get module spec for MLP/MoE
 def _get_mlp_module_spec(
-    use_te: bool = True, num_experts: int = None, moe_grouped_gemm: bool = False
+    use_te: Optional[bool] = True,
+    num_experts: Optional[int] = None,
+    moe_grouped_gemm: Optional[bool] = False,
+    fp8: Optional[str] = None,
 ) -> ModuleSpec:
-    """
-    Helper function to create a module specification for an MLP or MoE layer.
-
-    Args:
-        use_te: Optional; if `True`, uses Transformer Engine (TE) modules for the MLP configuration.
-        num_experts: Optional; the number of experts in the MoE configuration. If `None`, a standard MLP is used.
-        moe_grouped_gemm: Optional; if `True`, uses grouped GEMM optimization for the MoE configuration.
-
-    Returns:
-        A ModuleSpec object that specifies the MLP or MoE layer configuration based on the presence of experts
-        and the use of Transformer Engine optimizations.
-    """
+    """Helper function to get module spec for MLP/MoE"""
     if num_experts is None:
         # Dense MLP w/ or w/o TE modules.
         return ModuleSpec(
@@ -143,10 +156,34 @@ def _get_mlp_module_spec(
             ),
         )
     else:
-        # SwitchMLP based MoE with modules in megatron core.
+        # Mixture of experts with modules in megatron core.
+        if use_te and moe_grouped_gemm:
+            linear_fc1 = TEColumnParallelGroupedLinear
+            linear_fc2 = TERowParallelGroupedLinear
+        elif use_te and fp8:
+            linear_fc1 = TEColumnParallelLinear
+            linear_fc2 = TERowParallelLinear
+        else:
+            linear_fc1 = ColumnParallelLinear
+            linear_fc2 = RowParallelLinear
+
+        use_te_grouped_gemm = use_te and TEColumnParallelGroupedLinear is not None
+
         return ModuleSpec(
             module=MoELayer,
-            submodules=MLPSubmodules(linear_fc1=ColumnParallelLinear, linear_fc2=RowParallelLinear,)
-            if not moe_grouped_gemm
-            else None,
+            submodules=MoESubmodules(
+                experts=(
+                    MLPSubmodules(linear_fc1=linear_fc1, linear_fc2=linear_fc2)
+                    if not moe_grouped_gemm or use_te_grouped_gemm
+                    else None
+                ),
+                shared_experts=ModuleSpec(
+                    module=SharedExpertMLP,
+                    params={"gate": False},
+                    submodules=MLPSubmodules(
+                        linear_fc1=TEColumnParallelLinear if use_te else ColumnParallelLinear,
+                        linear_fc2=TERowParallelLinear if use_te else RowParallelLinear,
+                    ),
+                ),
+            ),
         )
