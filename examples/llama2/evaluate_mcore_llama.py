@@ -32,7 +32,7 @@ from megatron_patch.finetune_utils import build_data_loader
 from megatron_patch.arguments import get_patch_args
 from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.training import get_model
-from megatron_patch.model.mixtral.layer_specs import get_gpt_layer_with_transformer_engine_spec
+from megatron_patch.model.mixtral_bak.layer_specs import get_gpt_layer_with_transformer_engine_spec
 from megatron.core.models.gpt import GPTModel
 
 import torch._dynamo

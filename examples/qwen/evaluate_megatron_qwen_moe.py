@@ -37,9 +37,9 @@ from megatron_patch.data import build_evaluation_dataset
 from megatron_patch.finetune_utils import build_data_loader
 from megatron_patch.arguments import get_patch_args
 from megatron_patch.arguments import core_transformer_config_from_args
-from megatron_patch.model.mixtral.model import GPTModel
-from megatron_patch.model.mixtral.layer_specs import get_gpt_layer_with_transformer_engine_spec
-from megatron_patch.model.mixtral.transformer_config import TransformerConfig
+from megatron_patch.model.mixtral_bak.model import GPTModel
+from megatron_patch.model.mixtral_bak.layer_specs import get_gpt_layer_with_transformer_engine_spec
+from megatron_patch.model.mixtral_bak.transformer_config import TransformerConfig
 
 def get_model_provider():
     def model_provider(pre_process=True, post_process=True):

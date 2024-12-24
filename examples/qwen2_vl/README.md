@@ -64,8 +64,8 @@ tar -zxf wds.tgz
 MODEL_SIZE=$1                 # 模型参数：2B/7B/72B
 SOURCE_CKPT_PATH=$2           # 源llm checkpoint路径
 TARGET_CKPT_PATH=$3           # 目标checkpoint路径
-TP=$4                         # 解码器模型并行度(目前仅支持1)
-PP=$5                         # 解码器流水并行度(目前仅支持1)
+TP=$4                         # 解码器模型并行度
+PP=$5                         # 解码器流水并行度
 mg2hf=$6                      # 是否执行mcore2hf转换
 PR=$7                         # 精度设置，fp16/bf16/fp32     
 HF_CKPT_PATH=$8               # HF的CKPT的路径【可选，mg2hf=true时必须提供】
