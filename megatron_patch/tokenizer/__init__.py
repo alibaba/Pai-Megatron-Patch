@@ -263,8 +263,8 @@ def build_tokenizer(args):
                 return self.tokenizer(text, return_tensors=return_tensors, padding=padding,
                         max_length=max_length, truncation=truncation, add_special_tokens=add_special_tokens)
 
-            def apply_chat_template(self, conversations, tokenize:bool=True):
-                return self.tokenizer.apply_chat_template(conversations, tokenize=tokenize)
+            def apply_chat_template(self, conversations, tokenize:bool=True, **kwargs):
+                return self.tokenizer.apply_chat_template(conversations, tokenize=tokenize, **kwargs)
             
             @property
             def vocab_size(self):
@@ -315,6 +315,9 @@ def build_tokenizer(args):
             @property
             def vision_end_token_id(self):
                 return self.special_tokens_map[self.vision_end_token]
+            
+            def encode(self, x):
+                return self.tokenizer.encode(x)
 
         tokenizer = _Qwen2VLTokenizer(args.load, args.extra_vocab_size)
         args.padded_vocab_size = tokenizer.vocab_size

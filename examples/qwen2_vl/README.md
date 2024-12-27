@@ -57,6 +57,9 @@ wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models
 tar -zxf wds.tgz
 ```
 
+对于视频多模态、单样本中包含多张图片、多轮对话等复杂数据集，您需要将其转换为sharegpt格式数据后再使用Megatron-Patch训练。对于sharegpt格式的数据处理，参见[链接](./dataset_preparation.md)。
+
+
 ## Megatron-Core模型训练流程
 ### Megatron-Core模型格式转换
 运行`hf2mcore_qwen2_vl_convertor.sh`脚本，需要传入的参数列表如下
@@ -84,6 +87,21 @@ false \
 bf16
 ```
 
+当您需要将训练好的checkpoint转换回huggingface格式用于推理时，执行
+
+```bash
+cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen
+bash hf2mcore_qwen2_vl_convertor.sh \
+7B \
+/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct-tp2pp2 \
+/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct-tp2pp2-back \
+2  \
+2  \
+true \
+bf16 \
+/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct
+```
+
 ### Megatron-Core预训练
 
 #### 预训练命令描述
@@ -102,7 +120,7 @@ TP=${10}                        # 模型并行度
 PP=${11}                        # 流水并行度
 CP=${12}                        # 上下文并行度
 DO=${13}                        # 是否使用Megatron版Zero-1降显存优化器: true, false
-FL=${14}                        # 是否优先使用Flash Attention: true, false
+FL=${14}                        # 是否优先使用Flash Attention: false
 AC=${15}                        # 激活检查点模式: sel, full, offload, false
 OPTIMIZER_OFFLOAD=${16}         # 是否启用Offload optimizer: false, static, auto
 SAVE_INTERVAL=${17}             # 保存ckpt的间隔
@@ -123,17 +141,47 @@ sh run_mcore_qwen.sh  \
 dsw  \
 7B   \
 1    \
-256 \
-0.00015   \
+32 \
 1e-5   \
-1024  \
-1024  \
+1e-6   \
+2048  \
+2048  \
 bf16  \
 2   \
 2  \
 1 \
 true \
-true   \
+false   \
+true \
+false \
+100000  \
+/mnt/llava-datasets/LLaVA-Pretrain/wds   \
+/mnt/llava-datasets/LLaVA-Pretrain/wds   \
+/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct-tp2pp2 \
+20000  \
+200   \
+/workspace/output_mcore_qwen2vl_pretrain
+```
+
+由于PP切分时，PP Rank 0额外的ViT会导致其负载略高于其他PP Rank，为了达到最佳性能，您可能需要调整`MP_PP0_LAYERS`变量降低PP Rank 0的LLM层数。
+
+```bash
+cd /workspace/Pai-Megatron-Patch/examples/qwen2_vl
+MP_PP0_LAYERS=12 sh run_mcore_qwen.sh  \
+dsw  \
+7B   \
+1    \
+32 \
+1e-5   \
+1e-6   \
+2048  \
+2048  \
+bf16  \
+2   \
+2  \
+1 \
+true \
+false   \
 true \
 false \
 100000  \
