@@ -1,4 +1,16 @@
-
+# Copyright (c) 2024 Alibaba PAI and Nvidia Megatron-LM Team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Pretrain Qwen2-VL."""
 
 import os
@@ -30,6 +42,7 @@ from megatron_patch.model.qwen2_vl.layer_specs import (
 from megatron_patch.model.qwen2_vl.model import Qwen2VLModel
 
 from megatron_patch.tokenizer import build_tokenizer, get_tokenizer
+from megatron_patch.tensor_parallel import broadcast_data
 
 torch._dynamo.config.suppress_errors = True
 from megatron_patch.model.qwen2_vl.transformer_config import (
@@ -311,14 +324,20 @@ def get_batch(data_iterator):
     else:
         data = None
 
-    data_text = tensor_parallel.broadcast_data(["text"], data, torch.int64)["text"]
-    target = tensor_parallel.broadcast_data(["target"], data, torch.int64)["target"]
+    data_text =  broadcast_data(["text"], data, torch.int64)["text"]
+    target =  broadcast_data(["target"], data, torch.int64)["target"]
     # shape: num_tiles x c x h x w
-    imgs = tensor_parallel.broadcast_data(["imgs"], data, torch.float32)["imgs"]
-    # shape: n_samples
-    thw_grids = tensor_parallel.broadcast_data(["image_thw_grids"], data, torch.long)["image_thw_grids"]
-    image_input_mask = tensor_parallel.broadcast_data(["image_input_mask"], data, torch.bool)["image_input_mask"]
-    video_input_mask = tensor_parallel.broadcast_data(["video_input_mask"], data, torch.bool)["video_input_mask"]
+    imgs = broadcast_data(["imgs"], data, torch.float32)["imgs"]
+
+    # shape: num_tiles x c x h x w
+    videos = broadcast_data(["videos"], data, torch.float32)["videos"]
+    # shape: n_image_samples
+    image_thw_grids = broadcast_data(["image_thw_grids"], data, torch.long)["image_thw_grids"]
+    # shape: n_video_samples
+    video_thw_grids = broadcast_data(["video_thw_grids"], data, torch.long)["video_thw_grids"]
+
+    image_input_mask = broadcast_data(["image_input_mask"], data, torch.bool)["image_input_mask"]
+    video_input_mask = broadcast_data(["video_input_mask"], data, torch.bool)["video_input_mask"]
     torch.cuda.nvtx.range_pop()
 
     torch.cuda.nvtx.range_push("index tokens")
@@ -333,7 +352,7 @@ def get_batch(data_iterator):
     # NOTE: no sequence packing in LLM inputs
     torch.cuda.nvtx.range_push("get_ltor_masks_and_position_ids")
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-        tokens, thw_grids, None, labels, tokenizer.pad_token_id
+        tokens, image_thw_grids, video_thw_grids, labels, tokenizer.pad_token_id
     )
     torch.cuda.nvtx.range_pop()
 
@@ -344,11 +363,12 @@ def get_batch(data_iterator):
         attention_mask, 
         position_ids, 
         imgs, 
-        thw_grids, 
+        videos,
+        image_thw_grids, 
+        video_thw_grids,
         image_input_mask, 
         video_input_mask
     )
-
 
 def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
     """Loss function.
@@ -396,17 +416,22 @@ def forward_step(data_iterator, model: Qwen2VLModel):
         attention_mask, 
         position_ids, 
         imgs, 
-        thw_grids, 
+        videos,
+        image_thw_grids, 
+        video_thw_grids,
         image_input_mask, 
         video_input_mask
     ) = get_batch(data_iterator)
     timers("batch-generator").stop()
 
+    vision_data = torch.cat([imgs, videos], dim=0)
+    vision_grid = torch.cat([image_thw_grids, video_thw_grids], dim=0)
+
     output_tensor = model(
         input_ids = tokens,
         position_ids = position_ids,
-        vision_data = imgs,
-        vision_grid_thw = thw_grids,
+        vision_data = vision_data,
+        vision_grid_thw =  vision_grid,
         video_start_index = image_input_mask.sum().cpu().item(),
         image_input_mask = image_input_mask,
         video_input_mask = video_input_mask,

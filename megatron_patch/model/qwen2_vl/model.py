@@ -210,10 +210,12 @@ class Qwen2VLModel(MegatronModule):
             raise NotImplementedError()
         
         if self.pre_process:
-            vision_embeds = self.vision_model(
-                vision_data=vision_data, # If None, vision model should use intermediate outputs (EPP > 1)
-                grid_thw=vision_grid_thw # should provided in each EPP stage
-            )
+            vision_embeds = None
+            if vision_grid_thw.shape[0] > 0:
+                vision_embeds = self.vision_model(
+                    vision_data=vision_data, # If None, vision model should use intermediate outputs (EPP > 1)
+                    grid_thw=vision_grid_thw # should provided in each EPP stage
+                )
 
             # If running inference, the language model KV cache will be updated for image token positions.
             # Here we store the image tokens sequence length, which can be used as an offset to the KV cache later.
@@ -231,7 +233,7 @@ class Qwen2VLModel(MegatronModule):
             if use_inference_kv_cache:
                 # NOTE: why not cat here? is it the combined embeddings useless?
                 combined_embeddings = language_embeddings
-            else:
+            elif vision_embeds is not None:
                 if video_start_index == 0:
                     image_embeds = None
                     video_embeds = vision_embeds
@@ -250,6 +252,8 @@ class Qwen2VLModel(MegatronModule):
                 if video_embeds is not None:
                     video_embeds = video_embeds.to(language_embeddings.device, language_embeddings.dtype)
                     language_embeddings[video_input_mask.T] = video_embeds          
+                combined_embeddings = language_embeddings
+            else:
                 combined_embeddings = language_embeddings
         else:
             combined_embeddings = None

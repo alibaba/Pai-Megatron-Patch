@@ -90,7 +90,7 @@ def get_batch(data_iterator):
 
     # TODO: this is pretty hacky, find a better way
     if (not mpu.is_pipeline_first_stage()) and (not mpu.is_pipeline_last_stage()):
-        return None, None, None, None, None, None
+        return None, None, None, None, None, None, None
 
     args = get_args()
 
@@ -133,7 +133,11 @@ def get_batch(data_iterator):
         # slice batch along sequence dimension for context parallelism
         batch = get_batch_on_this_cp_rank(batch)
 
-        return tuple([*batch.values(), packed_seq_params])
+
+        if args.train_mode == "pretrain":
+            return tuple([*batch.values(), None, packed_seq_params])
+        else:
+            return tuple([*batch.values(), packed_seq_params])
     else:
         raise ValueError("please set correct --dataset ")
 
@@ -184,7 +188,7 @@ def forward_step(data_iterator, model: GPTModel):
 
     # Get the batch.
     timers("batch-generator", log_level=2).start()
-    tokens, labels, loss_mask, attention_mask, position_ids, packed_seq_params = get_batch(data_iterator)
+    tokens, labels, loss_mask, attention_mask, position_ids, _, packed_seq_params = get_batch(data_iterator)
     timers("batch-generator").stop()
     output_tensor = model(tokens, position_ids, attention_mask, labels=labels, packed_seq_params=packed_seq_params)
 

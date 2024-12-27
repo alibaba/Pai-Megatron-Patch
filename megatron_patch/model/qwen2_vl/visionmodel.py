@@ -2,6 +2,7 @@ from typing import Optional
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from megatron.core.models.common.vision_module.vision_module import VisionModule
 from megatron.core.transformer.enums import ModelType
@@ -215,8 +216,8 @@ class Qwen2VisionModel(VisionModule):
         return self.projection(hidden_states.view(-1, self.merge_hidden_size))
 
     def build_packed_seq_params(self, grid_thw: torch.Tensor) -> PackedSeqParams:
-        cu_seqlens = torch.zeros(grid_thw.shape[0] + 1, dtype=torch.int, device=grid_thw.device)
-        cu_seqlens[1:] = torch.prod(grid_thw, dim=-1).cumsum(dim=0)
+        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(dim=0)
+        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).int()
         return PackedSeqParams(
             cu_seqlens_q=cu_seqlens,
             cu_seqlens_kv=cu_seqlens,
