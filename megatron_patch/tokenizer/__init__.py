@@ -335,11 +335,25 @@ def build_tokenizer(args):
                 )
                 self.extra_vocab_size = extra_vocab_size
 
+                if self.tokenizer.chat_template is None:
+                    self.tokenizer.chat_template = "{% for message in messages %}{% if loop.first and messages[0]['role'] != 'system' %}{{ '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n' }}{% endif %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
+                    try:
+                        test_conversation = [
+                            {'role': 'user', 'content': 'hello world'}
+                        ]
+                        self.apply_chat_template(test_conversation)
+                    except Exception:
+                        # the default chat_template is invalid, assume user will not do SFT
+                        self.tokenizer.chat_template = None
+
             def __call__(self, text, return_tensors=None,
                          padding=None, max_length=None, truncation=None, add_special_tokens=None):
 
                 return self.tokenizer(text, return_tensors=return_tensors, padding=padding,
                         max_length=max_length, truncation=truncation, add_special_tokens=add_special_tokens)
+
+            def apply_chat_template(self, conversations, tokenize:bool=True, **kwargs):
+                return self.tokenizer.apply_chat_template(conversations, tokenize=tokenize, **kwargs)
 
             @property
             def vocab_size(self):
