@@ -104,6 +104,9 @@ bf16 \
 
 ### Megatron-Core预训练
 
+> 关于attention: Qwen2-VL调用了varlen attention，若您使用Hopper架构GPU，推荐将FL设为false以使用FusedAttention后端来获得最佳性能；
+对于其他NVIDIA GPU，由于FusedAttention不支持varlen，请将FL设置为true。此外，目前观察到Flash-Attention 3会出现不正常的grad norm，不推荐使用。
+
 #### 预训练命令描述
 需要传入的参数列表如下：
 ```bash
@@ -120,7 +123,7 @@ TP=${10}                        # 模型并行度
 PP=${11}                        # 流水并行度
 CP=${12}                        # 上下文并行度
 DO=${13}                        # 是否使用Megatron版Zero-1降显存优化器: true, false
-FL=${14}                        # 是否优先使用Flash Attention: false
+FL=${14}                        # 是否优先使用Flash Attention: true, false
 AC=${15}                        # 激活检查点模式: sel, full, offload, false
 OPTIMIZER_OFFLOAD=${16}         # 是否启用Offload optimizer: false, static, auto
 SAVE_INTERVAL=${17}             # 保存ckpt的间隔
