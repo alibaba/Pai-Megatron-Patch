@@ -21,7 +21,7 @@ from typing import Union
 from megatron.training import get_args, get_timers
 from megatron.core import mpu, tensor_parallel
 from megatron.core.enums import ModelType
-from megatron.training.utils import (
+from megatron.utils import (
     get_batch_on_this_tp_rank,
     get_batch_on_this_cp_rank,
     average_losses_across_data_parallel_group
@@ -30,7 +30,7 @@ from megatron.core.datasets.blended_megatron_dataset_builder import BlendedMegat
 from megatron.training import pretrain
 from megatron.core.datasets.gpt_dataset import GPTDatasetConfig
 from megatron.core.datasets.gpt_dataset import GPTDataset
-from megatron.training.arguments import core_transformer_config_from_args
+from megatron.arguments import core_transformer_config_from_args
 
 from megatron_patch.data import build_pretrain_dataset_from_original
 from megatron_patch.data.utils import get_batch_on_this_tp_rank_original
