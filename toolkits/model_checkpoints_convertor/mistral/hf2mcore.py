@@ -382,7 +382,6 @@ def convert_checkpoint_from_transformers_to_megatron(mgmodel, hgmodel, args, hf_
 def save_state_dict(args, model, checkpoint_name):
     args.tensor_model_parallel_size = args.target_tensor_model_parallel_size
     args.pipeline_model_parallel_size = args.target_pipeline_model_parallel_size
-    args.add_position_embedding = False
     state_dict = {}
     state_dict['args'] = args
     state_dict['checkpoint_version'] = 3.0

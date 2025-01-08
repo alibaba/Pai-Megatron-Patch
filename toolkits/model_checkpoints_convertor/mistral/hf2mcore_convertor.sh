@@ -110,6 +110,7 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore.py \
     --use-mcore-models \
     --attention-dropout 0.0 \
     --hidden-dropout 0.0 \
+    --position-embedding-type rope \
     ${expert_options} \
     ${convert_options} \
     ${gqa_options} \
