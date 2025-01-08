@@ -40,12 +40,12 @@ from megatron_patch.arguments import get_patch_args
 from megatron_patch.data import build_pretrain_dataset_from_original
 
 from megatron_patch.data.utils import get_batch_on_this_tp_rank_original, get_batch_on_this_tp_rank_idxmap_sft
-from megatron_patch.model.mixtral_bak.layer_specs import (
+from megatron_patch.model.mixtral.layer_specs import (
     get_gpt_layer_local_spec,
     get_gpt_layer_with_transformer_engine_spec,
 )
-from megatron_patch.model.mixtral_bak.model import GPTModel
-from megatron_patch.model.mixtral_bak.transformer_config import TransformerConfig
+from megatron_patch.model.mixtral.model import GPTModel
+from megatron_patch.model.mixtral.transformer_config import TransformerConfig
 from megatron_patch.tokenizer import build_tokenizer, get_tokenizer
 from megatron.core.packed_seq_params import PackedSeqParams
 
