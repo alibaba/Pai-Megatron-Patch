@@ -17,7 +17,7 @@ from megatron.checkpointing import get_checkpoint_name, get_checkpoint_tracker_f
 import sys
 path_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
 sys.path.append(os.path.join(path_dir, "examples"))
-from mistral.pretrain_mcore_mistral import model_provider
+from mistral.pretrain_mcore_mistral_bak import model_provider
 from megatron_patch.arguments import get_patch_args
 
 torch.backends.cudnn.deterministic = True
