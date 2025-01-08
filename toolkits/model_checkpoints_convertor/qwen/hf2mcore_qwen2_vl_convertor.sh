@@ -125,6 +125,23 @@ if [ $PP -gt 1 ]; then
         "
 fi
 
+if [ -z ${MP_PP0_LAYERS} ];then
+    uneven_split_option=""
+elif [ ${PP} -gt 1 ]; then
+    _check=$(( ( $NUM_LAYERS - ${MP_PP0_LAYERS} ) % ( ${PP} - 1 ) ))
+    if [ $_check != 0 ]; then
+        echo "With uneven pipelineing the left over layers must be divisible by left over stages."
+        exit -1
+    fi
+
+    uneven_split_option=" \
+        --target-decoder-first-pipeline-num-layers ${MP_PP0_LAYERS}
+    "
+else
+    echo "uneven pipeline split must be used when PP > 1"
+    exit -1
+fi
+
 cmd="torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen2_vl.py \
     --load ${SOURCE_CKPT_PATH} \
     --save ${TARGET_CKPT_PATH} \
@@ -160,7 +177,8 @@ cmd="torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen2_vl.py \
     ${pr_options} \
     ${cpu_options} \
     ${tie_option} \
-    ${gqa_options}"
+    ${gqa_options} \
+    ${uneven_split_option}"
 
 echo $cmd
 eval $cmd

@@ -91,6 +91,12 @@ def add_model_args(parser):
     )
 
     parser.add_argument(
+        "--target-decoder-first-pipeline-num-layers",
+        type=int,
+        default=None
+    )
+
+    parser.add_argument(
         "--hf-ckpt-path",
         type=str
     )
@@ -173,12 +179,19 @@ def load_megatron_model(args):
     elif (
         args.pipeline_model_parallel_size > 1
     ):  
-        num_layers = args.num_layers // args.pipeline_model_parallel_size
+        if args.target_decoder_first_pipeline_num_layers is not None:
+            remained_layers = args.num_layers - args.target_decoder_first_pipeline_num_layers
+            remained_stages = args.pipeline_model_parallel_size - 1
+            assert remained_layers % remained_stages == 0
+            pp_layers_per_stage = [args.target_decoder_first_pipeline_num_layers] +([remained_layers // remained_stages] * remained_stages)
+        else:
+            pp_layers_per_stage = [args.num_layers // args.pipeline_model_parallel_size] * args.pipeline_model_parallel_size
+
         layers_to_copy = {}
         for tp_rank in range(args.tensor_model_parallel_size):
             for pp_rank in range(args.pipeline_model_parallel_size):
-                layer_offset = pp_rank * num_layers
-                for layer in range(num_layers):
+                layer_offset = sum(pp_layers_per_stage[:pp_rank])
+                for layer in range(pp_layers_per_stage[pp_rank]):
                     pp_layer_id = layer + layer_offset
                     layers_to_copy[f"decoder.layers.{layer}"] = pp_layer_id
                 checkpoint_name = get_checkpoint_name(model_path, iteration, release, True, tp_rank, pp_rank, None, None)
@@ -593,7 +606,7 @@ def save_mgmodel(mgmodel, args):
     head_dim = args.hidden_size // args.num_attention_heads
     group_per_split = args.num_query_groups // args.target_tensor_model_parallel_size
     full_model = mgmodel.state_dict_for_save_checkpoint()
-    num_layers = args.num_layers // args.pipeline_model_parallel_size
+    
     for k in list(full_model.keys()):
         if full_model[k] is None:
             full_model.pop(k)
@@ -646,12 +659,22 @@ def save_mgmodel(mgmodel, args):
         args.pipeline_model_parallel_size > 1
     ):
         vision_state_dicts = split_vision_model(mgmodel.vision_model, args)
+        if args.target_decoder_first_pipeline_num_layers is not None:
+            remained_layers = args.num_layers - args.target_decoder_first_pipeline_num_layers
+            remained_stages = args.pipeline_model_parallel_size - 1
+            assert remained_layers % remained_stages == 0
+            pp_layers_per_stage = [ args.target_decoder_first_pipeline_num_layers] +([remained_layers // remained_stages] * remained_stages)
+        else:
+            pp_layers_per_stage = [args.num_layers // args.pipeline_model_parallel_size] * args.pipeline_model_parallel_size
+
         for tp_rank in range(args.tensor_model_parallel_size):
+            layer_offset = 0
             for pp_rank in range(args.pipeline_model_parallel_size):
                 model_split = {}
-                layer_offset = pp_rank * num_layers
+                # NOTE: support uneven pp split here.
+                layer_offset = sum(pp_layers_per_stage[:pp_rank])
                 layers_to_copy = {}
-                for layer in range(num_layers):
+                for layer in range(pp_layers_per_stage[pp_rank]):
                     pp_layer_id = layer + layer_offset
                     layers_to_copy[f"decoder.layers.{pp_layer_id}"] = layer
                 checkpoint_name = get_checkpoint_name(args.save, 0, True, True, tp_rank, pp_rank)
