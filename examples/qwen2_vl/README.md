@@ -102,6 +102,11 @@ bf16 \
 /mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct
 ```
 
+此外，如果您需要在继续预训练时设置不对称PP切分来达到最佳吞吐，在准备模型权重时，与训练阶段类似，您需要手动调整以下环境变量来确定第一个pipeline stage中的Transformer层数
+```bash
+export MP_PP0_LAYERS=12
+```
+
 ### Megatron-Core预训练
 
 > 关于attention: Qwen2-VL调用了varlen attention，若您使用Hopper架构GPU，推荐将FL设为false以使用FusedAttention后端来获得最佳性能；
@@ -154,8 +159,8 @@ bf16  \
 2  \
 1 \
 true \
-false   \
-true \
+true   \
+false \
 false \
 100000  \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
@@ -184,8 +189,8 @@ bf16  \
 2  \
 1 \
 true \
-false   \
-true \
+true   \
+false \
 false \
 100000  \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
