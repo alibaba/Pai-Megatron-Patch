@@ -374,7 +374,7 @@ class SelfAttention(Attention):
         self.linear_kv_a_proj_with_mqa = build_module(
             submodules.linear_kv_a_proj_with_mqa,
             self.config.hidden_size,
-            (self.config.kv_lora_rank + self.config.qk_rope_head_dim)*self.world_size,
+            self.config.kv_lora_rank + self.config.qk_rope_head_dim,
             config=self.config,
             init_method=self.config.init_method,
             gather_output=False,
@@ -434,6 +434,7 @@ class SelfAttention(Attention):
 
         # [96, 1, 576])
         compressed_kv, _ = self.linear_kv_a_proj_with_mqa(hidden_states)
+        compressed_kv = tensor_parallel.gather_from_tensor_model_parallel_region(compressed_kv)
 
         #compressed_kv:[96, 1, 512], k_pe: [96, 1, 64]
         compressed_kv, k_pe = torch.split(
