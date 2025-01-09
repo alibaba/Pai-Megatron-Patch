@@ -1,10 +1,21 @@
 #!/bin/bash
 set -e
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-7}
 START_TIME=$SECONDS
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 
+if [ -z ${MP_SAVE_SAFE_TENSORS} ];then
+    MP_SAVE_SAFE_TENSORS=false
+fi
+
+if [ ${MP_SAVE_SAFE_TENSORS} = true ];then
+    safe_options=" \
+        --save-safetensors"
+else
+    safe_options=""
+fi
+    
 MODEL_SIZE=$1
 SOURCE_CKPT_PATH=$2
 TARGET_CKPT_PATH=$3
@@ -12,6 +23,7 @@ TP=$4
 PP=$5
 MG2HF=$6
 PR=$7
+HF_CKPT_PATH=$8
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
@@ -113,6 +125,23 @@ if [ $PP -gt 1 ]; then
         "
 fi
 
+if [ -z ${MP_PP0_LAYERS} ];then
+    uneven_split_option=""
+elif [ ${PP} -gt 1 ]; then
+    _check=$(( ( $NUM_LAYERS - ${MP_PP0_LAYERS} ) % ( ${PP} - 1 ) ))
+    if [ $_check != 0 ]; then
+        echo "With uneven pipelineing the left over layers must be divisible by left over stages."
+        exit -1
+    fi
+
+    uneven_split_option=" \
+        --target-decoder-first-pipeline-num-layers ${MP_PP0_LAYERS}
+    "
+else
+    echo "uneven pipeline split must be used when PP > 1"
+    exit -1
+fi
+
 cmd="torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen2_vl.py \
     --load ${SOURCE_CKPT_PATH} \
     --save ${TARGET_CKPT_PATH} \
@@ -141,14 +170,15 @@ cmd="torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen2_vl.py \
     --attention-dropout 0.0 \
     --hidden-dropout 0.0 \
     --rotary-base 1000000 \
-    --save-safetensors \
     --spatial-merge-size 2 \
+    ${safe_options} \
     ${te_options} \
     ${convert_options} \
     ${pr_options} \
     ${cpu_options} \
     ${tie_option} \
-    ${gqa_options}"
+    ${gqa_options} \
+    ${uneven_split_option}"
 
 echo $cmd
 eval $cmd

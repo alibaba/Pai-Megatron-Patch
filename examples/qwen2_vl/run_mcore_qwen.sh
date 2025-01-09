@@ -135,12 +135,21 @@ tie_option=" \
 
 fi
 
-if [ $PP -gt 1 ]; then
-    ETP=$TP
-    EPP=1
+if [ -z ${MP_PP0_LAYERS} ];then
+    uneven_split_option=""
+elif [ ${PP} -gt 1 ]; then
+    _check=$(( ( $NUM_LAYERS - ${MP_PP0_LAYERS} ) % ( ${PP} - 1 ) ))
+    if [ $_check != 0 ]; then
+        echo "With uneven pipelineing the left over layers must be divisible by left over stages."
+        exit -1
+    fi
+
+    uneven_split_option=" \
+        --decoder-first-pipeline-num-layers ${MP_PP0_LAYERS}
+    "
 else
-    ETP=0
-    EPP=0
+    echo "uneven pipeline split must be used when PP > 1"
+    exit -1
 fi
 
 if [ $AC = full ]; then
@@ -294,7 +303,7 @@ megatron_options="  \
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
  ${megatron_options} ${dataset_option} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} \
- ${do_options} ${gqa_options} ${sft_option} ${tie_option} ${packing_options}"
+ ${do_options} ${gqa_options} ${sft_option} ${tie_option} ${packing_options} ${uneven_split_option}"
 
 echo ${run_cmd}
 eval ${run_cmd}

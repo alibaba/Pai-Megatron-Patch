@@ -18,11 +18,9 @@ from torch import Tensor
 from functools import partial
 from typing import Union
 
-from megatron import get_args
-from megatron import get_timers
+from megatron.training import get_args, get_timers
 from megatron.core import mpu, tensor_parallel
 from megatron.core.enums import ModelType
-import megatron.model
 from megatron.utils import (
     get_batch_on_this_tp_rank,
     get_batch_on_this_cp_rank,
@@ -32,19 +30,23 @@ from megatron.core.datasets.blended_megatron_dataset_builder import BlendedMegat
 from megatron.training import pretrain
 from megatron.core.datasets.gpt_dataset import GPTDatasetConfig
 from megatron.core.datasets.gpt_dataset import GPTDataset
+from megatron.arguments import core_transformer_config_from_args
 
 from megatron_patch.data import build_pretrain_dataset_from_original
+from megatron_patch.data.utils import get_batch_on_this_tp_rank_original
 from megatron_patch.tokenizer import get_tokenizer, build_tokenizer
 from megatron_patch.arguments import get_patch_args
-from megatron_patch.arguments import core_transformer_config_from_args
 from megatron_patch.model.mixtral_bak.model import GPTModel
 from megatron_patch.model.mixtral_bak.layer_specs import get_gpt_layer_with_transformer_engine_spec
-from megatron_patch.model.mixtral_bak.transformer_config import TransformerConfig
 
-def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megatron.model.GPTModel]:
+
+def model_provider(
+    pre_process=True, post_process=True
+) -> Union[GPTModel]:
+
     args = get_args()
     build_tokenizer(args)
-    config = core_transformer_config_from_args(get_args(), TransformerConfig)
+    config = core_transformer_config_from_args(get_args())
     transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm)
     model = GPTModel(
         config=config,
@@ -57,9 +59,7 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megat
         parallel_output=True,
         share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
         position_embedding_type=args.position_embedding_type,
-        rotary_percent=args.rotary_percent,
-        rotary_base=10000,
-        seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
+        rotary_percent=args.rotary_percent
     )
 
     return model
@@ -69,13 +69,32 @@ def get_batch(data_iterator):
 
     # TODO: this is pretty hacky, find a better way
     if (not mpu.is_pipeline_first_stage()) and (not mpu.is_pipeline_last_stage()):
-        return None, None, None, None, None
+        return None, None, None, None, None, None
 
-    # get batches based on the TP rank you are on
-    batch = get_batch_on_this_tp_rank(data_iterator)
+    args = get_args()
 
-    # slice batch along sequence dimension for context parallelism
-    batch = get_batch_on_this_cp_rank(batch)
+    if "-Raw" in args.dataset:
+        # get batches based on the TP rank you are on
+        batch = get_batch_on_this_tp_rank_original(data_iterator)
+        # slice batch along sequence dimension for context parallelism
+        batch = get_batch_on_this_cp_rank(batch)
+
+    elif "-Idxmap" in args.dataset:
+        # get batches based on the TP rank you are on
+        batch = get_batch_on_this_tp_rank(data_iterator)
+        # slice batch along sequence dimension for context parallelism
+        batch = get_batch_on_this_cp_rank(batch)
+        return (
+            batch['tokens'],
+            batch['labels'],
+            batch['loss_mask'],
+            batch['attention_mask'],
+            batch['position_ids'],
+            None
+        )
+    else:
+        raise ValueError("please set correct --dataset ")
+
     return batch.values()
 
 def loss_func(loss_mask: Tensor, output_tensor: Tensor):
@@ -116,7 +135,7 @@ def forward_step(data_iterator, model):
 
     # Get the batch.
     timers('batch-generator', log_level=2).start()
-    tokens, labels, loss_mask, attention_mask, position_ids = get_batch(
+    tokens, labels, loss_mask, attention_mask, position_ids, _ = get_batch(
         data_iterator)
     timers('batch-generator').stop()
 
@@ -142,7 +161,7 @@ def core_gpt_dataset_config_from_args(args):
 def train_valid_test_datasets_provider(train_val_test_num_samples):
     """Build train, valid, and test datasets."""
     args = get_args()
-    if os.path.isfile(args.train_data_path[0]):
+    if "-Raw" in args.dataset:
                 train_ds, valid_ds, test_ds = \
                                     build_pretrain_dataset_from_original(args.dataset)
     else:

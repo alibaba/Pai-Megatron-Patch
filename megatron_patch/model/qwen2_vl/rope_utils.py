@@ -121,60 +121,6 @@ def _apply_rotary_pos_emb_bshd(
     t = (t * cos_) + (_rotate_half(t, rotary_interleaved) * sin_)
     return torch.cat((t, t_pass), dim=-1).to(input_dtype)
 
-
-def _get_thd_freqs_on_this_cp_rank(cp_rank: int, cp_size: int, x: Tensor, freqs: Tensor) -> Tensor:
-    if cp_size > 1:
-        cp_seg = x.size(0) // 2
-        full_seqlen = cp_size * x.size(0)
-        return torch.cat(
-            [
-                freqs[cp_rank * cp_seg : (cp_rank + 1) * cp_seg],
-                freqs[full_seqlen - (cp_rank + 1) * cp_seg : full_seqlen - cp_rank * cp_seg],
-            ]
-        )
-    else:
-        return freqs[: x.size(0)]
-
-
-def _apply_rotary_pos_emb_thd(
-    t: Tensor,
-    cu_seqlens: Tensor,
-    freqs: Tensor,
-    rotary_interleaved: bool = False,
-    multi_latent_attention: bool = False,
-    mscale: float = 1.0,
-) -> Tensor:
-    """A baseline implementation of applying RoPE for `thd` format.
-
-    Args:
-        t (Tensor): Input tensor T is of shape [t, h, d]
-        cu_seqlens(Tensor):  Cumulative sum of sequence lengths in a batch for `t`,
-        with shape [b + 1] and dtype torch.int32.
-        freqs (Tensor): Rotary Positional embedding tensor freq is of shape [max_s, 1, 1, d]
-
-    Returns:
-        Tensor: Shape [t, h, d]. The input tensor after applying RoPE.
-    """
-
-    cp_size = parallel_state.get_context_parallel_world_size()
-    cp_rank = parallel_state.get_context_parallel_rank()
-    cu_seqlens = cu_seqlens // cp_size
-    seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-
-    return torch.cat(
-        [
-            _apply_rotary_pos_emb_bshd(
-                x.unsqueeze(1),
-                _get_thd_freqs_on_this_cp_rank(cp_rank, cp_size, x, freqs),
-                rotary_interleaved=rotary_interleaved,
-                multi_latent_attention=multi_latent_attention,
-                mscale=mscale,
-            )
-            for x in torch.split(t, seqlens)
-        ]
-    ).squeeze(1)
-
-
 def apply_rotary_pos_emb(
     t: Tensor,
     freqs: Tensor,
@@ -184,44 +130,22 @@ def apply_rotary_pos_emb(
 ):
     """
     Reroute to the appropriate apply_rotary_pos_emb function depending on
-    fused/unfused kernels, or bshd (conventional) / thd (packed seq) format
+    fused/unfused kernels
+
+    NOTE: the RoPE of vision model should not be applied like thd-format because all
+    freqs of each token have been computed.
     """
 
     if config.apply_rope_fusion:
-        if cu_seqlens is None:
-            return fused_apply_rotary_pos_emb(t, freqs)
-        else:
-            cp_size = parallel_state.get_context_parallel_world_size()
-            if cp_size > 1:
-                if not is_te_min_version("1.11.0", check_equality=False):
-                    raise ValueError("Only TE >= 1.12 supports RoPE fusion for THD format with CP.")
-                return fused_apply_rotary_pos_emb_thd(
-                    t,
-                    cu_seqlens,
-                    freqs,
-                    cp_size=cp_size,
-                    cp_rank=parallel_state.get_context_parallel_rank(),
-                )
-            else:
-                return fused_apply_rotary_pos_emb_thd(t, cu_seqlens, freqs)
-    else:
-        if cu_seqlens is None:
-            return _apply_rotary_pos_emb_bshd(
-                t,
-                freqs,
-                rotary_interleaved=config.rotary_interleaved,
-                multi_latent_attention=config.multi_latent_attention,
-                mscale=mscale,
-            )
-        else:
-            return _apply_rotary_pos_emb_thd(
-                t,
-                cu_seqlens,
-                freqs,
-                rotary_interleaved=config.rotary_interleaved,
-                multi_latent_attention=config.multi_latent_attention,
-                mscale=mscale,
-            )
+        return fused_apply_rotary_pos_emb(t.unsqueeze(1), freqs).squeeze(1)
+
+    return _apply_rotary_pos_emb_bshd(
+        t.unsqueeze(1),
+        freqs,
+        rotary_interleaved=config.rotary_interleaved,
+        multi_latent_attention=config.multi_latent_attention,
+        mscale=mscale,
+    ).squeeze(1)
 
 
 def apply_rotary_pos_emb_with_cos_sin(

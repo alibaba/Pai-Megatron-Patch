@@ -1,42 +1,32 @@
-# Copyright (c) 2024 Alibaba PAI and Nvidia Megatron-LM Team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
+# Copyright (c) 2023, NVIDIA CORPORATION. All rights reserved.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Union
+
 import torch
+
 from megatron.core import parallel_state, tensor_parallel
+from megatron.core.models.common.embeddings.rotary_pos_embedding import apply_rotary_pos_emb
+from megatron.core.transformer.custom_layers.transformer_engine import SplitAlongDim
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.spec_utils import ModuleSpec, build_module
 from megatron.core.utils import divide
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.transformer_config import TransformerConfig
 
-from megatron_patch.model.deepseek_v2.yarn_rotary_pos_embedding import DeepseekV2YarnRotaryEmbedding, \
-    apply_rotary_pos_emb, yarn_get_mscale
-
 @dataclass
 class SelfAttentionSubmodules:
-    linear_q_proj: Union[ModuleSpec, type] = None
-    linear_q_a_proj: Union[ModuleSpec, type] = None
-    linear_q_b_proj: Union[ModuleSpec, type] = None
-    linear_kv_a_proj_with_mqa: Union[ModuleSpec, type] = None
-    linear_kv_b_proj: Union[ModuleSpec, type] = None
+    linear_qkv: Union[ModuleSpec, type] = None
     core_attention: Union[ModuleSpec, type] = None
     linear_proj: Union[ModuleSpec, type] = None
-    q_a_layernorm: Union[ModuleSpec, type] = None
-    kv_a_layernorm: Union[ModuleSpec, type] = None
+
+
+@dataclass
+class CrossAttentionSubmodules:
+    linear_q: Union[ModuleSpec, type] = None
+    linear_kv: Union[ModuleSpec, type] = None
+    core_attention: Union[ModuleSpec, type] = None
+    linear_proj: Union[ModuleSpec, type] = None
 
 
 class Attention(MegatronModule, ABC):
@@ -49,7 +39,7 @@ class Attention(MegatronModule, ABC):
     def __init__(
         self,
         config: TransformerConfig,
-        submodules: Union[SelfAttentionSubmodules],
+        submodules: Union[SelfAttentionSubmodules, CrossAttentionSubmodules],
         layer_number: int,
         attn_mask_type: AttnMaskType,
         attention_type: str,
@@ -61,25 +51,18 @@ class Attention(MegatronModule, ABC):
         self.attn_mask_type = attn_mask_type
         self.attention_type = attention_type
 
-        self.num_heads = self.config.num_attention_heads
-
         # For normal attention without groups, num_query_groups == num_attention_heads,
         # so these two will be the same
-        self.query_projection_size = self.config.v_head_dim * self.config.num_attention_heads
+        self.query_projection_size = self.config.kv_channels * self.config.num_attention_heads
         self.kv_projection_size = self.config.kv_channels * self.config.num_query_groups
 
         # Per attention head and per partition values.
-        self.world_size = parallel_state.get_tensor_model_parallel_world_size()
+        world_size = parallel_state.get_tensor_model_parallel_world_size()
         self.hidden_size_per_attention_head = divide(
             self.query_projection_size, self.config.num_attention_heads
         )
-        self.num_attention_heads_per_partition = divide(self.config.num_attention_heads, self.world_size)
-        self.num_query_groups_per_partition = divide(self.config.num_query_groups, self.world_size)
-
-        self.q_head_dim = self.config.qk_nope_head_dim + self.config.qk_rope_head_dim
-        self.softmax_scale = self.q_head_dim ** (-0.5)
-        mscale = yarn_get_mscale(40, 0.707)
-        self.softmax_scale = self.softmax_scale * mscale * mscale
+        self.num_attention_heads_per_partition = divide(self.config.num_attention_heads, world_size)
+        self.num_query_groups_per_partition = divide(self.config.num_query_groups, world_size)
 
         self.core_attention = build_module(
             submodules.core_attention,
@@ -92,7 +75,6 @@ class Attention(MegatronModule, ABC):
         self.checkpoint_core_attention = self.config.recompute_granularity == 'selective'
 
         # Output.
-
         self.linear_proj = build_module(
             submodules.linear_proj,
             self.query_projection_size,
@@ -104,22 +86,6 @@ class Attention(MegatronModule, ABC):
             skip_bias_add=True,
             is_expert=False,
             tp_comm_buffer_name='proj',
-        )
-
-        kwargs = {
-            "original_max_position_embeddings": 4096,
-            "beta_fast": 32,
-            "beta_slow": 1,
-            "mscale": 0.707,
-            "mscale_all_dim": 0.707,
-        }
-
-        self.rotary_pos_emb = DeepseekV2YarnRotaryEmbedding(
-            self.config.qk_rope_head_dim,
-            max_position_embeddings=self.config.max_position_embeddings,
-            scaling_factor=self.config.rotary_scaling_factor,
-            base=self.config.rotary_base,
-            **kwargs,
         )
 
     def _checkpointed_attention_forward(
@@ -166,6 +132,18 @@ class Attention(MegatronModule, ABC):
         )
 
         return hidden_states
+
+    def _allocate_memory(self, inference_max_sequence_length, batch_size, dtype):
+        """Allocate memory to store kv cache during inference."""
+
+        return torch.empty(
+            inference_max_sequence_length,
+            batch_size,
+            self.num_query_groups_per_partition,
+            self.hidden_size_per_attention_head,
+            dtype=dtype,
+            device=torch.cuda.current_device(),
+        )
 
     def _adjust_key_value_for_inference(self, inference_params, key, value, rotary_pos_emb):
         """
@@ -240,7 +218,7 @@ class Attention(MegatronModule, ABC):
         return key, value, rotary_pos_emb, attn_mask_type
 
     @abstractmethod
-    def get_query_key_value_tensors(self, hidden_states, key_value_states, position_ids):
+    def get_query_key_value_tensors(self, hidden_states, key_value_states):
         """
         This method needs to be implemented based on whether the derived class
         is "self-attn" or "cross-attn".
@@ -254,33 +232,65 @@ class Attention(MegatronModule, ABC):
         inference_params=None,
         rotary_pos_emb=None,
         packed_seq_params=None,
-        position_ids=None
     ):
         # hidden_states: [sq, b, h]
+
+        # For self attention we just duplicate the rotary_pos_emb if it isn't already
+        if rotary_pos_emb is not None and not isinstance(rotary_pos_emb, tuple):
+            rotary_pos_emb = (rotary_pos_emb,) * 2
+
         # =====================
         # Query, Key, and Value
         # =====================
         # Get the query, key and value tensors based on the type of attention -
         # self or cross attn.
-        # query: [1, 8, 96, 192], key:[1, 8, 96, 192], value:[1, 8, 96, 128]
-        query, key, value = self.get_query_key_value_tensors(hidden_states, key_value_states, position_ids)
+        query, key, value = self.get_query_key_value_tensors(hidden_states, key_value_states)
+
+        # ===================================================
+        # Adjust key, value, and rotary_pos_emb for inference
+        # ===================================================
+        key, value, rotary_pos_emb, attn_mask_type = self._adjust_key_value_for_inference(
+            inference_params, key, value, rotary_pos_emb
+        )
 
         if packed_seq_params is not None:
             query = query.squeeze(1)
             key = key.squeeze(1)
             value = value.squeeze(1)
 
+        # ================================================
+        # relative positional embedding (rotary embedding)
+        # ================================================
+        if rotary_pos_emb is not None:
+            q_pos_emb, k_pos_emb = rotary_pos_emb
+
+            if packed_seq_params is not None:
+                cu_seqlens_q = packed_seq_params.cu_seqlens_q
+                cu_seqlens_kv = packed_seq_params.cu_seqlens_kv
+            else:
+                cu_seqlens_q = cu_seqlens_kv = None
+            query = apply_rotary_pos_emb(
+                query, q_pos_emb, fused=self.config.apply_rope_fusion, cu_seqlens=cu_seqlens_q
+            )
+            key = apply_rotary_pos_emb(
+                key, k_pos_emb, fused=self.config.apply_rope_fusion, cu_seqlens=cu_seqlens_kv
+            )
+            # TODO, can apply positional embedding to value_layer so it has
+            # absolute positional embedding.
+            # otherwise, only relative positional embedding takes effect
+            # value_layer = apply_rotary_pos_emb(value_layer, k_pos_emb)
+
         # ==================================
         # core attention computation
         # ==================================
 
-        if self.checkpoint_core_attention and self.training:
+        if self.checkpoint_core_attention:
             core_attn_out = self._checkpointed_attention_forward(
                 query,
                 key,
                 value,
                 attention_mask,
-                attn_mask_type=self.attn_mask_type,
+                attn_mask_type=attn_mask_type,
                 packed_seq_params=packed_seq_params,
             )
         else:
@@ -289,7 +299,7 @@ class Attention(MegatronModule, ABC):
                 key,
                 value,
                 attention_mask,
-                attn_mask_type=self.attn_mask_type,
+                attn_mask_type=attn_mask_type,
                 packed_seq_params=packed_seq_params,
             )
 
@@ -331,165 +341,139 @@ class SelfAttention(Attention):
             attention_type="self",
         )
 
-        if self.config.q_lora_rank is None:
-
-            self.linear_q_proj = build_module(
-                submodules.linear_q_proj,
-                self.config.hidden_size,
-                self.num_heads * self.q_head_dim,
-                config=self.config,
-                init_method=self.config.init_method,
-                gather_output=False,
-                bias=False,
-                skip_bias_add=False,
-                is_expert=False,
-            )
-
-        else:
-
-            self.linear_q_a_proj = build_module(
-                submodules.linear_q_a_proj,
-                self.config.hidden_size,
-                self.config.q_lora_rank,
-                config=self.config,
-                init_method=self.config.init_method,
-                gather_output=False,
-                bias=False,
-                skip_bias_add=False,
-                is_expert=False,
-            )
-
-            self.linear_q_b_proj = build_module(
-                submodules.linear_q_b_proj,
-                self.config.q_lora_rank//self.world_size,
-                self.config.num_attention_heads * self.q_head_dim,
-                config=self.config,
-                init_method=self.config.init_method,
-                gather_output=False,
-                bias=False,
-                skip_bias_add=False,
-                is_expert=True,
-            )
-
-        self.linear_kv_a_proj_with_mqa = build_module(
-            submodules.linear_kv_a_proj_with_mqa,
+        self.linear_qkv = build_module(
+            submodules.linear_qkv,
             self.config.hidden_size,
-            self.config.kv_lora_rank + self.config.qk_rope_head_dim,
+            self.query_projection_size + 2 * self.kv_projection_size,
             config=self.config,
             init_method=self.config.init_method,
             gather_output=False,
-            bias=False,
+            bias=self.config.add_bias_linear,
+            skip_bias_add=False,
+            is_expert=False,
+            tp_comm_buffer_name='qkv',
+        )
+
+    def get_query_key_value_tensors(self, hidden_states, key_value_states=None):
+        """
+        Derives `query`, `key` and `value` tensors from `hidden_states`.
+        """
+        # Attention heads [sq, b, h] --> [sq, b, ng * (np/ng + 2) * hn)]
+        mixed_qkv, _ = self.linear_qkv(hidden_states)
+
+        # [sq, b, hp] --> [sq, b, ng, (np/ng + 2) * hn]
+        new_tensor_shape = mixed_qkv.size()[:-1] + (
+            self.num_query_groups_per_partition,
+            (
+                (self.num_attention_heads_per_partition // self.num_query_groups_per_partition + 2)
+                * self.hidden_size_per_attention_head
+            ),
+        )
+        mixed_qkv = mixed_qkv.view(*new_tensor_shape)
+
+        split_arg_list = [
+            (
+                self.num_attention_heads_per_partition
+                // self.num_query_groups_per_partition
+                * self.hidden_size_per_attention_head
+            ),
+            self.hidden_size_per_attention_head,
+            self.hidden_size_per_attention_head,
+        ]
+
+        if SplitAlongDim is not None:
+
+            # [sq, b, ng, (np/ng + 2) * hn] --> [sq, b, ng, np/ng * hn], [sq, b, ng, hn], [sq, b, ng, hn]
+            (query, key, value) = SplitAlongDim(mixed_qkv, 3, split_arg_list,)
+        else:
+
+            # [sq, b, ng, (np/ng + 2) * hn] --> [sq, b, ng, np/ng * hn], [sq, b, ng, hn], [sq, b, ng, hn]
+            (query, key, value) = torch.split(mixed_qkv, split_arg_list, dim=3,)
+
+        # [sq, b, ng, np/ng * hn] -> [sq, b, np, hn]
+        query = query.reshape(query.size(0), query.size(1), -1, self.hidden_size_per_attention_head)
+
+        return query, key, value
+
+
+class CrossAttention(Attention):
+    """Cross-attention layer class
+
+    Cross-attention layer takes input with size [s, b, h] and context with size
+    [s, b, h] and returns output of the same size.
+    """
+
+    def __init__(
+        self,
+        config: TransformerConfig,
+        submodules: CrossAttentionSubmodules,
+        layer_number: int,
+        attn_mask_type=AttnMaskType.padding,
+    ):
+        super().__init__(
+            config=config,
+            submodules=submodules,
+            layer_number=layer_number,
+            attn_mask_type=attn_mask_type,
+            attention_type="cross",
+        )
+
+        if self.config.num_query_groups != self.config.num_attention_heads:
+            raise ValueError(
+                f"Group query attention is not currently supported in cross attention."
+            )
+        assert self.query_projection_size == self.kv_projection_size
+
+        self.linear_q = build_module(
+            submodules.linear_q,
+            self.config.hidden_size,
+            self.query_projection_size,
+            config=self.config,
+            init_method=self.config.init_method,
+            gather_output=False,
+            bias=self.config.add_bias_linear,
             skip_bias_add=False,
             is_expert=False,
         )
 
-        self.linear_kv_b_proj = build_module(
-            submodules.linear_kv_b_proj,
-            self.config.kv_lora_rank,
-            self.config.num_attention_heads * (self.q_head_dim - self.config.qk_rope_head_dim + self.config.v_head_dim),
+        self.linear_kv = build_module(
+            submodules.linear_kv,
+            self.config.hidden_size,
+            2 * self.kv_projection_size,
             config=self.config,
             init_method=self.config.init_method,
             gather_output=False,
-            bias=False,
+            bias=self.config.add_bias_linear,
             skip_bias_add=False,
-            is_expert=True,
+            is_expert=False,
         )
 
-        if self.config.q_lora_rank is not None:
-
-            self.q_a_layernorm = build_module(
-                submodules.q_a_layernorm,
-                hidden_size=self.config.q_lora_rank//self.world_size,
-                config=self.config,
-                eps=self.config.layernorm_epsilon,
-            )
-
-        self.kv_a_layernorm = build_module(
-            submodules.kv_a_layernorm,
-            hidden_size=self.config.kv_lora_rank,
-            config=self.config,
-            eps=self.config.layernorm_epsilon,
-        )
-
-    def get_query_key_value_tensors(self, hidden_states, key_value_states=None, position_ids=None):
+    def get_query_key_value_tensors(self, hidden_states, key_value_states):
         """
-        Derives `query`, `key` and `value` tensors from `hidden_states`.
+        Derives `query` tensor from `hidden_states`, and `key`/`value` tensors
+        from `key_value_states`.
         """
-        if self.config.q_lora_rank is not None:
-            q, _ = self.linear_q_a_proj(hidden_states)
-            q = self.q_a_layernorm(q)
-            q, _ = self.linear_q_b_proj(q)
-        else:
-            # hidden_states:[48, 1, 2048] q: [96, 1, 1536]
-            q, _ = self.linear_q_proj(hidden_states)
+        # Attention heads [sk, b, h] --> [sk, b, (np * 2 * hn)]
+        mixed_kv, _ = self.linear_kv(key_value_states)
 
-        q_len, bsz, _ = q.size()
-        # [96, 1, 8, 192]
-        q = q.view(q_len, bsz, self.num_attention_heads_per_partition, self.q_head_dim)
-
-        # q_nope: [96, 1, 8, 128], q_pe: [96, 1, 8, 64]
-        q_nope, q_pe = torch.split(
-            q, [self.config.qk_nope_head_dim, self.config.qk_rope_head_dim], dim=-1
+        # [sk, b, (np * 2 * hn)] --> [sk, b, np, 2 * hn]
+        new_tensor_shape = mixed_kv.size()[:-1] + (
+            self.num_attention_heads_per_partition,
+            2 * self.hidden_size_per_attention_head,
         )
+        mixed_kv = mixed_kv.view(*new_tensor_shape)
 
-        # [96, 1, 576])
-        compressed_kv, _ = self.linear_kv_a_proj_with_mqa(hidden_states)
-        compressed_kv = tensor_parallel.gather_from_tensor_model_parallel_region(compressed_kv)
+        # [sk, b, np, 2 * hn] --> 2 [sk, b, np, hn]
+        (key, value) = tensor_parallel.split_tensor_along_last_dim(mixed_kv, 2)
 
-        #compressed_kv:[96, 1, 512], k_pe: [96, 1, 64]
-        compressed_kv, k_pe = torch.split(
-            compressed_kv, [self.config.kv_lora_rank,
-                            self.config.qk_rope_head_dim], dim=-1
+        # Attention head [sq, b, h] --> [sq, b, hp]
+        query, _ = self.linear_q(hidden_states)
+
+        # [sq, b, hp] --> [sq, b, np, hn]
+        new_tensor_shape = query.size()[:-1] + (
+            self.num_attention_heads_per_partition,
+            self.hidden_size_per_attention_head,
         )
+        query = query.view(*new_tensor_shape)
 
-        #[96, 1, 2048]
-        kv, _ = self.linear_kv_b_proj(self.kv_a_layernorm(compressed_kv))
-
-        #[96, 1, 8, 128])
-        kv = kv.view(q_len, bsz, self.num_attention_heads_per_partition, self.config.qk_nope_head_dim + self.config.v_head_dim)
-
-        #k_nope: [96, 1, 8, 128], value_states: [96, 1, 8, 128]
-        k_nope, value_states = torch.split(
-            kv, [self.config.qk_nope_head_dim, self.config.v_head_dim], dim=-1
-        )
-
-        # [96, 1, 8, 128] -> [1, 8, 96, 128]
-        #value_states = value_states.transpose(0, 1).transpose(1, 2)
-        kv_seq_len = value_states.shape[0]
-
-        #cos: [96, 64], sin:[96, 64]
-        cos, sin = self.rotary_pos_emb(value_states, seq_len=kv_seq_len)
-
-        #[96, 1, 8, 64] -> [1, 8, 96, 64]
-        q_pe = q_pe.transpose(0, 1).transpose(1, 2)
-        #[96, 1, 32] -> [1, 96, 32]
-        k_pe = k_pe.transpose(0, 1)
-        #[1, 1, 96, 64]
-        k_pe = k_pe.reshape(bsz, q_len, 1, -1).transpose(1, 2)
-
-        #q_pe: [1, 8, 96, 64], k_pe:[1, 1, 96, 64]
-        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin, position_ids)
-
-        #[1, 8, 96, 192]
-        query_states = q_pe.new_empty(bsz, self.num_attention_heads_per_partition, q_len, self.q_head_dim)
-
-        #[96, 1, 8, 128] -> [1, 8, 96, 128]
-        q_nope = q_nope.transpose(0, 1).transpose(1, 2)
-
-        query_states[:, :, :, : self.config.qk_nope_head_dim] = q_nope
-        query_states[:, :, :, self.config.qk_nope_head_dim :] = q_pe
-
-        #[1, 8, 96, 192]
-        key_states = k_pe.new_empty(bsz, self.num_attention_heads_per_partition, q_len, self.q_head_dim)
-
-        # [96, 1, 8, 128] -> [1, 8, 96, 128]
-        k_nope = k_nope.transpose(0, 1).transpose(1, 2)
-
-        key_states[:, :, :, : self.config.qk_nope_head_dim] = k_nope
-        key_states[:, :, :, self.config.qk_nope_head_dim :] = k_pe
-
-        query_states = query_states.transpose(1, 2).transpose(0, 1)
-        key_states = key_states.transpose(1, 2).transpose(0, 1)
-
-        return query_states, key_states, value_states
-
+        return query, key, value

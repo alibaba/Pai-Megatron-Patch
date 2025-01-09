@@ -17,7 +17,7 @@ from megatron.checkpointing import get_checkpoint_name, get_checkpoint_tracker_f
 import sys
 path_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
 sys.path.append(os.path.join(path_dir, "examples"))
-from mistral.pretrain_mcore_mistral import model_provider
+from mistral.pretrain_mcore_mistral_bak import model_provider
 from megatron_patch.arguments import get_patch_args
 
 torch.backends.cudnn.deterministic = True
@@ -382,7 +382,6 @@ def convert_checkpoint_from_transformers_to_megatron(mgmodel, hgmodel, args, hf_
 def save_state_dict(args, model, checkpoint_name):
     args.tensor_model_parallel_size = args.target_tensor_model_parallel_size
     args.pipeline_model_parallel_size = args.target_pipeline_model_parallel_size
-    args.add_position_embedding = False
     state_dict = {}
     state_dict['args'] = args
     state_dict['checkpoint_version'] = 3.0

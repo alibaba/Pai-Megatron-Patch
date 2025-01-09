@@ -39,8 +39,7 @@ from megatron_patch.data import build_pretrain_dataset_from_original
 from megatron_patch.data.utils import get_batch_on_this_tp_rank_original
 from megatron_patch.tokenizer import get_tokenizer, build_tokenizer
 from megatron_patch.arguments import get_patch_args
-from megatron_patch.model.mixtral.transformer_config import TransformerConfig
-from megatron_patch.model.mixtral.layer_specs import get_gpt_layer_with_transformer_engine_spec
+from megatron_patch.model.mixtral_bak.layer_specs import get_gpt_layer_with_transformer_engine_spec
 
 import torch._dynamo
 torch._dynamo.config.suppress_errors = True
@@ -87,7 +86,7 @@ def get_batch(data_iterator):
 
     # TODO: this is pretty hacky, find a better way
     if (not mpu.is_pipeline_first_stage()) and (not mpu.is_pipeline_last_stage()):
-        return None, None, None, None, None
+        return None, None, None, None, None, None
 
     args = get_args()
 
@@ -102,7 +101,14 @@ def get_batch(data_iterator):
         batch = get_batch_on_this_tp_rank(data_iterator)
         # slice batch along sequence dimension for context parallelism
         batch = get_batch_on_this_cp_rank(batch)
-
+        return (
+            batch['tokens'],
+            batch['labels'],
+            batch['loss_mask'],
+            batch['attention_mask'],
+            batch['position_ids'],
+            None
+        )
     else:
         raise ValueError("please set correct --dataset ")
 
@@ -147,7 +153,7 @@ def forward_step(data_iterator, model):
 
     # Get the batch.
     timers('batch-generator', log_level=2).start()
-    tokens, labels, loss_mask, attention_mask, position_ids = get_batch(
+    tokens, labels, loss_mask, attention_mask, position_ids, _ = get_batch(
         data_iterator)
     timers('batch-generator').stop()
 

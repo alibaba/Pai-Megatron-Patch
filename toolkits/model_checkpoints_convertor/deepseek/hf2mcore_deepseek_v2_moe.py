@@ -431,7 +431,7 @@ def save_mgmodel(mgmodel, args):
                 for k, v in full_model.items():
                     if not isinstance(v, torch.Tensor):
                         target_v = v
-                    elif 'linear_q_proj' in k or 'linear_q_a_proj' in k:
+                    elif 'linear_q_proj' in k or 'linear_q_a_proj' in k or 'linear_kv_a_proj_with_mqa' in k:
                         seg = v.shape[0] // args.tensor_model_parallel_size
                         target_v = v[seg * tp_rank: seg * (tp_rank + 1)]
                     elif 'linear_q_b_proj' in k:
