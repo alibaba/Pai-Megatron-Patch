@@ -100,6 +100,7 @@ class MoELayer(BaseMoELayer):
             )
             self.shared_expert = MLP(self.config, mlpSubmodules, is_expert=False, is_shared_expert=True)
             self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
+            setattr(self.shared_expert_gate.weight, 'sequence_parallel', config.sequence_parallel)
 
         if self.config.moe_grouped_gemm:
             if isinstance(self.submodules, MLPSubmodules):
