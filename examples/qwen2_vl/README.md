@@ -127,17 +127,18 @@ PR=${9}                         # 训练精度: fp16, bf16, fp8
 TP=${10}                        # 模型并行度
 PP=${11}                        # 流水并行度
 CP=${12}                        # 上下文并行度
-DO=${13}                        # 是否使用Megatron版Zero-1降显存优化器: true, false
-FL=${14}                        # 是否优先使用Flash Attention: true, false
-AC=${15}                        # 激活检查点模式: sel, full, offload, false
-OPTIMIZER_OFFLOAD=${16}         # 是否启用Offload optimizer: false, static, auto
-SAVE_INTERVAL=${17}             # 保存ckpt的间隔
-DATASET_PATH=${18}              # 训练数据集路径
-VALID_DATASET_PATH=${19}        # 验证数据集路径
-PRETRAIN_CHECKPOINT_PATH=${20}  # 预训练模型路径
-TRAIN_ITERS=${21}               # Iter数
-LR_WARMUP_ITERS=${22}           # 预热Iter数        
-OUTPUT_BASEPATH=${23}           # 训练输出日志文件路径
+SP=${13}                        # 是否启用序列并行: true, false
+DO=${14}                        # 是否使用Megatron版Zero-1降显存优化器: true, false
+FL=${15}                        # 是否优先使用Flash Attention: true, false
+AC=${16}                        # 激活检查点模式: sel, full, offload, false
+OPTIMIZER_OFFLOAD=${17}         # 是否启用Offload optimizer: false, static, auto
+SAVE_INTERVAL=${18}             # 保存ckpt的间隔
+DATASET_PATH=${19}              # 训练数据集路径
+VALID_DATASET_PATH=${20}        # 验证数据集路径
+PRETRAIN_CHECKPOINT_PATH=${21}  # 预训练模型路径
+TRAIN_ITERS=${22}               # Iter数
+LR_WARMUP_ITERS=${23}           # 预热Iter数        
+OUTPUT_BASEPATH=${24}           # 训练输出日志文件路径
 ```
 
 #### 预训练示例
@@ -158,6 +159,7 @@ bf16  \
 2   \
 2  \
 1 \
+true \
 true \
 true   \
 false \
@@ -188,6 +190,7 @@ bf16  \
 2   \
 2  \
 1 \
+true \
 true \
 true   \
 false \

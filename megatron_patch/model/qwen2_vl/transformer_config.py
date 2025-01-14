@@ -56,6 +56,8 @@ def get_vision_model_config(args, config):
     config.normalization = 'LayerNorm' # use LayerNorm
     config.seq_length = args.seq_length
 
+    config.tp_comm_overlap = False
+    config.sequence_parallel = False
     config.temporal_patch_size = 2
     config.patch_size = 14
     config.in_channels = 3
@@ -75,4 +77,6 @@ def get_vision_projection_config(config, embed_dim, spatial_merge_size):
     config.add_bias_linear = True
     config.ffn_hidden_size = embed_dim * (spatial_merge_size ** 2)
     config.activation_func = torch.nn.functional.gelu
+    config.tp_comm_overlap = False
+    config.sequence_parallel = False
     return config
