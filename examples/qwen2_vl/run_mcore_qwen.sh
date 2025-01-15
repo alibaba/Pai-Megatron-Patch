@@ -25,8 +25,11 @@ elif [ $ENV = dlc ]; then
     GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU}
 fi
 
-if [ ${MP_VP} ]; then
-    echo "No Virtual Pipeline Parallel Support for Multimodel Model"
+if [ -z ${MP_VP} ]; then
+    vp_options=""
+else
+    vp_options=" \
+        --num-layers-per-virtual-pipeline-stage ${MP_VP}"
 fi
 
 MP_SFT_PACKING=false
@@ -48,23 +51,24 @@ PR=$9
 TP=${10}
 PP=${11}
 CP=${12}
-DO=${13}
-FL=${14}
+SP=${13}
+DO=${14}
+FL=${15}
 ### PARALLEL / BOOL OPTION ###
 
 ### OTHERS ###
-AC=${15}
-OPTIMIZER_OFFLOAD=${16}
-SAVE_INTERVAL=${17}
-DATASET_PATH=${18}
-VALID_DATASET_PATH=${19}
-PRETRAIN_CHECKPOINT_PATH=${20}
+AC=${16}
+OPTIMIZER_OFFLOAD=${17}
+SAVE_INTERVAL=${18}
+DATASET_PATH=${19}
+VALID_DATASET_PATH=${20}
+PRETRAIN_CHECKPOINT_PATH=${21}
 
-TRAIN_ITERS=${21}
-LR_WARMUP_ITERS=${22}
+TRAIN_ITERS=${22}
+LR_WARMUP_ITERS=${23}
 ###############################
 
-OUTPUT_BASEPATH=${23}
+OUTPUT_BASEPATH=${24}
 ### OTHERS ###
 if [ $FL = true ]; then
     export NVTE_FLASH_ATTN=1 NVTE_FUSED_ATTN=0
@@ -204,11 +208,16 @@ elif [ $DO = false ]; then
                     "
 fi
 
-te_options=" \
-        --transformer-impl transformer_engine"
-SP=false
+comm_overlap_option="\
+        --overlap-grad-reduce \
+        --overlap-param-gather"
+
 if [ $SP = true ] && [ $TP -gt 1 ]; then
-    echo "VLM Sequence Parallel Not Support Yet..."
+    comm_overlap_option="\
+        --tp-comm-overlap \
+        --overlap-grad-reduce \
+        --overlap-param-gather \
+        --sequence-parallel"
 fi
 
 if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
@@ -299,11 +308,12 @@ megatron_options="  \
         --no-save-optim \
         --disable-vision-class-token \
         --dataloader-type external \
+        --transformer-impl transformer_engine \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
- ${megatron_options} ${dataset_option} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} \
- ${do_options} ${gqa_options} ${sft_option} ${tie_option} ${packing_options} ${uneven_split_option}"
+ ${megatron_options} ${dataset_option} ${pr_options} ${load_options} ${activation_checkpoint_options} \
+ ${do_options} ${gqa_options} ${sft_option} ${tie_option} ${packing_options} ${uneven_split_option} ${vp_options} ${comm_overlap_option}"
 
 echo ${run_cmd}
 eval ${run_cmd}

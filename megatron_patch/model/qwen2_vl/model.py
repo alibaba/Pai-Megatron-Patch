@@ -1,18 +1,15 @@
 # Copyright (c) 2024, NVIDIA CORPORATION. All rights reserved.
 import logging
 from collections import namedtuple
-from functools import partial
 from typing import List
 
 import torch
 
 from megatron.core import InferenceParams, parallel_state
-from megatron.core.models.vision.multimodal_projector import MultimodalProjector
 from megatron.core.transformer import MegatronModule
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_config import TransformerConfig
 from .transformer_config import Qwen2VLTransformerConfig
-from megatron.core.utils import make_viewless_tensor
 from megatron.core.packed_seq_params import PackedSeqParams
 
 from .visionmodel import Qwen2VisionModel
@@ -225,12 +222,12 @@ class Qwen2VLModel(MegatronModule):
                 #     vision_embeddings.shape[0]
                 # )
             
-            language_embeddings: torch.Tensor = self.language_model.embedding(
-                input_ids=input_ids,
-                position_ids=None # NOTE: disable
-            ).clone()  # [text_seq_len, b, h_language]
             # If running inference, we can skip image token computation if they were computed already earlier for this sample.
             if use_inference_kv_cache:
+                language_embeddings: torch.Tensor = self.language_model.embedding(
+                input_ids=input_ids,
+                position_ids=None # NOTE: disable
+                )  # [text_seq_len, b, h_language]
                 # NOTE: why not cat here? is it the combined embeddings useless?
                 combined_embeddings = language_embeddings
             elif vision_embeds is not None:
@@ -247,14 +244,22 @@ class Qwen2VLModel(MegatronModule):
                     raise ValueError(f"Expect video token start index in range [0, {vision_embeds.shape[0]}], but got {video_start_index}")
                 
                 if image_embeds is not None:
-                    image_embeds = image_embeds.to(language_embeddings.device, language_embeddings.dtype)
-                    language_embeddings[image_input_mask.T] = image_embeds
+                    image_input_mask = image_input_mask.T # shape [seqlen, mbs]
                 if video_embeds is not None:
-                    video_embeds = video_embeds.to(language_embeddings.device, language_embeddings.dtype)
-                    language_embeddings[video_input_mask.T] = video_embeds          
-                combined_embeddings = language_embeddings
+                    video_input_mask = video_input_mask.T
+                combined_embeddings = self.language_model.embedding(
+                    input_ids=input_ids,
+                    position_ids=None, # NOTE: disable
+                    image_input_mask=image_input_mask,
+                    video_input_mask=video_input_mask,
+                    image_embeds=image_embeds,
+                    video_embeds=video_embeds
+                )  # [text_seq_len, b, h_language]
             else:
-                combined_embeddings = language_embeddings
+                combined_embeddings = self.language_model.embedding(
+                    input_ids=input_ids,
+                    position_ids=None # NOTE: disable
+                )  # [text_seq_len, b, h_language]
         else:
             combined_embeddings = None
 
