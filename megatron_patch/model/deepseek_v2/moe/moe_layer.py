@@ -1,32 +1,33 @@
-# Copyright (c) 2023 Alibaba PAI and Nvidia Megatron-LM Team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Copyright (c) 2023, NVIDIA CORPORATION. All rights reserved.
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Union
+
 import torch
-import torch.nn.functional as F
 
-from megatron.core import parallel_state
+from megatron.core import parallel_state, tensor_parallel
 from megatron.core.transformer.module import MegatronModule
-from megatron.core.transformer.transformer_config import TransformerConfig
-
-from .experts import GroupedMLP, SequentialMLP
-from .router import TopKRouter
-from .token_dispatcher import (
+from megatron.core.transformer.moe.legacy_a2a_token_dispatcher import MoEAlltoAllSEQTokenDispatcher
+from megatron.core.transformer.moe.router import TopKRouter
+from megatron.core.transformer.moe.token_dispatcher import (
     MoEAllGatherTokenDispatcher,
     MoEAlltoAllTokenDispatcher,
 )
-from ..transformer.mlp import MLPSubmodules, MLP
+from megatron.core.transformer.spec_utils import ModuleSpec
+from megatron.core.transformer.transformer_config import TransformerConfig
+
+from .experts import GroupedMLP, SequentialMLP, TEGroupedMLP
+from .shared_experts import SharedExpertMLP
+from ..mlp import MLPSubmodules
+
+@dataclass
+class MoESubmodules:
+    """MoE Layer Submodule spec"""
+
+    experts: Union[ModuleSpec, type] = None
+    shared_experts: Union[ModuleSpec, type] = None
+
 
 class BaseMoELayer(MegatronModule, ABC):
     """Base class for a mixture of experts layer.
@@ -40,25 +41,37 @@ class BaseMoELayer(MegatronModule, ABC):
         self.config = config
         self.expert_parallel_size = parallel_state.get_expert_model_parallel_world_size()
         assert self.expert_parallel_size > 0, "Expected non-negative expert parallel size"
-        assert self.config.num_moe_experts % self.expert_parallel_size == 0
-        self.num_local_experts = self.config.num_moe_experts // self.expert_parallel_size
-        local_expert_indices_offset = (
-            parallel_state.get_expert_model_parallel_rank() * self.num_local_experts
-        )
+
+        if self.config.moe_extended_tp:
+            self.num_local_experts = self.config.num_moe_experts
+            local_expert_indices_offset = 0
+        else:
+            assert self.config.num_moe_experts % self.expert_parallel_size == 0
+            self.num_local_experts = self.config.num_moe_experts // self.expert_parallel_size
+            local_expert_indices_offset = (
+                parallel_state.get_expert_model_parallel_rank() * self.num_local_experts
+            )
+
+        self.use_shared_expert = self.config.moe_shared_expert_intermediate_size is not None
+        self.shared_expert_overlap = self.config.moe_shared_expert_overlap
+
         self.local_expert_indices = [
             local_expert_indices_offset + i for i in range(self.num_local_experts)
         ]
         assert all(map(lambda x: x < self.config.num_moe_experts, self.local_expert_indices))
         self.router = None
         self.experts = None
+        self.shared_experts = None
         self.token_dispatcher = None
         self.layer_number = layer_number
 
     @abstractmethod
     def forward(self, hidden_states):
+        """Forward method for the MoE layer."""
         pass
 
     def set_layer_number(self, layer_number: int):
+        """Set the layer number for the MoE layer."""
         self.layer_number = layer_number
         self.router.set_layer_number(layer_number)
 
@@ -75,16 +88,26 @@ class MoELayer(BaseMoELayer):
     ):
         self.submodules = submodules
         super(MoELayer, self).__init__(config=config, layer_number=layer_number)
-        self.router = TopKRouter(config=self.config)
-        self.enable_shared_experts = config.enable_shared_expert
-        if config.enable_shared_expert:
-            self.shared_expert = MLP(self.config, submodules, is_expert=False, is_shared_expert=True)
+        self.moe_layer_recompute = config.moe_layer_recompute
 
+        # Initialize router
+        self.router = TopKRouter(config=self.config)
+
+        # Initialize experts
         if self.config.moe_grouped_gemm:
-            self.experts = GroupedMLP(self.num_local_experts, self.config)
+            if isinstance(self.submodules.experts, MLPSubmodules):
+                self.experts = TEGroupedMLP(
+                    self.num_local_experts, self.config, self.submodules.experts
+                )
+            else:
+                self.experts = GroupedMLP(self.num_local_experts, self.config)
         else:
-            assert isinstance(self.submodules, MLPSubmodules)
-            self.experts = SequentialMLP(self.num_local_experts, self.config, self.submodules)
+            assert isinstance(self.submodules.experts, MLPSubmodules)
+            self.experts = SequentialMLP(
+                self.num_local_experts, self.config, self.submodules.experts
+            )
+
+        # Initialize token dispatcher
         if config.moe_token_dispatcher_type == "allgather":
             self.token_dispatcher = MoEAllGatherTokenDispatcher(
                 self.num_local_experts, self.local_expert_indices, config=self.config
@@ -93,21 +116,49 @@ class MoELayer(BaseMoELayer):
             self.token_dispatcher = MoEAlltoAllTokenDispatcher(
                 self.num_local_experts, self.local_expert_indices, config=self.config
             )
+        elif config.moe_token_dispatcher_type == "alltoall_seq":
+            self.token_dispatcher = MoEAlltoAllSEQTokenDispatcher(
+                self.num_local_experts, self.local_expert_indices, config=self.config
+            )
         else:
             raise ValueError(
                 f"Unsupported token dispatcher type: {config.moe_token_dispatcher_type}"
             )
 
+        # Initialize shared experts
+        if self.use_shared_expert:
+            self.shared_experts = SharedExpertMLP(self.config, self.submodules.shared_experts)
+            if self.shared_expert_overlap:
+                self.token_dispatcher.set_shared_experts(self.shared_experts)
+
     def forward(self, hidden_states: torch.Tensor):
+        if (
+            self.training
+            and self.config.tensor_model_parallel_size > 1
+            and not self.config.sequence_parallel
+        ):
+            raise ValueError(
+                "During training, performance may degrade if MoE and tensor parallelism"
+                "are enabled without also enabling sequence parallelism."
+            )
+
         # process MoE
-        scores, indices = self.router(hidden_states)
-        (dispatched_input, tokens_per_expert) = self.token_dispatcher.token_permutation(
-            hidden_states, scores, indices
-        )
-        expert_output, mlp_bias = self.experts(dispatched_input, tokens_per_expert)
-        output, mlp_bias = self.token_dispatcher.token_unpermutation(expert_output, mlp_bias)
-        if self.enable_shared_experts:
-            shared_expert_output, shared_bias = self.shared_expert(hidden_states)
-            output = output + shared_expert_output.view(-1, hidden_states.shape[-2], hidden_states.shape[-1])
+        def custom_forward(hidden_states):
+            probs, routing_map = self.router(hidden_states)
+            (dispatched_input, tokens_per_expert) = self.token_dispatcher.token_permutation(
+                hidden_states, probs, routing_map
+            )
+            expert_output, mlp_bias = self.experts(dispatched_input, tokens_per_expert)
+            output, mlp_bias = self.token_dispatcher.token_unpermutation(expert_output, mlp_bias)
+            if self.use_shared_expert and not self.shared_expert_overlap:
+                # if shared_expert_overlap is True, the expert calculation happens in
+                # the token_dispatcher to overlap communications and computations
+                output += self.shared_experts(hidden_states)
+            return output, mlp_bias
+
+        if self.moe_layer_recompute:
+            output, mlp_bias = tensor_parallel.checkpoint(custom_forward, False, hidden_states)
+        else:
+            output, mlp_bias = custom_forward(hidden_states)
 
         return output, mlp_bias

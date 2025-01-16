@@ -20,7 +20,6 @@ from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.core.datasets.utils import get_blend_from_list
 from megatron.core.enums import ModelType
 from megatron.training import get_args, get_timers, pretrain, print_rank_0
-from megatron.training.arguments import core_transformer_config_from_args
 from megatron.training.utils import (
     average_losses_across_data_parallel_group,
     get_batch_on_this_cp_rank,
@@ -34,13 +33,12 @@ from megatron_patch.data import build_pretrain_dataset_from_original
 from megatron_patch.data.utils import get_batch_on_this_tp_rank_original, get_batch_on_this_tp_rank_idxmap_sft
 
 
+from megatron_patch.arguments import core_transformer_config_from_args
+from megatron_patch.model.deepseek_v2.transformer_config import DeepSeekV2TransformerConfig
+from megatron_patch.model.deepseek_v2.model import GPTModel
 from megatron_patch.model.deepseek_v2.layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
 )
-from megatron_patch.model.deepseek_v2.model import GPTModel
-from megatron_patch.model.deepseek_v2.transformer_config import DeepSeekV2TransformerConfig
-
-
 
 torch._dynamo.config.suppress_errors = True
 
@@ -57,7 +55,7 @@ def model_provider(
     if use_te:
         print_rank_0("building deepseek_v2 model in TE...")
         transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
-            args.num_experts, args.moe_grouped_gemm, args.qk_layernorm
+            args.num_experts, args.moe_grouped_gemm, args.qk_layernorm, multi_latent_attention=True, fp8=args.fp8
         )
     else:
         raise ValueError("Current only support TE")
