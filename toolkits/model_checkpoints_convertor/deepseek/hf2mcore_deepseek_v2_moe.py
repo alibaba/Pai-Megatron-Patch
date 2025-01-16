@@ -75,6 +75,12 @@ def add_model_args(parser):
     )
 
     parser.add_argument(
+        "--target-decoder-first-pipeline-num-layers",
+        type=int,
+        default=None
+    )
+
+    parser.add_argument(
         "--hf-ckpt-path",
         type=str
     )
@@ -116,7 +122,7 @@ def load_megatron_model(args):
     model_path = args.load
     tracker_filename = get_checkpoint_tracker_filename(model_path)
     iteration, release = read_metadata(tracker_filename)
-    q_head_dim = args.qk_nope_head_dim + args.qk_rope_head_dim
+    q_head_dim = args.qk_head_dim + args.qk_pos_emb_head_dim
     group_per_split = args.num_attention_heads // args.tensor_model_parallel_size
     if args.num_experts is not None:
         num_local_experts = args.num_experts // args.expert_model_parallel_size
@@ -131,7 +137,7 @@ def load_megatron_model(args):
     elif (
         args.tensor_model_parallel_size == 1
         and args.pipeline_model_parallel_size == 1
-        and args.expert_model_parallel_size >1
+        and args.expert_model_parallel_size > 1
         and args.num_experts % args.expert_model_parallel_size == 0
     ):
         for ep_rank in range(args.expert_model_parallel_size):
@@ -145,65 +151,29 @@ def load_megatron_model(args):
                     k = k.replace(f'local_experts.{expert_local_rank}', f'local_experts.{expert_rank}')
                 state_dict[k] = v
     elif (
-        args.tensor_model_parallel_size > 1
-        and args.pipeline_model_parallel_size == 1
-        and args.expert_model_parallel_size > 1
+        args.tensor_model_parallel_size >= 1
+        and args.pipeline_model_parallel_size >= 1
+        and args.expert_model_parallel_size >= 1
         and args.num_experts % args.expert_model_parallel_size == 0
     ):
-        for tp_rank in range(args.tensor_model_parallel_size):
-            for ep_rank in range(args.expert_model_parallel_size):
-                if args.expert_model_parallel_size >1:
-                    checkpoint_name = get_checkpoint_name(model_path, iteration,release, None, tp_rank, None, True, ep_rank)
-                elif args.expert_model_parallel_size ==1:
-                    checkpoint_name = get_checkpoint_name(model_path, iteration, release, None, tp_rank, None, False)
-                print(f'load {checkpoint_name}')
-                split_state = torch.load(checkpoint_name, map_location="cpu")['model']
-                for k, v in split_state.items():
-                    if 'local_experts' in k:
-                        local_expert_rank = name_to_expert_rank(k)
-                        expert_rank = local_expert_rank + num_local_experts * ep_rank
-                        k = k.replace(f'local_experts.{local_expert_rank}', f'local_experts.{expert_rank}')
-                        mid_state[k].append(v)
-                    elif ep_rank == 0:
-                        mid_state[k].append(v)
+        #assert args.num_layers % args.pipeline_model_parallel_size == 0
+        if args.target_decoder_first_pipeline_num_layers is not None:
+            remained_layers = args.num_layers - args.target_decoder_first_pipeline_num_layers
+            remained_stages = args.pipeline_model_parallel_size - 1
+            assert remained_layers % remained_stages == 0
+            pp_layers_per_stage = [args.target_decoder_first_pipeline_num_layers] +([remained_layers // remained_stages] * remained_stages)
+        else:
+            pp_layers_per_stage = [args.num_layers // args.pipeline_model_parallel_size] * args.pipeline_model_parallel_size
 
-        for k, v in mid_state.items():
-            if not isinstance(v[0], torch.Tensor) or 'norm' in k or 'router' in k or 'gate' in k or "linear_kv_a_proj_with_mqa" in k:
-                target_v = v[0]
-            elif 'embedding' in k or 'output_layer' in k:
-                target_v = torch.cat(v, dim=0)
-            elif 'linear_proj' in k or 'linear_fc2' in k:
-                target_v = torch.cat(v, dim=1)
-            elif 'linear_q_proj' in k:
-                viewed = [x.view(group_per_split, -1, q_head_dim, args.hidden_size) for x in v]
-                target_v = torch.cat(viewed, dim=0).view(-1, args.hidden_size)
-            elif 'linear_kv_b_proj' in k:
-                viewed = [x.view(group_per_split, -1, q_head_dim - args.qk_rope_head_dim + args.v_head_dim, args.kv_lora_rank) for x in v]
-                target_v = torch.cat(viewed, dim=0).view(-1, args.kv_lora_rank)
-            elif 'linear_fc1' in k:
-                viewed = [x.view(2, -1, args.hidden_size) for x in v]
-                target_v = torch.cat(viewed, dim=1).view(-1, args.hidden_size)
-            else:
-                print('passed', k)
-                exit()
-            state_dict[k] = target_v
-
-    elif (
-        args.tensor_model_parallel_size > 1
-        and args.pipeline_model_parallel_size > 1
-        and args.expert_model_parallel_size > 1
-        and args.num_experts % args.expert_model_parallel_size == 0
-    ):
-        assert args.num_layers % args.pipeline_model_parallel_size == 0
-        num_layers = args.num_layers // args.pipeline_model_parallel_size
+        #num_layers = args.num_layers // args.pipeline_model_parallel_size
         layers_to_copy = {}
         for tp_rank in range(args.tensor_model_parallel_size):
             for ep_rank in range(args.expert_model_parallel_size):
                 for pp_rank in range(args.pipeline_model_parallel_size):
-                    layer_offset = pp_rank * num_layers
-                    for layer in range(num_layers):
+                    layer_offset = sum(pp_layers_per_stage[:pp_rank])
+                    for layer in range(pp_layers_per_stage[pp_rank]):
                         pp_layer_id = layer + layer_offset
-                        layers_to_copy[f"decoder.layers.{layer}"] = pp_layer_id
+                        layers_to_copy[(pp_rank, layer)] = pp_layer_id
 
                     if args.expert_model_parallel_size > 1:
                         checkpoint_name = get_checkpoint_name(model_path, iteration, release, True, tp_rank, pp_rank, True,
@@ -214,37 +184,59 @@ def load_megatron_model(args):
                     print(f'load {checkpoint_name}')
                     split_state = torch.load(checkpoint_name, map_location="cpu")['model']
                     for k, v in split_state.items():
-                        if 'local_experts' in k:
-                            local_expert_rank = name_to_expert_rank(k)
-                            expert_rank = local_expert_rank + num_local_experts * ep_rank
-                            k = k.replace(f'local_experts.{local_expert_rank}', f'local_experts.{expert_rank}')
-                            mid_state[k].append(v)
-                        elif ep_rank == 0:
-                            mid_state[k].append(v)
                         try:
+                            if 'local_experts' in k:
+                                local_expert_rank = name_to_expert_rank(k)
+                                expert_rank = local_expert_rank + num_local_experts * ep_rank
+                                k = k.replace(f'local_experts.{local_expert_rank}', f'local_experts.{expert_rank}')
                             pattern = re.compile(r'\d+')
                             res = pattern.findall(k)
-                            k = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy["decoder.layers." + res[0]]), k)
-                            mid_state[k].append(v)
+                            tgt = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy[(pp_rank, int(res[0]))]), k)
+                            if 'linear_proj' in k or 'linear_q_proj' in k or 'linear_kv_up_proj' in k or 'decoder.layers.0.mlp.linear_fc2' in k or \
+                                    'decoder.layers.0.mlp.linear_fc1' in k or 'shared_experts.linear_fc1' in k or 'shared_experts.linear_fc2' in k:
+                                if ep_rank ==0:
+                                    mid_state[tgt].append(v)
+                            else:
+                                mid_state[tgt].append(v)
                         except:
-                            mid_state[k].append(v)
+                            print(f"Skipping {k}")
+                            if "word_embeddings" in k:
+                                if ep_rank ==0 and pp_rank == 0:
+                                    mid_state[k].append(v)
+                            elif "output_layer" in k or "final_layernorm" in k:
+                                if ep_rank ==0 and pp_rank == args.pipeline_model_parallel_size - 1:
+                                    mid_state[k].append(v)
+                            else:
+                                raise ValueError("Something is wrong!")
+
         for k, v in mid_state.items():
-            if not isinstance(v[0], torch.Tensor) or 'norm' in k or 'router' in k or 'gate' in k or "linear_kv_a_proj_with_mqa" in k:
+            if not isinstance(v[0], torch.Tensor) or 'router' in k or 'gate' in k:
                 target_v = v[0]
-            elif 'embedding' in k or 'output_layer' in k:
+            elif 'word_embeddings' in k or 'output_layer' in k or 'final_layernorm' in k:
                 target_v = torch.cat(v, dim=0)
-            elif 'linear_proj' in k or 'linear_fc2' in k:
+            elif 'linear_proj' in k:
                 target_v = torch.cat(v, dim=1)
             elif 'linear_q_proj' in k:
                 viewed = [x.view(group_per_split, -1, q_head_dim, args.hidden_size) for x in v]
                 target_v = torch.cat(viewed, dim=0).view(-1, args.hidden_size)
-            elif 'linear_kv_b_proj' in k:
-                viewed = [x.view(group_per_split, -1, q_head_dim - args.qk_rope_head_dim + args.v_head_dim, args.kv_lora_rank) for x in v]
+            elif 'linear_kv_up_proj' in k:
+                viewed = [x.view(group_per_split, -1, q_head_dim - args.qk_pos_emb_head_dim + args.v_head_dim, args.kv_lora_rank) for x in v]
                 target_v = torch.cat(viewed, dim=0).view(-1, args.kv_lora_rank)
+            elif 'linear_kv_down_proj' in k:
+                target_v = v[0]
             elif 'linear_fc1' in k:
                 viewed = [x.view(2, -1, args.hidden_size) for x in v]
                 target_v = torch.cat(viewed, dim=1).view(-1, args.hidden_size)
+            elif 'linear_fc2' in k:
+                target_v = torch.cat(v, dim=1)
+            elif 'input_layernorm' in k:
+                target_v = v[0]
+            elif 'kv_layernorm' in k:
+                target_v = v[0]
+            elif 'pre_mlp_layernorm' in k:
+                target_v = v[0]
             else:
+                print(f"Missing {k}")
                 raise ValueError
             state_dict[k] = target_v
 
@@ -270,9 +262,9 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
             hflayer.input_layernorm.weight.copy_(mglayer.input_layernorm.weight)
             hflayer.post_attention_layernorm.weight.copy_(mglayer.pre_mlp_layernorm.weight)
             hflayer.self_attn.q_proj.weight.copy_(mglayer.self_attention.linear_q_proj.weight)
-            hflayer.self_attn.kv_a_proj_with_mqa.weight.copy_(mglayer.self_attention.linear_kv_a_proj_with_mqa.weight)
-            hflayer.self_attn.kv_b_proj.weight.copy_(mglayer.self_attention.linear_kv_b_proj.weight)
-            hflayer.self_attn.kv_a_layernorm.weight.copy_(mglayer.self_attention.kv_a_layernorm.weight)
+            hflayer.self_attn.kv_a_proj_with_mqa.weight.copy_(mglayer.self_attention.linear_kv_down_proj.weight)
+            hflayer.self_attn.kv_b_proj.weight.copy_(mglayer.self_attention.linear_kv_up_proj.weight)
+            hflayer.self_attn.kv_a_layernorm.weight.copy_(mglayer.self_attention.kv_layernorm.weight)
             hflayer.self_attn.o_proj.weight.copy_(mglayer.self_attention.linear_proj.weight)
 
             if layer_idx == 0:
@@ -292,11 +284,11 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
                     hfexpert.down_proj.weight.copy_(mgexpert.linear_fc2.weight)
 
                 shared_expert_gate_weight, shared_expert_up_weight = \
-                    torch.split(mglayer.mlp.shared_expert.linear_fc1.weight,
-                                split_size_or_sections=args.moe_ffn_hidden_size*args.num_shared_experts)
+                    torch.split(mglayer.mlp.shared_experts.linear_fc1.weight,
+                                split_size_or_sections=args.moe_shared_expert_intermediate_size)
                 hflayer.mlp.shared_experts.gate_proj.weight.copy_(shared_expert_gate_weight)
                 hflayer.mlp.shared_experts.up_proj.weight.copy_(shared_expert_up_weight)
-                hflayer.mlp.shared_experts.down_proj.weight.copy_(mglayer.mlp.shared_expert.linear_fc2.weight)
+                hflayer.mlp.shared_experts.down_proj.weight.copy_(mglayer.mlp.shared_experts.linear_fc2.weight)
 
         hfmodel.model.norm.weight.copy_(mgmodel.decoder.final_layernorm.weight)
         hfmodel.lm_head.weight.copy_(mgmodel.output_layer.weight)
@@ -317,14 +309,14 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
             mglayer.input_layernorm.weight.copy_(hflayer.input_layernorm.weight)
             mglayer.pre_mlp_layernorm.weight.copy_(hflayer.post_attention_layernorm.weight)
             if args.q_lora_rank is not None:
-                mglayer.self_attention.linear_q_a_proj.weight.copy_(hflayer.self_attn.q_a_proj.weight)
-                mglayer.self_attention.linear_q_b_proj.weight.copy_(hflayer.self_attn.q_b_proj.weight)
+                mglayer.self_attention.linear_q_down_proj.weight.copy_(hflayer.self_attn.q_a_proj.weight)
+                mglayer.self_attention.linear_q_up_proj.weight.copy_(hflayer.self_attn.q_b_proj.weight)
                 mglayer.self_attention.q_a_layernorm.weight.copy_(hflayer.self_attn.q_a_layernorm.weight)
             else:
                 mglayer.self_attention.linear_q_proj.weight.copy_(hflayer.self_attn.q_proj.weight)
-            mglayer.self_attention.linear_kv_a_proj_with_mqa.weight.copy_(hflayer.self_attn.kv_a_proj_with_mqa.weight)
-            mglayer.self_attention.linear_kv_b_proj.weight.copy_(hflayer.self_attn.kv_b_proj.weight)
-            mglayer.self_attention.kv_a_layernorm.weight.copy_(hflayer.self_attn.kv_a_layernorm.weight)
+            mglayer.self_attention.linear_kv_down_proj.weight.copy_(hflayer.self_attn.kv_a_proj_with_mqa.weight)
+            mglayer.self_attention.linear_kv_up_proj.weight.copy_(hflayer.self_attn.kv_b_proj.weight)
+            mglayer.self_attention.kv_layernorm.weight.copy_(hflayer.self_attn.kv_a_layernorm.weight)
             mglayer.self_attention.linear_proj.weight.copy_(hflayer.self_attn.o_proj.weight)
 
             if layer_idx == 0:
@@ -340,8 +332,8 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
 
                 shared_fc1_weight = torch.cat(
                     [hflayer.mlp.shared_experts.gate_proj.weight, hflayer.mlp.shared_experts.up_proj.weight])
-                mglayer.mlp.shared_expert.linear_fc1.weight.copy_(shared_fc1_weight)
-                mglayer.mlp.shared_expert.linear_fc2.weight.copy_(hflayer.mlp.shared_experts.down_proj.weight)
+                mglayer.mlp.shared_experts.linear_fc1.weight.copy_(shared_fc1_weight)
+                mglayer.mlp.shared_experts.linear_fc2.weight.copy_(hflayer.mlp.shared_experts.down_proj.weight)
 
         mgmodel.decoder.final_layernorm.weight.copy_(hfmodel.model.norm.weight)
         if args.untie_embeddings_and_output_weights:
@@ -382,7 +374,7 @@ def save_mgmodel(mgmodel, args):
     full_model = mgmodel.state_dict_for_save_checkpoint()
 
     for k in list(full_model.keys()):
-        if full_model[k] is None or "_extra_state" in k:
+        if full_model[k] is None:
             full_model.pop(k)
 
     if args.num_experts is not None:
@@ -431,17 +423,17 @@ def save_mgmodel(mgmodel, args):
                 for k, v in full_model.items():
                     if not isinstance(v, torch.Tensor):
                         target_v = v
-                    elif 'linear_q_proj' in k or 'linear_q_a_proj' in k or 'linear_kv_a_proj_with_mqa' in k:
+                    elif 'linear_q_proj' in k or 'linear_q_down_proj' in k or 'linear_kv_down_proj' in k:
                         seg = v.shape[0] // args.tensor_model_parallel_size
                         target_v = v[seg * tp_rank: seg * (tp_rank + 1)]
-                    elif 'linear_q_b_proj' in k:
+                    elif 'linear_q_up_proj' in k:
                         seg_0 = v.shape[0] // args.tensor_model_parallel_size
                         seg_1 = v.shape[1] // args.tensor_model_parallel_size
                         target_v = v[seg_0 * tp_rank: seg_0 * (tp_rank + 1), seg_1 * tp_rank: seg_1 * (tp_rank + 1)]
                     elif 'q_a_layernorm' in k:
                         seg = v.shape[0] // args.tensor_model_parallel_size
                         target_v = v[seg * tp_rank: seg * (tp_rank + 1)]
-                    elif 'linear_kv_b_proj' in k:
+                    elif 'linear_kv_up_proj' in k:
                         seg = v.shape[0] // args.tensor_model_parallel_size
                         target_v = v[seg * tp_rank:seg* (tp_rank + 1)]
                     elif 'linear_proj' in k:
@@ -472,8 +464,8 @@ def save_mgmodel(mgmodel, args):
                         k = k.replace(f'local_experts.{expert_rank}', f'local_experts.{expert_local_rank}')
                     elif 'shared_expert' in k and 'gate' not in k:
                         if 'linear_fc1' in k:
-                            viewed = v.view(-1, args.moe_ffn_hidden_size * args.num_shared_experts, args.hidden_size)
-                            seg = args.moe_ffn_hidden_size * args.num_shared_experts // args.tensor_model_parallel_size
+                            viewed = v.view(-1, args.moe_shared_expert_intermediate_size, args.hidden_size)
+                            seg = args.moe_shared_expert_intermediate_size // args.tensor_model_parallel_size
                             target_v = viewed[:, seg * tp_rank: seg * (tp_rank + 1), :].reshape(-1, args.hidden_size)
                         elif 'linear_fc2' in k:
                             seg = v.shape[1] // args.tensor_model_parallel_size
@@ -487,15 +479,25 @@ def save_mgmodel(mgmodel, args):
         args.pipeline_model_parallel_size > 1
         and args.num_experts % args.expert_model_parallel_size == 0
     ):
-        assert args.num_layers % args.pipeline_model_parallel_size == 0
-        num_layers = args.num_layers // args.pipeline_model_parallel_size
+
+        if args.target_decoder_first_pipeline_num_layers is not None:
+            remained_layers = args.num_layers - args.target_decoder_first_pipeline_num_layers
+            remained_stages = args.pipeline_model_parallel_size - 1
+            assert remained_layers % remained_stages == 0
+            pp_layers_per_stage = [ args.target_decoder_first_pipeline_num_layers] +([remained_layers // remained_stages] * remained_stages)
+        else:
+            pp_layers_per_stage = [args.num_layers // args.pipeline_model_parallel_size] * args.pipeline_model_parallel_size
+
+        #num_layers = args.num_layers // args.pipeline_model_parallel_size
         for tp_rank in range(args.tensor_model_parallel_size):
             for ep_rank in range(args.expert_model_parallel_size):
                 for pp_rank in range(args.pipeline_model_parallel_size):
                     model_split = {}
-                    layer_offset = pp_rank * num_layers
+                    #layer_offset = pp_rank * num_layers
+                    layer_offset = sum(pp_layers_per_stage[:pp_rank])
                     layers_to_copy = {}
-                    for layer in range(num_layers):
+                    #for layer in range(num_layers):
+                    for layer in range(pp_layers_per_stage[pp_rank]):
                         pp_layer_id = layer + layer_offset
                         layers_to_copy[f"decoder.layers.{pp_layer_id}"] = layer
                     if args.expert_model_parallel_size > 1:
@@ -512,17 +514,17 @@ def save_mgmodel(mgmodel, args):
                             continue
                         if not isinstance(v, torch.Tensor):
                             target_v = v
-                        elif 'linear_q_proj' in k or 'linear_q_a_proj' in k:
+                        elif 'linear_q_proj' in k or 'linear_q_down_proj' in k or 'linear_kv_down_proj' in k:
                             seg = v.shape[0] // args.tensor_model_parallel_size
                             target_v = v[seg * tp_rank: seg * (tp_rank + 1)]
-                        elif 'linear_q_b_proj' in k:
+                        elif 'linear_q_up_proj' in k:
                             seg_0 = v.shape[0] // args.tensor_model_parallel_size
                             seg_1 = v.shape[1] // args.tensor_model_parallel_size
                             target_v = v[seg_0 * tp_rank: seg_0 * (tp_rank + 1), seg_1 * tp_rank: seg_1 * (tp_rank + 1)]
                         elif 'q_a_layernorm' in k:
                             seg = v.shape[0] // args.tensor_model_parallel_size
                             target_v = v[seg * tp_rank: seg * (tp_rank + 1)]
-                        elif 'linear_kv_b_proj' in k:
+                        elif 'linear_kv_up_proj' in k:
                             seg = v.shape[0] // args.tensor_model_parallel_size
                             target_v = v[seg * tp_rank:seg * (tp_rank + 1)]
                         elif 'linear_proj' in k:
@@ -553,9 +555,9 @@ def save_mgmodel(mgmodel, args):
                             k = k.replace(f'local_experts.{expert_rank}', f'local_experts.{expert_local_rank}')
                         elif 'shared_expert' in k and 'gate' not in k:
                             if 'linear_fc1' in k:
-                                viewed = v.view(-1, args.moe_ffn_hidden_size * args.num_shared_experts,
+                                viewed = v.view(-1, args.moe_shared_expert_intermediate_size,
                                                 args.hidden_size)
-                                seg = args.moe_ffn_hidden_size * args.num_shared_experts // args.tensor_model_parallel_size
+                                seg = args.moe_shared_expert_intermediate_size // args.tensor_model_parallel_size
                                 target_v = viewed[:, seg * tp_rank: seg * (tp_rank + 1), :].reshape(-1, args.hidden_size)
                             elif 'linear_fc2' in k:
                                 seg = v.shape[1] // args.tensor_model_parallel_size
@@ -617,12 +619,12 @@ def check_hf_mg_forward(hfmodel, mgmodel, mgargs):
     mg_hiddens = [{} for _ in range(mgargs.num_layers)]
 
     hidden_size = mgargs.hidden_size
-    q_head_dim = mgargs.qk_nope_head_dim + mgargs.qk_rope_head_dim
+    q_head_dim = mgargs.qk_head_dim + mgargs.qk_pos_emb_head_dim
     num_heads = mgargs.num_attention_heads
     v_head_dim = mgargs.v_head_dim
     vocab_size = mgargs.padded_vocab_size
-    kv_a_dim = mgargs.kv_lora_rank + mgargs.qk_rope_head_dim
-    kv_b_dim = num_heads * (q_head_dim - mgargs.qk_rope_head_dim + v_head_dim)
+    kv_a_dim = mgargs.kv_lora_rank + mgargs.qk_pos_emb_head_dim
+    kv_b_dim = num_heads * (q_head_dim - mgargs.qk_pos_emb_head_dim + v_head_dim)
     kv_lora_rank = mgargs.kv_lora_rank
 
     def print_input_hook(module, args, kwargs, layer_idx, mode):
@@ -749,22 +751,22 @@ def check_hf_mg_forward(hfmodel, mgmodel, mgargs):
             layer.self_attention.linear_q_proj.register_forward_hook(
                 partial(print_output_hook, layer_idx=idx, mode='mg-q_proj_out'), with_kwargs=True)
 
-        layer.self_attention.linear_kv_a_proj_with_mqa.register_forward_pre_hook(
+        layer.self_attention.linear_kv_down_proj.register_forward_pre_hook(
             partial(print_input_hook, layer_idx=idx, mode='mg-kv_a_proj_in'), with_kwargs=True)
 
-        layer.self_attention.linear_kv_a_proj_with_mqa.register_forward_hook(
+        layer.self_attention.linear_kv_down_proj.register_forward_hook(
             partial(print_output_hook, layer_idx=idx, mode='mg-kv_a_proj_out'), with_kwargs=True)
 
-        layer.self_attention.kv_a_layernorm.register_forward_pre_hook(
+        layer.self_attention.kv_layernorm.register_forward_pre_hook(
             partial(print_input_hook, layer_idx=idx, mode='mg-kv_a_norm_in'), with_kwargs=True)
 
-        layer.self_attention.kv_a_layernorm.register_forward_hook(
+        layer.self_attention.kv_layernorm.register_forward_hook(
             partial(print_output_hook, layer_idx=idx, mode='mg-kv_a_norm_out'), with_kwargs=True)
 
-        layer.self_attention.linear_kv_b_proj.register_forward_pre_hook(
+        layer.self_attention.linear_kv_up_proj.register_forward_pre_hook(
             partial(print_input_hook, layer_idx=idx, mode='mg-kv_b_proj_in'), with_kwargs=True)
 
-        layer.self_attention.linear_kv_b_proj.register_forward_hook(
+        layer.self_attention.linear_kv_up_proj.register_forward_hook(
             partial(print_output_hook, layer_idx=idx, mode='mg-kv_b_proj_out'), with_kwargs=True)
 
         layer.self_attention.linear_proj.register_forward_pre_hook(
@@ -783,13 +785,13 @@ def check_hf_mg_forward(hfmodel, mgmodel, mgargs):
             layer.mlp.linear_fc2.register_forward_hook(
                 partial(print_output_hook, layer_idx=idx, mode='mg-down_proj_out'), with_kwargs=True)
         else:
-            layer.mlp.shared_expert.linear_fc2.register_forward_pre_hook(
+            layer.mlp.shared_experts.linear_fc2.register_forward_pre_hook(
                 partial(print_input_hook, layer_idx=idx, mode='mg-shared_experts_down_proj_in'), with_kwargs=True)
 
-            layer.mlp.shared_expert.linear_fc2.register_forward_hook(
+            layer.mlp.shared_experts.linear_fc2.register_forward_hook(
                 partial(print_output_hook, layer_idx=idx, mode='mg-shared_experts_down_proj_out'), with_kwargs=True)
 
-    input_ids = torch.tensor([[1, 2, 3]]).long().cuda()
+    input_ids = torch.tensor([list(range(1, mgargs.max_position_embeddings+1))]).long().cuda()
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(input_ids, -100, True, True, True)
     print(hfmodel)
     print(mgmodel)

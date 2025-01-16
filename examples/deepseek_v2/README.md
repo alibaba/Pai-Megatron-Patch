@@ -14,7 +14,7 @@
 
 ## 安装
 
-请在阿里云人工智能平台PAI产品中填写专属镜像地址： `dsw-registry.cn-wulanchabu.cr.aliyuncs.com/pai/pai-megatron-patch:24.07` 
+请在阿里云人工智能平台PAI产品中填写专属镜像地址： `dsw-registry.cn-wulanchabu.cr.aliyuncs.com/pai/pai-megatron-patch-vlm:24.11` 
 
 运行下列代码克隆Pai-Megatron-Patch
 ```bash
@@ -68,27 +68,27 @@ wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models
 MODEL_SIZE=$1                  # 模型参数：A2.4B/A21B
 SOURCE_CKPT_PATH=$2            # 源路径
 TARGET_CKPT_PATH=$3            # 目标路径
-TP=$4                          # 模型并行度
+TP=$4                          # 模型并行度, 当前只能设置为1
 PP=$5                          # 流水并行度
 EP=$6                          # 专家并行度
 PR=$7                          # 转换精度
-USE_TE=$8                      # 是否使用Transformer Engine建模
-mg2hf=$9                       # 是否执行mcore2hf转换
-HG_CKPT_PATH=${10}             # HF的CKPT的路径
+mg2hf=$8                       # 是否执行mcore2hf转换
+HG_CKPT_PATH=$9                # HF的CKPT的路径
 ```
-例如，使用下述脚本将checkpoint转换到MCore-Dense并检查输出
+例如，使用下述脚本将checkpoint转换到MCore-MoE并检查输出。
+注意对于A2.4B模型由于它有27层，所以需要执行非均匀切分策略设置`MP_PP0_LAYERS=6`。
 
 ```bash
+export MP_PP0_LAYERS=6
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/deepseek
 bash hf2mcore_deepseek_v2_moe_convertor.sh \
 A2.4B \
 /mnt/deepseek-ckpts/DeepSeek-V2-Lite \
-/mnt/deepseek-ckpts/DeepSeek-V2-Lite-to-mcore-tp2-pp1-ep4  \
-2  \
+/mnt/deepseek-ckpts/DeepSeek-V2-Lite-to-mcore-tp1-pp4-ep2  \
 1  \
-4 \
+4  \
+2 \
 fp32 \
-true \
 false 
 ```
 
@@ -107,7 +107,7 @@ MIN_LR=$6                       # 最小学习率
 SEQ_LEN=$7                      # 序列长度
 PAD_LEN=$8                      # Padding长度
 PR=${9}                         # 训练精度: fp16, bf16, fp8
-TP=${10}                        # 模型并行度
+TP=${10}                        # 模型并行度，当前只能设置为1
 PP=${11}                        # 流水并行度
 CP=${12}                        # 上下文并行度
 EP=${13}                        # 专家并行度
@@ -139,25 +139,25 @@ A2.4B   \
 8 \
 1e-5   \
 1e-6   \
-128  \
-128  \
+1024  \
+1024  \
 bf16  \
-2   \
-1  \
+1   \
+4  \
 1 \
-4 \
+2 \
 true \
 true   \
 true \
 false \
-false   \
+sel   \
 false \
 100000  \
 /mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
 /mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
-/mnt/deepseek-ckpts/DeepSeek-V2-Lite-to-mcore-tp2-pp1-ep4  \
-10000  \
-100   \
+/mnt/deepseek-ckpts/DeepSeek-V2-Lite-to-mcore-tp1-pp4-ep2  \
+1000000000  \
+10000   \
 /workspace/output_mcore_deepseek_pretrain
 ```
 
@@ -174,23 +174,23 @@ A2.4B   \
 8 \
 1e-5   \
 1e-6   \
-128  \
-128  \
+1024  \
+1024  \
 bf16  \
-2   \
-1  \
+1   \
+4  \
 1 \
-4 \
+2 \
 true \
 true   \
 true \
 true \
-false   \
+sel   \
 false \
 100000  \
-/mnt/deepseek-datasets/path_to_your_dataset   \
-/mnt/deepseek-datasets/path_to_your_dataset   \
-/path/to/pretraining/checkpoint  \
+/mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
+/mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
+/mnt/deepseek-ckpts/DeepSeek-V2-Lite-to-mcore-tp1-pp4-ep2  \
 10000  \
 100   \
 /workspace/output_mcore_deepseek_finetune
@@ -206,23 +206,23 @@ A2.4B   \
 8 \
 1e-5   \
 1e-6   \
-128  \
-128  \
+1024  \
+1024  \
 bf16  \
-2   \
-1  \
+1   \
+4  \
 1 \
-4 \
+2 \
 true \
 true   \
 true \
 true \
-false   \
+sel   \
 false \
 100000  \
 /mnt/deepseek-datasets/alpaca_zh-train.json    \
 /mnt/deepseek-datasets/alpaca_zh-train.json   \
-/mnt/deepseek-ckpts/DeepSeek-V2-Lite-to-mcore-tp2-pp1-ep4  \
+/mnt/deepseek-ckpts/DeepSeek-V2-Lite-to-mcore-tp1-pp4-ep2  \
 10000  \
 100   \
 /workspace/output_mcore_deepseek_finetune
@@ -237,13 +237,12 @@ false \
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/deepseek
 bash hf2mcore_deepseek_v2_moe_convertor.sh \
 A2.4B \
-/mnt/deepseek-ckpts/DeepSeek-V2-Lite-to-mcore-tp2-pp1-ep4  \
+/mnt/deepseek-ckpts/DeepSeek-V2-Lite-to-mcore-tp1-pp4-ep2  \
 /mnt/deepseek-ckpts/DeepSeek-V2-Lite-mcore-te-to-hf    \
-2  \
 1  \
-4 \
+4  \
+2 \
 fp32 \
-true \
 true \
 /mnt/deepseek-ckpts/DeepSeek-V2-Lite
 ```

@@ -3,7 +3,7 @@ set -e
 ENV=$1
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/PAI-Megatron-LM-240718:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-241113:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
 # Here are some configs controled by env
@@ -16,7 +16,7 @@ if [ -z ${MP_AC_LAYERS} ];then
 fi
 
 if [ $ENV = dsw ]; then
-    export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+    export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7,8
     MASTER_ADDR=localhost
     MASTER_PORT=$(shuf -n 1 -i 10000-65535)
     NNODES=1
@@ -86,14 +86,49 @@ elif [ $FL = false ]; then
     export NVTE_FLASH_ATTN=0 NVTE_FUSED_ATTN=1
 fi
 
-if [ $MODEL_SIZE = A21B ]; then
+if [ $MODEL_SIZE = A2.4B ]; then
+
+HIDDEN_SIZE=2048
+NUM_ATTN_HEADS=16
+NUM_LAYERS=27
+INTERMEDIATE_SIZE=10944
+MOE_INTERMEDIATE_SIZE=1408
+MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
+EXTRA_VOCAB_SIZE=2400
+KV_LORA_RANK=512
+QK_NOPE_HEAD_DIM=128
+QK_ROPE_HEAD_DIM=64
+V_HEAD_DIM=128
+ROPE_THETA=10000
+SCALE_FACTOR=40
+NUM_EXPERTS=64
+ROUTER_TOPK=6
+NUM_SHARED_EXPERTS=2
+MOE_LAYER_FREQ=1
+RMS_NORM_EPS=1e-6
+
+moe_options=" \
+    --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
+    --moe-router-topk ${ROUTER_TOPK} \
+    --num-experts ${NUM_EXPERTS} \
+    --moe-layer-freq ${MOE_LAYER_FREQ} \
+    --moe-aux-loss-coeff 1e-2 \
+    --moe-shared-expert-intermediate-size $((${MOE_INTERMEDIATE_SIZE} * ${NUM_SHARED_EXPERTS} )) \
+    --expert-model-parallel-size ${EP} \
+    --kv-lora-rank ${KV_LORA_RANK} \
+    --qk-head-dim ${QK_NOPE_HEAD_DIM} \
+    --qk-pos-emb-head-dim ${QK_ROPE_HEAD_DIM} \
+    --v-head-dim ${V_HEAD_DIM} \
+    --moe-router-load-balancing-type aux_loss"
+
+elif [ $MODEL_SIZE = A21B ]; then
 
 HIDDEN_SIZE=5120
 NUM_ATTN_HEADS=128
 NUM_LAYERS=60
 INTERMEDIATE_SIZE=12288
 MOE_INTERMEDIATE_SIZE=1536
-MAX_POSITION_EMBEDDINGS=163840
+MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
 EXTRA_VOCAB_SIZE=2400
 Q_LORA_RANK=1536
 KV_LORA_RANK=512
@@ -110,54 +145,16 @@ RMS_NORM_EPS=1e-6
 
 moe_options=" \
     --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
-    --enable-shared-expert \
-    --moe-layer-freq ${MOE_LAYER_FREQ} \
-    --num-shared-experts ${NUM_SHARED_EXPERTS} \
     --moe-router-topk ${ROUTER_TOPK} \
     --num-experts ${NUM_EXPERTS} \
+    --moe-layer-freq ${MOE_LAYER_FREQ} \
     --moe-aux-loss-coeff 1e-2 \
+    --moe-shared-expert-intermediate-size $((${MOE_INTERMEDIATE_SIZE} * ${NUM_SHARED_EXPERTS} )) \
     --expert-model-parallel-size ${EP} \
     --q-lora-rank ${Q_LORA_RANK} \
     --kv-lora-rank ${KV_LORA_RANK} \
-    --qk-nope-head-dim ${QK_NOPE_HEAD_DIM} \
-    --qk-rope-head-dim ${QK_ROPE_HEAD_DIM} \
-    --v-head-dim ${V_HEAD_DIM} \
-    --moe-router-load-balancing-type aux_loss"
-
-
-elif [ $MODEL_SIZE = A2.4B ]; then
-
-HIDDEN_SIZE=2048
-NUM_ATTN_HEADS=16
-NUM_LAYERS=27
-INTERMEDIATE_SIZE=10944
-MOE_INTERMEDIATE_SIZE=1408
-MAX_POSITION_EMBEDDINGS=163840
-EXTRA_VOCAB_SIZE=2400
-KV_LORA_RANK=512
-QK_NOPE_HEAD_DIM=128
-QK_ROPE_HEAD_DIM=64
-V_HEAD_DIM=128
-ROPE_THETA=10000
-SCALE_FACTOR=40
-NUM_EXPERTS=64
-ROUTER_TOPK=6
-NUM_SHARED_EXPERTS=2
-MOE_LAYER_FREQ=1
-RMS_NORM_EPS=1e-6
-
-moe_options=" \
-    --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
-    --enable-shared-expert \
-    --moe-layer-freq ${MOE_LAYER_FREQ} \
-    --num-shared-experts ${NUM_SHARED_EXPERTS} \
-    --moe-router-topk ${ROUTER_TOPK} \
-    --num-experts ${NUM_EXPERTS} \
-    --moe-aux-loss-coeff 1e-2 \
-    --expert-model-parallel-size ${EP} \
-    --kv-lora-rank ${KV_LORA_RANK} \
-    --qk-nope-head-dim ${QK_NOPE_HEAD_DIM} \
-    --qk-rope-head-dim ${QK_ROPE_HEAD_DIM} \
+    --qk-head-dim ${QK_NOPE_HEAD_DIM} \
+    --qk-pos-emb-head-dim ${QK_ROPE_HEAD_DIM} \
     --v-head-dim ${V_HEAD_DIM} \
     --moe-router-load-balancing-type aux_loss"
 
@@ -246,6 +243,23 @@ if [ $SP = true ] && [ $TP -gt 1 ]; then
 elif [ $SP = false ]; then
     sp_options=" \
                     "
+fi
+
+if [ -z ${MP_PP0_LAYERS} ];then
+    uneven_split_option=""
+elif [ ${PP} -gt 1 ]; then
+    _check=$(( ( $NUM_LAYERS - ${MP_PP0_LAYERS} ) % ( ${PP} - 1 ) ))
+    if [ $_check != 0 ]; then
+        echo "With uneven pipelineing the left over layers must be divisible by left over stages."
+        exit -1
+    fi
+
+    uneven_split_option=" \
+        --decoder-first-pipeline-num-layers ${MP_PP0_LAYERS}
+    "
+else
+    echo "uneven pipeline split must be used when PP > 1"
+    exit -1
 fi
 
 if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
@@ -351,7 +365,6 @@ megatron_options="  \
         --tensorboard-queue-size 1 \
         --tensorboard-dir ${TENSORBOARD_DIR} \
         --log-timers-to-tensorboard \
-        --log-batch-size-to-tensorboard \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
@@ -372,15 +385,15 @@ megatron_options="  \
         --disable-bias-linear \
         --rotary-base ${ROPE_THETA} \
         --rotary-scaling-factor ${SCALE_FACTOR} \
-        --rotary-seq-len-interpolation-factor 1 \
         --no-save-optim \
         --kv-channels ${V_HEAD_DIM} \
-        --qk-layernorm
+        --qk-layernorm \
+        --multi-latent-attention
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_deepseek.py
  ${megatron_options} ${dataset_option} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} \
- ${do_options} ${sp_options} ${moe_options} ${offload_option} ${sft_option} ${vp_options} ${packing_options}"
+ ${do_options} ${sp_options} ${moe_options} ${offload_option} ${sft_option} ${vp_options} ${packing_options} ${uneven_split_option}"
 
 echo ${run_cmd}
 eval ${run_cmd}

@@ -193,7 +193,7 @@ def load_megatron_model(args):
                 layer_offset = sum(pp_layers_per_stage[:pp_rank])
                 for layer in range(pp_layers_per_stage[pp_rank]):
                     pp_layer_id = layer + layer_offset
-                    layers_to_copy[f"decoder.layers.{layer}"] = pp_layer_id
+                    layers_to_copy[(pp_rank, layer)] = pp_layer_id # NOTE: (pp_rank, layer) -> pp_layer_id
                 checkpoint_name = get_checkpoint_name(model_path, iteration, release, True, tp_rank, pp_rank, None, None)
                 print(f'load {checkpoint_name}')
                 split_state = torch.load(checkpoint_name, map_location="cpu")['model']
@@ -205,9 +205,10 @@ def load_megatron_model(args):
                     try:
                         pattern = re.compile(r'\d+')
                         res = pattern.findall(k)
-                        k = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy["decoder.layers." + res[0]]), k)
-                        mid_state[k].append(v)
+                        tgt = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy[(pp_rank, int(res[0]))]), k)
+                        mid_state[tgt].append(v)
                     except:
+                        print(f"Skipping {k}")
                         mid_state[k].append(v)
         for k, v in mid_state.items():
             if not isinstance(v[0], torch.Tensor) or 'norm' in k:
