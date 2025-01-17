@@ -513,7 +513,7 @@ def save_mgmodel(mgmodel, args):
     full_model = mgmodel.state_dict_for_save_checkpoint()
     num_layers = args.num_layers // args.pipeline_model_parallel_size
     for k in list(full_model.keys()):
-        if full_model[k] is None or "_extra_state" in k:
+        if full_model[k] is None:
             full_model.pop(k)
 
     if args.num_experts is not None:
