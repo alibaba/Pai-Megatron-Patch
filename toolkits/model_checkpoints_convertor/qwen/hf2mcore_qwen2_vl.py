@@ -45,6 +45,12 @@ sys.path.append(os.path.join(path_dir, "examples"))
 sys.path.append(os.path.join(path_dir, "examples/qwen2_vl"))
 from qwen2_vl.pretrain_qwen import model_provider
 from megatron_patch.arguments import get_patch_args
+from toolkits.model_checkpoints_convertor.utils import (
+    build_layer_id_mapping,
+    clone_state_dict,
+    safe_copy,
+    save_state_dict
+)
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -52,29 +58,6 @@ torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
 torch.backends.cuda.enable_mem_efficient_sdp(False)
 torch.backends.cuda.enable_flash_sdp(False)
-
-import numpy as np
-from collections.abc import Mapping, Sequence
-@torch.inference_mode()
-def clone_state_dict(elem):
-    """clone all tensors in the elem to cpu device.
-    """
-    elem_type = type(elem)
-    if isinstance(elem, torch.Tensor):
-        elem = elem.clone()
-    elif isinstance(elem, (np.ndarray, str)):
-        pass
-    elif isinstance(elem, Mapping):
-        elem = dict(elem)
-        for k, v in elem.items():
-            elem[k] = clone_state_dict(v)
-        elem = elem_type(elem)
-    elif isinstance(elem, Sequence):
-        elem = list(elem)
-        for i in range(len(elem)):
-            elem[i] = clone_state_dict(elem[i])
-        elem = elem_type(elem)
-    return elem
 
 def add_model_args(parser):
 
@@ -88,6 +71,12 @@ def add_model_args(parser):
         "--target-pipeline-model-parallel-size",
         type=int,
         default=1
+    )
+
+    parser.add_argument(
+        "--target-num-layers-per-virtual-pipeline-stage",
+        type=int,
+        default=None
     )
 
     parser.add_argument(
@@ -126,6 +115,11 @@ def load_megatron_model(args):
     model = model_provider()
     args.tensor_model_parallel_size = args.target_tensor_model_parallel_size
     args.pipeline_model_parallel_size = args.target_pipeline_model_parallel_size
+    if args.target_num_layers_per_virtual_pipeline_stage is not None:
+        args.num_layers_per_virtual_pipeline_stage = args.target_num_layers_per_virtual_pipeline_stage
+        num_layers_per_pipeline_stage = args.num_layers // args.pipeline_model_parallel_size
+        args.virtual_pipeline_model_parallel_size = num_layers_per_pipeline_stage // \
+            args.num_layers_per_virtual_pipeline_stage
 
     model_path = args.load
     tracker_filename = get_checkpoint_tracker_filename(model_path)
@@ -179,37 +173,31 @@ def load_megatron_model(args):
     elif (
         args.pipeline_model_parallel_size > 1
     ):  
-        if args.target_decoder_first_pipeline_num_layers is not None:
-            remained_layers = args.num_layers - args.target_decoder_first_pipeline_num_layers
-            remained_stages = args.pipeline_model_parallel_size - 1
-            assert remained_layers % remained_stages == 0
-            pp_layers_per_stage = [args.target_decoder_first_pipeline_num_layers] +([remained_layers // remained_stages] * remained_stages)
-        else:
-            pp_layers_per_stage = [args.num_layers // args.pipeline_model_parallel_size] * args.pipeline_model_parallel_size
-
-        layers_to_copy = {}
+        ltog, _ = build_layer_id_mapping(args)
         for tp_rank in range(args.tensor_model_parallel_size):
             for pp_rank in range(args.pipeline_model_parallel_size):
-                layer_offset = sum(pp_layers_per_stage[:pp_rank])
-                for layer in range(pp_layers_per_stage[pp_rank]):
-                    pp_layer_id = layer + layer_offset
-                    layers_to_copy[(pp_rank, layer)] = pp_layer_id # NOTE: (pp_rank, layer) -> pp_layer_id
                 checkpoint_name = get_checkpoint_name(model_path, iteration, release, True, tp_rank, pp_rank, None, None)
                 print(f'load {checkpoint_name}')
-                split_state = torch.load(checkpoint_name, map_location="cpu")['model']
-                for k, v in split_state.items():
-                    if k.startswith('vision_model'):
-                        assert pp_rank == 0
-                        vision_state_dicts[(tp_rank, 0)][k] = v
-                        continue
-                    try:
-                        pattern = re.compile(r'\d+')
-                        res = pattern.findall(k)
-                        tgt = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy[(pp_rank, int(res[0]))]), k)
-                        mid_state[tgt].append(v)
-                    except:
-                        print(f"Skipping {k}")
-                        mid_state[k].append(v)
+                keys = ['model']
+                if args.virtual_pipeline_model_parallel_size is not None:
+                    keys = [f'model{i}' for i in range(args.virtual_pipeline_model_parallel_size)]
+                split_state = torch.load(checkpoint_name, map_location="cpu")
+                for vpp_id, key in enumerate(keys):
+                    for k, v in split_state[key].items():
+                        if k.startswith('vision_model'):
+                            assert pp_rank == 0
+                            vision_state_dicts[(tp_rank, 0)][k] = v
+                            continue
+                        try:
+                            pattern = re.compile(r'\d+')
+                            local_id = int(pattern.findall(k)[0])
+                            global_id = ltog[(pp_rank, vpp_id, local_id)]
+                            tgt = re.sub(r"decoder.layers.\d+", f"decoder.layers.{global_id}", k)
+                            mid_state[tgt].append(v)
+                        except Exception as e:
+                            print(f"Skipping {k} with exception {e}")
+                            mid_state[k].append(v)
+
         for k, v in mid_state.items():
             if not isinstance(v[0], torch.Tensor) or 'norm' in k:
                 target_v = v[0]
@@ -348,12 +336,6 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
     n_params = sum([t.numel() for t in hfllm.state_dict().values() if isinstance(t, torch.Tensor)])
     assert n_params == copied_numel
 
-def safe_copy(src_tensor: torch.Tensor, dst_tensor: torch.Tensor):
-    assert src_tensor.dtype == dst_tensor.dtype
-    assert src_tensor.shape == dst_tensor.shape
-    dst_tensor.data.copy_(src_tensor.data)
-    return src_tensor.numel()
-
 @torch.inference_mode()
 def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
     if args.fp16:
@@ -461,20 +443,12 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
     n_params = sum([t.numel() for t in hfllm.state_dict().values()])
     assert n_params == copied_numel
 
-def save_state_dict(args, model, checkpoint_name):
-    state_dict = {}
-    state_dict['args'] = args
-    state_dict['checkpoint_version'] = 3.0
-    state_dict['iteration'] = 0    
-    state_dict['model'] = model
-    os.makedirs(os.path.dirname(checkpoint_name), exist_ok=True)
-    print(f'save model part {checkpoint_name}')
-    torch.save(clone_state_dict(state_dict), checkpoint_name)
-
 def check_layer(layers_to_copy, k):
-    pattern = re.compile(r"decoder.layers.\d+")
+    if 'vision_model' in k:
+        return False
+    pattern = re.compile(r"decoder.layers.(\d+)")
     res = pattern.findall(k)
-    return res and res[0] in layers_to_copy.keys()
+    return res and int(res[0]) in layers_to_copy.keys()
 
 def split_vision_model(mgvision, args, prefix="vision_model") -> Dict[Tuple, Dict]:
     state_dicts = {}
@@ -593,6 +567,13 @@ def load_split_state_dict_to_vision_model(state_dicts, mgvision, args):
 def save_mgmodel(mgmodel, args):
     args.tensor_model_parallel_size = args.target_tensor_model_parallel_size
     args.pipeline_model_parallel_size = args.target_pipeline_model_parallel_size
+    vpp_size = 1 # NOTE: vpp_size=1 if vpp is not used
+    if args.target_num_layers_per_virtual_pipeline_stage is not None:
+        args.num_layers_per_virtual_pipeline_stage = args.target_num_layers_per_virtual_pipeline_stage
+        num_layers_per_pipeline_stage = args.num_layers // args.pipeline_model_parallel_size
+        args.virtual_pipeline_model_parallel_size = num_layers_per_pipeline_stage // \
+            args.num_layers_per_virtual_pipeline_stage
+        vpp_size = args.virtual_pipeline_model_parallel_size
 
     os.makedirs(args.save, exist_ok=True)
     os.system("cp -rf " + args.load + "/config*.json " + args.save)
@@ -624,7 +605,7 @@ def save_mgmodel(mgmodel, args):
     ):
         vision_state_dicts = split_vision_model(mgmodel.vision_model, args)
         for tp_rank in range(args.tensor_model_parallel_size):
-            model_split = {}
+            model_part = {}
             checkpoint_name = get_checkpoint_name(args.save, 0, True, None, tp_rank)
             print(f'tensor_parallel, save model to {checkpoint_name}')
             for k, v in full_model.items():
@@ -654,79 +635,75 @@ def save_mgmodel(mgmodel, args):
                     target_v = viewed[:, seg*tp_rank: seg*(tp_rank+1), :].reshape(-1, args.hidden_size)
                 else:
                     target_v = v
-                model_split[k] = target_v
-            save_state_dict(args, model_split, checkpoint_name)
+                model_part[k] = target_v
+            save_state_dict(args, [model_part], checkpoint_name)
     elif (
         args.pipeline_model_parallel_size > 1
     ):
         vision_state_dicts = split_vision_model(mgmodel.vision_model, args)
-        if args.target_decoder_first_pipeline_num_layers is not None:
-            remained_layers = args.num_layers - args.target_decoder_first_pipeline_num_layers
-            remained_stages = args.pipeline_model_parallel_size - 1
-            assert remained_layers % remained_stages == 0
-            pp_layers_per_stage = [ args.target_decoder_first_pipeline_num_layers] +([remained_layers // remained_stages] * remained_stages)
-        else:
-            pp_layers_per_stage = [args.num_layers // args.pipeline_model_parallel_size] * args.pipeline_model_parallel_size
+        ltog, _ = build_layer_id_mapping(args)
 
         for tp_rank in range(args.tensor_model_parallel_size):
-            layer_offset = 0
             for pp_rank in range(args.pipeline_model_parallel_size):
-                model_split = {}
-                # NOTE: support uneven pp split here.
-                layer_offset = sum(pp_layers_per_stage[:pp_rank])
-                layers_to_copy = {}
-                for layer in range(pp_layers_per_stage[pp_rank]):
-                    pp_layer_id = layer + layer_offset
-                    layers_to_copy[f"decoder.layers.{pp_layer_id}"] = layer
+                model_chunk = []
                 checkpoint_name = get_checkpoint_name(args.save, 0, True, True, tp_rank, pp_rank)
                 print(f'tensor_parallel & pipeline_parallel, save model to {checkpoint_name}')
-                for k, v in full_model.items():
-                    if check_layer(layers_to_copy, k) and 'vision_model' not in k:
-                        pattern = re.compile(r'\d+')
-                        res = pattern.findall(k)
-                        k = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy["decoder.layers." + res[0]]), k)
-                    elif not ("word_embeddings" in k or "output_layer" in k or "final_layernorm" in k or 'vision_model' in k):
-                        continue
-                    if 'vision_model' in k:
-                        if pp_rank > 0:
+                for vpp_id in range(vpp_size):
+                    layers_to_copy = {}
+                    local_id = 0
+                    while (pp_rank, vpp_id, local_id) in ltog:
+                        gloabl_layer_id = ltog[(pp_rank, vpp_id, local_id)]
+                        layers_to_copy[gloabl_layer_id] = local_id
+                        local_id += 1
+                    model_part = {}
+                    for k, v in full_model.items():
+                        if check_layer(layers_to_copy, k):
+                            pattern = re.compile(r'\d+')
+                            res = pattern.findall(k)
+                            k = re.sub(r"decoder.layers.\d+", f"decoder.layers.{layers_to_copy[int(res[0])]}", k)
+                        elif not ("word_embeddings" in k or "output_layer" in k or "final_layernorm" in k or 'vision_model' in k):
                             continue
-                        vision_part = vision_state_dicts[(tp_rank, 0)]
-                        assert k in vision_part, f"Cannot find key {k} in vision model split!"
-                        target_v = vision_part[k]
-                    elif not isinstance(v, torch.Tensor):
-                        target_v = v
-                    elif 'linear_qkv.weight' in k:
-                        viewed = v.view(args.num_query_groups, -1, head_dim, args.hidden_size)
-                        viewed = viewed[group_per_split*tp_rank : group_per_split*(tp_rank + 1)]
-                        target_v = viewed.view(-1, args.hidden_size)
-                    elif 'linear_qkv.bias' in k:
-                        viewed = v.view(args.num_query_groups, -1, head_dim)
-                        viewed = viewed[group_per_split * tp_rank: group_per_split * (tp_rank + 1)]
-                        target_v = viewed.view(-1)
-                    elif 'linear_proj' in k or 'linear_fc2' in k:
-                        seg = v.shape[1] // args.tensor_model_parallel_size
-                        target_v = v[:, seg*tp_rank : seg*(tp_rank + 1)]
-                    elif 'embedding' in k or 'output_layer' in k:
-                        seg = v.shape[0] // args.tensor_model_parallel_size
-                        target_v = v[seg*tp_rank : seg*(tp_rank + 1)]
-                    elif 'linear_fc1' in k and 'norm' not in k:
-                        viewed = v.view(-1, args.ffn_hidden_size, args.hidden_size)
-                        seg = args.ffn_hidden_size // args.tensor_model_parallel_size
-                        target_v = viewed[:, seg*tp_rank: seg*(tp_rank+1), :].reshape(-1, args.hidden_size)
-                    else:
-                        target_v = v
-                    if "word_embeddings" in k:
-                        if pp_rank == 0:
-                            model_split[k] = target_v
-                    elif 'vision_model' not in k and ("output_layer" in k or "final_layernorm" in k):
-                        if pp_rank == args.pipeline_model_parallel_size - 1:
-                            model_split[k] = target_v
-                    else:
-                        model_split[k] = target_v
-                save_state_dict(args, model_split, checkpoint_name)
-
+                        if 'vision_model' in k:
+                            if pp_rank > 0  or vpp_id > 0:
+                                # NOTE: The vision model will only be attached to the first model_part of pp stage 0
+                                continue
+                            vision_part = vision_state_dicts[(tp_rank, 0)]
+                            assert k in vision_part, f"Cannot find key {k} in vision model split!"
+                            target_v = vision_part[k]
+                        elif not isinstance(v, torch.Tensor):
+                            target_v = v
+                        elif 'linear_qkv.weight' in k:
+                            viewed = v.view(args.num_query_groups, -1, head_dim, args.hidden_size)
+                            viewed = viewed[group_per_split*tp_rank : group_per_split*(tp_rank + 1)]
+                            target_v = viewed.view(-1, args.hidden_size)
+                        elif 'linear_qkv.bias' in k:
+                            viewed = v.view(args.num_query_groups, -1, head_dim)
+                            viewed = viewed[group_per_split * tp_rank: group_per_split * (tp_rank + 1)]
+                            target_v = viewed.view(-1)
+                        elif 'linear_proj' in k or 'linear_fc2' in k:
+                            seg = v.shape[1] // args.tensor_model_parallel_size
+                            target_v = v[:, seg*tp_rank : seg*(tp_rank + 1)]
+                        elif 'embedding' in k or 'output_layer' in k:
+                            seg = v.shape[0] // args.tensor_model_parallel_size
+                            target_v = v[seg*tp_rank : seg*(tp_rank + 1)]
+                        elif 'linear_fc1' in k and 'norm' not in k:
+                            viewed = v.view(-1, args.ffn_hidden_size, args.hidden_size)
+                            seg = args.ffn_hidden_size // args.tensor_model_parallel_size
+                            target_v = viewed[:, seg*tp_rank: seg*(tp_rank+1), :].reshape(-1, args.hidden_size)
+                        else:
+                            target_v = v
+                        if "word_embeddings" in k:
+                            if pp_rank == 0 and vpp_id == 0:
+                                model_part[k] = target_v
+                        elif 'vision_model' not in k and ("output_layer" in k or "final_layernorm" in k):
+                            if pp_rank == args.pipeline_model_parallel_size - 1 and vpp_id == vpp_size - 1:
+                                model_part[k] = target_v
+                        else:
+                            model_part[k] = target_v
+                    model_chunk.append(model_part)
+                save_state_dict(args, model_chunk, checkpoint_name, args.target_num_layers_per_virtual_pipeline_stage is not None)
     else:
-        raise ValueError('Something is wrong, please check your tp/pp size')
+        raise ValueError(f'Got invalid TP/PP: {args.tensor_model_parallel_size}/{args.pipeline_model_parallel_size}')
 
     print(f'megatron model is save to {args.save}')
 

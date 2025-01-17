@@ -15,7 +15,14 @@ if [ ${MP_SAVE_SAFE_TENSORS} = true ];then
 else
     safe_options=""
 fi
-    
+
+if [ -z ${MP_VP} ]; then
+    vp_options=""
+else
+    vp_options=" \
+        --target-num-layers-per-virtual-pipeline-stage ${MP_VP}"
+fi
+
 MODEL_SIZE=$1
 SOURCE_CKPT_PATH=$2
 TARGET_CKPT_PATH=$3
@@ -178,7 +185,8 @@ cmd="torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen2_vl.py \
     ${cpu_options} \
     ${tie_option} \
     ${gqa_options} \
-    ${uneven_split_option}"
+    ${uneven_split_option} \
+    ${vp_options}"
 
 echo $cmd
 eval $cmd
