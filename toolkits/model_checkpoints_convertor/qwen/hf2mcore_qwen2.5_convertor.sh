@@ -184,6 +184,11 @@ elif [ $PR = bf16 ]; then
 
 fi
 
+if [ $PP -gt 1 ]; then
+    tie_option=" \
+        --untie-embeddings-and-output-weights \
+        "
+fi
 
 DISTRIBUTED_ARGS="--nproc_per_node 1 --nnodes 1 --node_rank 0 --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
