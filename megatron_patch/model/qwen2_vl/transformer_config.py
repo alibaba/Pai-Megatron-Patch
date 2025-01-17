@@ -16,6 +16,7 @@ from typing import List
 from dataclasses import dataclass, field
 from megatron.core.transformer import TransformerConfig
 from megatron.training.activations import quick_gelu
+from megatron.core import parallel_state
 
 @dataclass
 class Qwen2VLTransformerConfig(TransformerConfig):
@@ -36,7 +37,11 @@ class Qwen2VLTransformerConfig(TransformerConfig):
 
 def get_vision_model_config(args, config):
     # mlp: embed_dim -> embed_dim * mlp_ratio -> embed_dim, silu
-    config.num_layers = 32 # depth
+    # NOTE: here we provide a workaround to solve the wrong layer amount when VPP of decoder is on
+    if parallel_state.get_virtual_pipeline_model_parallel_world_size() is not None:
+        config.num_layers = 32 * parallel_state.get_virtual_pipeline_model_parallel_world_size() # depth
+    else:
+        config.num_layers = 32 # depth
     config.num_attention_heads = 16 # num_heads
     config.add_bias_linear = True # all nn.Linear has bias (MLP, attn)
     config.add_qkv_bias = True # qkv_proj in attn has bias
