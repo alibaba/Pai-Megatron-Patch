@@ -119,7 +119,6 @@ def load_megatron_model(args):
 
     model = model_provider()
 
-
     model_path = args.load
     tracker_filename = get_checkpoint_tracker_filename(model_path)
     iteration, release = read_metadata(tracker_filename)
@@ -250,7 +249,7 @@ def load_megatron_model(args):
                         mid_state[k].append(v)
 
         for k, v in mid_state.items():
-            if not isinstance(v[0], torch.Tensor) or 'norm' in k or 'router' in k or 'gate' in k:
+            if not isinstance(v[0], torch.Tensor) or 'router' in k or 'gate' in k:
                 target_v = v[0]
             elif 'embedding' in k or 'output_layer' in k:
                 target_v = torch.cat(v, dim=0)
@@ -265,16 +264,22 @@ def load_megatron_model(args):
             elif 'linear_fc1' in k:
                 viewed = [x.view(2, -1, args.hidden_size) for x in v]
                 target_v = torch.cat(viewed, dim=1).view(-1, args.hidden_size)
+            elif 'input_layernorm' in k:
+                target_v = v[0]
+            elif 'kv_layernorm' in k:
+                target_v = v[0]
+            elif 'pre_mlp_layernorm' in k:
+                target_v = v[0]
             else:
-                print('passed', k)
-                exit()
+                print(f"Missing {k}")
+                raise ValueError
             state_dict[k] = target_v
 
     elif (
-        args.tensor_model_parallel_size > 1
+        args.tensor_model_parallel_size >= 1
         and args.pipeline_model_parallel_size > 1
-        and args.expert_model_parallel_size > 1
-        and args.num_experts % args.expert_model_parallel_size == 0
+        and args.expert_model_parallel_size >= 1
+        and ( args.num_experts is None or args.num_experts % args.expert_model_parallel_size == 0 )
     ):
         num_layers = args.num_layers // args.pipeline_model_parallel_size
         layers_to_copy = {}
@@ -295,24 +300,34 @@ def load_megatron_model(args):
                     print(f'load {checkpoint_name}')
                     split_state = torch.load(checkpoint_name, map_location="cpu")['model']
                     for k, v in split_state.items():
-                        if 'local_experts' in k and 'norm' not in k:
-                            local_expert_rank = name_to_expert_rank(k)
-                            expert_rank = local_expert_rank + num_local_experts * ep_rank
-                            k = k.replace(f'local_experts.{local_expert_rank}', f'local_experts.{expert_rank}')
-                            mid_state[k].append(v)
-                        elif ep_rank == 0:
-                            mid_state[k].append(v)
                         try:
+                            if 'local_experts' in k:
+                                local_expert_rank = name_to_expert_rank(k)
+                                expert_rank = local_expert_rank + num_local_experts * ep_rank
+                                k = k.replace(f'local_experts.{local_expert_rank}', f'local_experts.{expert_rank}')
                             pattern = re.compile(r'\d+')
                             res = pattern.findall(k)
-                            k = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy["decoder.layers." + res[0]]), k)
-                            mid_state[k].append(v)
+                            tgt = re.sub(r"decoder.layers.\d+","decoder.layers." + str(layers_to_copy["decoder.layers." + res[0]]), k)
+                            if 'linear_proj' in k or 'linear_q_proj' in k or 'linear_kv_up_proj' in k or 'decoder.layers.0.mlp.linear_fc2' in k or \
+                                    'decoder.layers.0.mlp.linear_fc1' in k or 'shared_experts.linear_fc1' in k or 'shared_experts.linear_fc2' in k:
+                                if ep_rank ==0:
+                                    mid_state[tgt].append(v)
+                            else:
+                                mid_state[tgt].append(v)
                         except:
-                            mid_state[k].append(v)
+                            print(f"Skipping {k}")
+                            if "word_embeddings" in k:
+                                if ep_rank ==0 and pp_rank == 0:
+                                    mid_state[k].append(v)
+                            elif "output_layer" in k or "final_layernorm" in k:
+                                if ep_rank ==0 and pp_rank == args.pipeline_model_parallel_size - 1:
+                                    mid_state[k].append(v)
+                            else:
+                                raise ValueError("Something is wrong!")
         for k, v in mid_state.items():
-            if not isinstance(v[0], torch.Tensor) or 'norm' in k or 'router' in k or 'gate' in k:
+            if not isinstance(v[0], torch.Tensor) or 'router' in k or 'gate' in k:
                 target_v = v[0]
-            elif 'embedding' in k or 'output_layer' in k:
+            elif 'word_embeddings' in k or 'output_layer' in k or 'final_layernorm' in k:
                 target_v = torch.cat(v, dim=0)
             elif 'linear_proj' in k or 'linear_fc2' in k:
                 target_v = torch.cat(v, dim=1)
@@ -322,10 +337,17 @@ def load_megatron_model(args):
             elif 'linear_qkv.bias' in k:
                 viewed = [x.view(group_per_split, -1) for x in v]
                 target_v = torch.cat(viewed, dim=0).view(-1)
-            elif 'linear_fc1' in k:
+            elif 'linear_fc1' in k and "layer_norm_weight" not in k:
                 viewed = [x.view(2, -1, args.hidden_size) for x in v]
                 target_v = torch.cat(viewed, dim=1).view(-1, args.hidden_size)
+            elif 'input_layernorm' in k:
+                target_v = v[0]
+            elif 'layer_norm_weight' in k:
+                target_v = v[0]
+            elif 'pre_mlp_layernorm' in k:
+                target_v = v[0]
             else:
+                print(f"Missing {k}")
                 raise ValueError
             state_dict[k] = target_v
 
