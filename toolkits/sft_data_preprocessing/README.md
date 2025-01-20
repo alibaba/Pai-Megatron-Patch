@@ -64,6 +64,8 @@ qwen-datasets
    └── mmap_qwen2_sft_datasets_text_document.idx
 ```
 
+需要注意的是，对于拥有不同Tokenizer的模型，按照上述流程处理得到的mmap数据不能混用，以免造成训练失败。
+
 #### Sequence Packing
 
 目前Pai-Megatron-Patch中的部分模型(LLaMA3.1, Qwen-2等)已支持基于mmap格式的Sequence-Packing训练，为此，您首先需要按照下列步骤准备打包后的数据集
@@ -97,7 +99,7 @@ LLama3Tokenizer \
 4. 微调训练时，设置`SFT=true`，同时设置环境变量`MP_SFT_PACKING=true`即可使用Sequence Packing。
 
 #### 小规模预处理数据下载试用
-为方便用户试用，我们也提供了已经处理好的小规模数据，可直接下载使用
+对于Qwen2模型，为方便用户试用，我们也提供了已经处理好的小规模数据，可直接下载使用。
 ```bash
 cd /mnt/workspace/qwen-datasets
 wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/qwen-datasets/mmap_qwen2_sft_datasets_text_document.bin
