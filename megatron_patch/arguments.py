@@ -19,6 +19,33 @@ import dataclasses
 import torch.nn.functional as F
 from megatron.core.transformer import TransformerConfig
 
+def moe_freq_type(x):
+    """Frequency between MoE layers and Dense layers.
+
+    Accepts either:
+    - An integer N: Represents a 1:N ratio, meaning one expert layer for every N-1 dense layers
+    - A string "N": Same as above, but provided as a string
+    - A string containing a Python list expression that defines a custom pattern, e.g.:
+      "([1]*3+[0]*1)*3" evaluates to [1,1,1,0,1,1,1,0,1,1,1,0]
+      where 1 indicates an expert layer and 0 indicates a dense layer.
+      This allows defining arbitrary patterns of expert and dense layers.
+      The pattern length must match the total number of transformer layers.
+      Examples:
+          "([0]+[1]*23)": 1 dense layer followed by 23 experts layers
+          "([1]*3+[0]*2)*2": Three expert layers followed by two dense layers, repeated twice.
+    """
+    if isinstance(x, int):
+        return x
+    assert isinstance(x, str)
+    if '[' in x:
+        # it's a custom pattern
+        pattern = eval(x)
+        return pattern
+    else:
+        # it's a single int but in str
+        return int(x)
+
+
 def core_transformer_config_from_args(args, config_class=None):
     # Config class.
     config_class = config_class or TransformerConfig
@@ -493,8 +520,14 @@ def get_patch_args(parser):
     group.add_argument("--qk-nope-head-dim", type=int, default=None)
     group.add_argument("--qk-rope-head-dim", type=int, default=None)
     group.add_argument("--num-shared-experts", type=int, default=None)
-    group.add_argument("--moe-layer-freq", type=int, default=1)
-
+    group.add_argument('--moe-layer-freq', type=moe_freq_type, default=1,
+                       help='Frequency between MoE layers and Dense layers. Accepts either: '
+                            '- An integer N: Represents a 1:N ratio, meaning one expert layer for every N-1 dense layers '
+                            '- A string containing a Python list expression that defines a custom pattern, e.g.: '
+                            '"([1]*3+[0]*1)*3" evaluates to [1,1,1,0,1,1,1,0,1,1,1,0] '
+                            'where 1 indicates an expert layer and 0 indicates a dense layer. '
+                            'Examples: "([0]+[1]*23)": 1 dense layer followed by 23 experts layers, '
+                            '"([1]*3+[0]*2)*2": Three expert layers followed by two dense layers, repeated twice.')
     patch_if_not_exist(
         group,
         "--rotary-scaling-factor", type=int, default=1
