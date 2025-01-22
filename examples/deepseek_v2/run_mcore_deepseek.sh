@@ -16,7 +16,7 @@ if [ -z ${MP_AC_LAYERS} ];then
 fi
 
 if [ $ENV = dsw ]; then
-    export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7,8
+    export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
     MASTER_ADDR=localhost
     MASTER_PORT=$(shuf -n 1 -i 10000-65535)
     NNODES=1

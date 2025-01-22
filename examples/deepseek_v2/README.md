@@ -91,6 +91,19 @@ A2.4B \
 fp32 \
 false 
 ```
+注意对于A21B模型由于它有60层，所以需要执行非均匀切分策略设置`MP_PP0_LAYERS=4`。另外切分成pp=8,ep=16可以跑起来。
+```bash
+export MP_PP0_LAYERS=4
+bash hf2mcore_deepseek_v2_moe_convertor.sh \
+A21B \
+/mnt/data/jerry.lp/deepseek-ckpts/DeepSeek-V2 \
+/mnt/data/jerry.lp/deepseek-ckpts/DeepSeek-V2-to-mcore-tp1-pp8-ep16  \
+1  \
+8  \
+16 \
+fp32 \
+false
+```
 
 ### Megatron-Core预训练及指令微调
 在DeepSeek-V2中，我们已将预训练和微调整合到`run_mcore_deepseek.sh`脚本，对于不同的使用场景，二者各参数的意义有所不同。

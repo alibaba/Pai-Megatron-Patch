@@ -192,14 +192,14 @@ def load_megatron_model(args):
                             pattern = re.compile(r'\d+')
                             res = pattern.findall(k)
                             tgt = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy[(pp_rank, int(res[0]))]), k)
-                            if 'linear_proj' in k or 'linear_q_proj' in k or 'linear_kv_up_proj' in k or 'decoder.layers.0.mlp.linear_fc2' in k or \
+                            if 'linear_proj' in k or 'linear_q_proj' or 'linear_q_down_proj' or 'linear_q_up_proj'in k or \
+                                    'linear_kv_up_proj' in k or 'decoder.layers.0.mlp.linear_fc2' in k or \
                                     'decoder.layers.0.mlp.linear_fc1' in k or 'shared_experts.linear_fc1' in k or 'shared_experts.linear_fc2' in k:
                                 if ep_rank ==0:
                                     mid_state[tgt].append(v)
                             else:
                                 mid_state[tgt].append(v)
                         except:
-                            print(f"Skipping {k}")
                             if "word_embeddings" in k:
                                 if ep_rank ==0 and pp_rank == 0:
                                     mid_state[k].append(v)
@@ -207,7 +207,7 @@ def load_megatron_model(args):
                                 if ep_rank ==0 and pp_rank == args.pipeline_model_parallel_size - 1:
                                     mid_state[k].append(v)
                             else:
-                                raise ValueError("Something is wrong!")
+                                raise ValueError(f"{k} is missing! ")
 
         for k, v in mid_state.items():
             if not isinstance(v[0], torch.Tensor) or 'router' in k or 'gate' in k:
@@ -222,6 +222,10 @@ def load_megatron_model(args):
             elif 'linear_kv_up_proj' in k:
                 viewed = [x.view(group_per_split, -1, q_head_dim - args.qk_pos_emb_head_dim + args.v_head_dim, args.kv_lora_rank) for x in v]
                 target_v = torch.cat(viewed, dim=0).view(-1, args.kv_lora_rank)
+            elif 'linear_q_up_proj' in k:
+                target_v = v[0]
+            elif 'linear_q_down_proj' in k:
+                target_v = v[0]
             elif 'linear_kv_down_proj' in k:
                 target_v = v[0]
             elif 'linear_fc1' in k:
@@ -231,13 +235,14 @@ def load_megatron_model(args):
                 target_v = torch.cat(v, dim=1)
             elif 'input_layernorm' in k:
                 target_v = v[0]
+            elif 'q_layernorm' in k:
+                target_v = v[0]
             elif 'kv_layernorm' in k:
                 target_v = v[0]
             elif 'pre_mlp_layernorm' in k:
                 target_v = v[0]
             else:
-                print(f"Missing {k}")
-                raise ValueError
+                raise ValueError(f"{k} is missing!")
             state_dict[k] = target_v
 
     else:
@@ -261,7 +266,14 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
         for layer_idx, (mglayer, hflayer) in enumerate(zip(mgmodel.decoder.layers, hfmodel.model.layers)):
             hflayer.input_layernorm.weight.copy_(mglayer.input_layernorm.weight)
             hflayer.post_attention_layernorm.weight.copy_(mglayer.pre_mlp_layernorm.weight)
-            hflayer.self_attn.q_proj.weight.copy_(mglayer.self_attention.linear_q_proj.weight)
+
+            if args.q_lora_rank is not None:
+                hflayer.self_attn.q_a_proj.weight.copy_(mglayer.self_attention.linear_q_down_proj.weight)
+                hflayer.self_attn.q_b_proj.weight.copy_(mglayer.self_attention.linear_q_up_proj.weight)
+                hflayer.self_attn.q_a_layernorm.weight.copy_(mglayer.self_attention.q_layernorm.weight)
+            else:
+                hflayer.self_attn.q_proj.weight.copy_(mglayer.self_attention.linear_q_proj.weight)
+
             hflayer.self_attn.kv_a_proj_with_mqa.weight.copy_(mglayer.self_attention.linear_kv_down_proj.weight)
             hflayer.self_attn.kv_b_proj.weight.copy_(mglayer.self_attention.linear_kv_up_proj.weight)
             hflayer.self_attn.kv_a_layernorm.weight.copy_(mglayer.self_attention.kv_layernorm.weight)
@@ -306,12 +318,13 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
     with torch.no_grad():
         mgmodel.embedding.word_embeddings.weight.copy_(hfmodel.model.embed_tokens.weight)
         for layer_idx, (mglayer, hflayer) in enumerate(zip(mgmodel.decoder.layers, hfmodel.model.layers)):
+            print(layer_idx)
             mglayer.input_layernorm.weight.copy_(hflayer.input_layernorm.weight)
             mglayer.pre_mlp_layernorm.weight.copy_(hflayer.post_attention_layernorm.weight)
             if args.q_lora_rank is not None:
                 mglayer.self_attention.linear_q_down_proj.weight.copy_(hflayer.self_attn.q_a_proj.weight)
                 mglayer.self_attention.linear_q_up_proj.weight.copy_(hflayer.self_attn.q_b_proj.weight)
-                mglayer.self_attention.q_a_layernorm.weight.copy_(hflayer.self_attn.q_a_layernorm.weight)
+                mglayer.self_attention.q_layernorm.weight.copy_(hflayer.self_attn.q_a_layernorm.weight)
             else:
                 mglayer.self_attention.linear_q_proj.weight.copy_(hflayer.self_attn.q_proj.weight)
             mglayer.self_attention.linear_kv_down_proj.weight.copy_(hflayer.self_attn.kv_a_proj_with_mqa.weight)
@@ -430,7 +443,7 @@ def save_mgmodel(mgmodel, args):
                         seg_0 = v.shape[0] // args.tensor_model_parallel_size
                         seg_1 = v.shape[1] // args.tensor_model_parallel_size
                         target_v = v[seg_0 * tp_rank: seg_0 * (tp_rank + 1), seg_1 * tp_rank: seg_1 * (tp_rank + 1)]
-                    elif 'q_a_layernorm' in k:
+                    elif 'q_layernorm' in k:
                         seg = v.shape[0] // args.tensor_model_parallel_size
                         target_v = v[seg * tp_rank: seg * (tp_rank + 1)]
                     elif 'linear_kv_up_proj' in k:
@@ -521,7 +534,7 @@ def save_mgmodel(mgmodel, args):
                             seg_0 = v.shape[0] // args.tensor_model_parallel_size
                             seg_1 = v.shape[1] // args.tensor_model_parallel_size
                             target_v = v[seg_0 * tp_rank: seg_0 * (tp_rank + 1), seg_1 * tp_rank: seg_1 * (tp_rank + 1)]
-                        elif 'q_a_layernorm' in k:
+                        elif 'q_layernorm' in k:
                             seg = v.shape[0] // args.tensor_model_parallel_size
                             target_v = v[seg * tp_rank: seg * (tp_rank + 1)]
                         elif 'linear_kv_up_proj' in k:
@@ -853,6 +866,7 @@ def main():
         hf_model = AutoModelForCausalLM.from_pretrained(args.load, trust_remote_code=True, torch_dtype=config.torch_dtype)
         mg_model = model_provider()
         convert_checkpoint_from_transformers_to_megatron(hf_model, mg_model, args)
+        print("done convert")
         if args.q_lora_rank is None:
             check_hf_mg_forward(hf_model, mg_model, args)
         save_mgmodel(mg_model, args)
