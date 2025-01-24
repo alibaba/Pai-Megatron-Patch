@@ -102,7 +102,7 @@ def get_batch(data_iterator):
         if args.train_mode == "pretrain":
             batch = get_batch_on_this_tp_rank(data_iterator)
         else:
-            batch = get_batch_on_this_tp_rank_idxmap_sft(data_iterator)
+            batch = get_batch_on_this_tp_rank_idxmap_sft(data_iterator, per_seq_average=True)
 
         packed_seq_params = None
         if args.reset_position_ids:
