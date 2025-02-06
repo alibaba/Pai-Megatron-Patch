@@ -103,9 +103,10 @@ if [ $MG2HF = true ]; then
     convert_options=" \
                 --convert-checkpoint-from-megatron-to-transformers \
                 --hf-ckpt-path ${HF_CKPT_PATH}"
-
+    PRETRAIN_CHECKPOINT_PATH=${HF_CKPT_PATH}
 elif [ $MG2HF = false ]; then
     convert_options=""
+    PRETRAIN_CHECKPOINT_PATH=${SOURCE_CKPT_PATH}
 fi
 
 te_options=" \
@@ -148,6 +149,12 @@ else
     echo "uneven pipeline split must be used when PP > 1"
     exit -1
 fi
+
+mkdir -p ${TARGET_CKPT_PATH}
+# NOTE: model.safetensors.index.json will be copied by the following line and 
+# should be removed in mg->hf conversion if save_safetensor is disabled.
+find -L ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${TARGET_CKPT_PATH}
+find -L ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "merges.txt" -print0 | xargs -0 cp -t ${TARGET_CKPT_PATH}
 
 cmd="torchrun ${DISTRIBUTED_ARGS} hf2mcore_qwen2_vl.py \
     --load ${SOURCE_CKPT_PATH} \

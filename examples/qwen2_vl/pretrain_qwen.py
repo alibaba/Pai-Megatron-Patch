@@ -295,7 +295,7 @@ def get_ltor_masks_and_position_ids(
         input_ids=input_ids,
         image_grid_thw=image_thw_grids,
         video_grid_thw=video_thw_grids,
-        attention_mask=target == pad_token
+        attention_mask=input_ids != pad_token
     )
 
     # Loss mask.

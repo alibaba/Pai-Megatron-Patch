@@ -100,17 +100,6 @@ def add_model_args(parser):
 def load_megatron_model(args):
     """load a TPxPPx checkpoint into a TP1PP1 model."""
     os.makedirs(args.save, exist_ok=True)
-    os.system("cp -rf " + args.hf_ckpt_path + "/config*.json " + args.save)
-    os.system("cp -rf " + args.hf_ckpt_path + "/generation_config.json " + args.save)
-    os.system("cp -rf " + args.hf_ckpt_path+ "/tokenizer* " + args.save)
-    os.system("cp -rf " + args.hf_ckpt_path + "/vocab.json " + args.save)
-    os.system("cp -rf " + args.hf_ckpt_path + "/merges.txt " + args.save)
-
-    os.system("cp -rf " + args.hf_ckpt_path + "/config*.json " + args.load)
-    os.system("cp -rf " + args.hf_ckpt_path + "/generation_config.json " + args.load)
-    os.system("cp -rf " + args.hf_ckpt_path+ "/tokenizer* " + args.load)
-    os.system("cp -rf " + args.hf_ckpt_path + "/vocab.json " + args.load)
-    os.system("cp -rf " + args.hf_ckpt_path + "/merges.txt " + args.load)
 
     model = model_provider()
     args.tensor_model_parallel_size = args.target_tensor_model_parallel_size
@@ -576,10 +565,6 @@ def save_mgmodel(mgmodel, args):
         vpp_size = args.virtual_pipeline_model_parallel_size
 
     os.makedirs(args.save, exist_ok=True)
-    os.system("cp -rf " + args.load + "/config*.json " + args.save)
-    os.system("cp -rf " + args.load + "/tokenizer* " + args.save)
-    os.system("cp -rf " + args.load + "/vocab.json " + args.save)
-    os.system("cp -rf " + args.load + "/merges.txt " + args.save)
 
     tracker_filepath = os.path.join(args.save, 'latest_checkpointed_iteration.txt')
     with open(tracker_filepath, "w") as f:
@@ -711,6 +696,11 @@ def save_hfmodel(args, model, max_shard_size='10GB'):
     output_state_dict = model.state_dict()
     weight_file = SAFE_WEIGHTS_NAME if args.save_safetensors else WEIGHTS_NAME
     index_file = SAFE_WEIGHTS_INDEX_NAME if args.save_safetensors else WEIGHTS_INDEX_NAME
+    # NOTE: remove all old index files
+    if os.path.exists(os.path.join(args.save, SAFE_WEIGHTS_INDEX_NAME)):
+        os.remove(os.path.join(args.save, SAFE_WEIGHTS_INDEX_NAME))
+    if os.path.exists(os.path.join(args.save, WEIGHTS_INDEX_NAME)):
+        os.remove(os.path.join(args.save, WEIGHTS_INDEX_NAME))
 
     shards, index = shard_checkpoint(output_state_dict, max_shard_size=max_shard_size, weights_name=weight_file)
     os.makedirs(args.save, exist_ok=True)
