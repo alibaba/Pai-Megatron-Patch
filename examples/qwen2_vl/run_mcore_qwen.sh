@@ -309,6 +309,7 @@ megatron_options="  \
         --disable-vision-class-token \
         --dataloader-type external \
         --transformer-impl transformer_engine \
+        --ckpt-format torch \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py

@@ -388,7 +388,8 @@ megatron_options="  \
         --no-save-optim \
         --kv-channels ${V_HEAD_DIM} \
         --qk-layernorm \
-        --multi-latent-attention
+        --multi-latent-attention \
+        --ckpt-format torch
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_deepseek.py

@@ -1,8 +1,51 @@
 import os
 import numpy as np
 import torch
-
+import json
+from transformers.modeling_utils import (
+    WEIGHTS_INDEX_NAME, 
+    WEIGHTS_NAME, 
+    SAFE_WEIGHTS_INDEX_NAME,
+    SAFE_WEIGHTS_NAME,
+    shard_checkpoint, 
+)
+import safetensors
 from collections.abc import Mapping, Sequence
+
+def save_hfmodel(args, model, max_shard_size='10GB'):
+    output_state_dict = model.state_dict()
+    weight_file = SAFE_WEIGHTS_NAME if args.save_safetensors else WEIGHTS_NAME
+    index_file = SAFE_WEIGHTS_INDEX_NAME if args.save_safetensors else WEIGHTS_INDEX_NAME
+    # NOTE: remove all old index files
+    if os.path.exists(os.path.join(args.save, SAFE_WEIGHTS_INDEX_NAME)):
+        os.remove(os.path.join(args.save, SAFE_WEIGHTS_INDEX_NAME))
+    if os.path.exists(os.path.join(args.save, WEIGHTS_INDEX_NAME)):
+        os.remove(os.path.join(args.save, WEIGHTS_INDEX_NAME))
+
+    shards, index = shard_checkpoint(output_state_dict, max_shard_size=max_shard_size, weights_name=weight_file)
+    os.makedirs(args.save, exist_ok=True)
+    for shard_file, shard in shards.items():
+        target_file = os.path.join(args.save, shard_file)
+        print(f'huggingface model is save to {target_file}')
+        if args.save_safetensors:
+            safetensors.torch.save_file(clone_state_dict(shard), target_file, metadata={"format": "pt"})
+        else:
+            torch.save(clone_state_dict(shard), target_file)
+
+    if index is None:
+        print(f"Model weights saved in {os.path.join(args.save, weight_file)}") # do nothing
+    else:
+        save_index_file = os.path.join(args.save, index_file)
+        # Save the index as well
+        with open(save_index_file, "w", encoding="utf-8") as f:
+            content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+            f.write(content)
+        print(
+            f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
+            f"split in {len(shards)} checkpoint shards. You can find where each parameters has been saved in the "
+            f"index located at {save_index_file}."
+        )
+
 @torch.inference_mode()
 def clone_state_dict(elem):
     """clone all tensors in the elem to cpu device.
