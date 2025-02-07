@@ -82,11 +82,11 @@ def name_to_expert_rank(key):
 
 def load_megatron_model(args):
     os.makedirs(args.save, exist_ok=True)
-    os.system("cp -rf " + args.hf_ckpt_path + "/config*.json " + args.save)
+    os.system("cp -rf " + args.hf_ckpt_path + "/*config.json " + args.save)
     os.system("cp -rf " + args.hf_ckpt_path + "/tokenizer* " + args.save)
     os.system("cp -rf " + args.hf_ckpt_path + "/*.py " + args.save)
 
-    os.system("cp -rf " + args.hf_ckpt_path + "/config*.json " + args.load)
+    os.system("cp -rf " + args.hf_ckpt_path + "/*config.json " + args.load)
     os.system("cp -rf " + args.hf_ckpt_path + "/tokenizer* " + args.load)
     os.system("cp -rf " + args.hf_ckpt_path + "/*.py " + args.load)
 
@@ -349,7 +349,7 @@ def save_mgmodel(mgmodel, args):
         args.expert_model_parallel_size = args.target_expert_model_parallel_size
 
     os.makedirs(args.save, exist_ok=True)
-    os.system("cp -rf " + args.load + "/config*.json " + args.save)
+    os.system("cp -rf " + args.load + "/*config.json " + args.save)
     os.system("cp -rf " + args.load + "/tokenizer* " + args.save)
 
     tracker_filepath = os.path.join(args.save, 'latest_checkpointed_iteration.txt')
@@ -372,7 +372,7 @@ def save_mgmodel(mgmodel, args):
         and args.expert_model_parallel_size == 1
     ):
         checkpoint_name = get_checkpoint_name(args.save, 0, True)
-        save_state_dict(args, full_model, checkpoint_name)
+        save_state_dict(args, [full_model], checkpoint_name)
     elif (
         args.tensor_model_parallel_size == 1
         and args.pipeline_model_parallel_size == 1
@@ -392,7 +392,7 @@ def save_mgmodel(mgmodel, args):
                     expert_local_rank = expert_rank % num_local_experts
                     k = k.replace(f'local_experts.{expert_rank}', f'local_experts.{expert_local_rank}')
                 model_split[k] = v
-            save_state_dict(args, model_split, checkpoint_name)
+            save_state_dict(args, [model_split], checkpoint_name)
     elif (
         args.tensor_model_parallel_size > 1
         and args.pipeline_model_parallel_size == 1
@@ -458,7 +458,7 @@ def save_mgmodel(mgmodel, args):
                     else:
                         target_v = v
                     model_split[k] = target_v
-                save_state_dict(args, model_split, checkpoint_name)
+                save_state_dict(args, [model_split], checkpoint_name)
 
     elif (
         args.pipeline_model_parallel_size > 1
@@ -557,7 +557,7 @@ def save_mgmodel(mgmodel, args):
                                 model_split[k] = target_v
                         else:
                             model_split[k] = target_v
-                    save_state_dict(args, model_split, checkpoint_name)
+                    save_state_dict(args, [model_split], checkpoint_name)
 
     else:
         raise ValueError('Something is wrong, please check your tp/pp/ep size')
