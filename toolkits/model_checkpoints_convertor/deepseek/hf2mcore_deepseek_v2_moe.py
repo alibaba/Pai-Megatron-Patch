@@ -359,7 +359,7 @@ def save_mgmodel(mgmodel, args):
     full_model = mgmodel.state_dict_for_save_checkpoint()
 
     for k in list(full_model.keys()):
-        if full_model[k] is None:
+        if full_model[k] is None and '_extra_state' not in k:
             full_model.pop(k)
 
     if args.num_experts is not None:
@@ -379,7 +379,6 @@ def save_mgmodel(mgmodel, args):
         and args.expert_model_parallel_size >1
         and args.num_experts % args.expert_model_parallel_size == 0
     ):
-
         for ep_rank in range(args.expert_model_parallel_size):
             model_split = {}
             checkpoint_name = get_checkpoint_name(args.save, 0, True, None, None, None, True, ep_rank)
@@ -407,6 +406,12 @@ def save_mgmodel(mgmodel, args):
                     checkpoint_name = get_checkpoint_name(args.save, 0, True, None, tp_rank, None, False)
                 for k, v in full_model.items():
                     if not isinstance(v, torch.Tensor):
+                        if 'local_experts' in k:
+                            expert_rank = int(re.findall(pattern, k)[0])
+                            if expert_rank // num_local_experts != ep_rank:
+                                continue
+                            expert_local_rank = expert_rank % num_local_experts
+                            k = k.replace(f'local_experts.{expert_rank}', f'local_experts.{expert_local_rank}')
                         target_v = v
                     elif 'linear_q_proj' in k or 'linear_q_down_proj' in k or 'linear_kv_down_proj' in k:
                         seg = v.shape[0] // args.tensor_model_parallel_size
@@ -498,6 +503,12 @@ def save_mgmodel(mgmodel, args):
                         elif not ("word_embeddings" in k or "output_layer" in k or "final_layernorm" in k):
                             continue
                         if not isinstance(v, torch.Tensor):
+                            if 'local_experts' in k:
+                                expert_rank = int(re.findall(pattern, k)[0])
+                                if expert_rank // num_local_experts != ep_rank:
+                                    continue
+                                expert_local_rank = expert_rank % num_local_experts
+                                k = k.replace(f'local_experts.{expert_rank}', f'local_experts.{expert_local_rank}')
                             target_v = v
                         elif 'linear_q_proj' in k or 'linear_q_down_proj' in k or 'linear_kv_down_proj' in k:
                             seg = v.shape[0] // args.tensor_model_parallel_size

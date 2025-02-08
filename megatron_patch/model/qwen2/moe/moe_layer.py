@@ -30,7 +30,7 @@ from ..transformer.mlp import MLPSubmodules, MLP
 
 try:
     from megatron.core.transformer.custom_layers.transformer_engine import (
-        TELayerNormColumnParallelLinear,
+        TEColumnParallelLinear,
         TERowParallelLinear,
     )
 
@@ -95,7 +95,7 @@ class MoELayer(BaseMoELayer):
         self.enable_shared_experts = config.enable_shared_expert
         if config.enable_shared_expert:
             mlpSubmodules=MLPSubmodules(
-                linear_fc1=TELayerNormColumnParallelLinear,
+                linear_fc1=TEColumnParallelLinear,
                 linear_fc2=TERowParallelLinear,
             )
             self.shared_expert = MLP(self.config, mlpSubmodules, is_expert=False, is_shared_expert=True)

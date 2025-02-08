@@ -180,7 +180,7 @@ false \
 通过设置MP_DATASET_TYPE环境变量，本脚本还可使用json格式的数据集进行指令微调
 ```bash
 export MP_DATASET_TYPE="raw"
-cd /workspace/Pai-Megatron-Patch/examples/qwen2
+cd /workspace/Pai-Megatron-Patch/examples/qwen2_5
 sh run_mcore_qwen.sh  \
 dsw  \
 0.5B   \

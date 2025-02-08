@@ -85,6 +85,36 @@ def get_ltor_masks_and_position_ids(data,
 
     return attention_mask, loss_mask, position_ids
 
+def get_ltor_position_ids_packed_seq(data):
+    """
+        Given a input_seqs from custom mmap dataset, generate a 
+        position_ids by searching negative tokens.
+    """
+
+    # Extract batch size and sequence length.
+    micro_batch_size, seq_length = data.size()
+
+    # Position ids.
+    position_ids = torch.arange(seq_length, dtype=torch.long, device=data.device)
+    position_ids = position_ids.unsqueeze(0).expand_as(data)
+    # We need to clone as the ids will be modifed based on batch index.
+    position_ids = position_ids.clone()
+
+    # Loop through the batches:
+    for b in range(micro_batch_size):
+        # Find indecies where EOD token is.
+        eod_index = position_ids[b, data[b] < 0]
+        # Detach indecies from positions if going to modify positions.
+        eod_index = eod_index.clone()
+        # Loop through EOD indecies:
+        prev_index = 0
+        for j in range(eod_index.size()[0]):
+            i = eod_index[j]
+            position_ids[b, (i + 1):] -= (i + 1 - prev_index)
+            prev_index = i + 1
+
+    return position_ids
+
 def get_batch_on_this_tp_rank_original(data_iterator, per_seq_average=False):
     args = get_args()
     tokenizer = get_tokenizer()
@@ -230,30 +260,43 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator, per_seq_average=False):
         labels = data['tokens'][..., actual_seqlen:]
         loss_mask = (labels != -100).float()
         
-        attention_mask, _, position_ids = get_ltor_masks_and_position_ids(
-            tokens,
-            tokenizer.eod,
-            args.reset_position_ids,
-            args.reset_attention_mask,
-            False,
-            args.create_attention_mask_in_dataloader
-        )
+        if args.reset_position_ids:
+            attention_mask = None
+            position_ids = get_ltor_position_ids_packed_seq(tokens)
+            has_pad = tokens[:, -1] >= 0
+            tokens[tokens < 0] = - tokens[tokens < 0] - 1
+        else:
+            tokens[tokens < 0] = - tokens[tokens < 0] - 1
+            attention_mask, _, position_ids = get_ltor_masks_and_position_ids(
+                tokens,
+                tokenizer.eod,
+                args.reset_position_ids,
+                args.reset_attention_mask,
+                False,
+                args.create_attention_mask_in_dataloader
+            )
 
         num_seqs = None
         if per_seq_average:
-            num_seqs = torch.zeros(position_ids.shape[0], device=torch.cuda.current_device(), dtype=torch.int64)
-            for b in range(position_ids.shape[0]):
-                p = position_ids[b]
-                start_indices = (p == 0).nonzero(as_tuple=True)[0]
-                seqlens = start_indices[1:] - start_indices[:-1]
-                num_seqs[b] = len(seqlens)
-                seqlens = seqlens.cpu().numpy().tolist() + [p.shape[0] - start_indices[-1].item()]
-                subseqs = torch.split(loss_mask[b], seqlens)    
-                for start_idx, seqlen, subseq in zip(start_indices, seqlens, subseqs):
-                    assert subseq.sum() > 0
-                    loss_mask[b, start_idx: start_idx + seqlen] /= subseq.sum()      
-                 
-
+            if args.reset_position_ids:
+                num_seqs = torch.zeros(position_ids.shape[0], device=torch.cuda.current_device(), dtype=torch.int64)
+                for b in range(position_ids.shape[0]):
+                    p = position_ids[b]
+                    start_indices = (p == 0).nonzero(as_tuple=True)[0]
+                    seqlens = start_indices[1:] - start_indices[:-1]
+                    seqlens = seqlens.cpu().numpy().tolist() + [p.shape[0] - start_indices[-1].item()]
+                    subseqs = torch.split(loss_mask[b], seqlens)    
+                    num_seqs[b] = len(seqlens) - int(has_pad[b])
+                    for subseq_idx, (start_idx, seqlen, subseq) in enumerate(zip(start_indices, seqlens, subseqs)):
+                        if subseq_idx == num_seqs[b]:
+                            # NOTE: do not process pad sequence
+                            continue
+                        assert subseq.sum() > 0
+                        loss_mask[b, start_idx: start_idx + seqlen] /= subseq.sum()
+            else:
+                num_seqs = loss_mask.sum(dim=-1).long() # [mbs]
+                loss_mask = loss_mask / num_seqs.view(-1, 1)                  
+                
         # dtype: long, long, float, bool, long
         batch = {
             'tokens': tokens.cuda(non_blocking=True),

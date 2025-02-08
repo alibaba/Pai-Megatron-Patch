@@ -39,18 +39,18 @@ max       2458.000000            # 样本最大长度
 #### 制作MMAP格式预训练数据集
 mmap数据是一种预先执行tokenize处理的数据格式，可以极大减少训练微调过程中等待数据读入的时间，当数据量极大时，优势显著。
 
-在DSW的Terminal中进入代码目录：/mnt/workspace/Pai-Megatron-Patch/toolkits/sft_data_preprocessing。查看run_build_idxmap_data_for_sft.sh脚本内容。里面有5个启动参数需要在运行时输入，具体参数列表如下：
+在DSW的Terminal中进入代码目录：/mnt/workspace/Pai-Megatron-Patch/toolkits/sft_data_preprocessing。查看run_build_idxmap_sft_dataset.sh脚本内容。里面有6个启动参数需要在运行时输入，具体参数列表如下：
 ```
 input_data_path=$1                # 设置输入文件路径
 tokenizer=$2                      # 设置分词器
 seq_len=$3                        # 设置训练用的序列长度
 output_data_path=$4               # 设置输出文件路径  
 load_dir=$5                       # 设置HF模型的路径
-
+default_packing=$6                # 设置是否采用默认packing策略(默认false)
 ```
 运行示例如下所示：
 ```bash
-sh run_build_idxmap_data_for_sft.sh \
+bash run_build_idxmap_sft_dataset.sh \
 /mnt/workspace/qwen-datasets/qwen_sft.json \
 Qwen2Tokenizer \
 256 \
@@ -79,16 +79,15 @@ qwen-datasets
 ```
 处理后的格式为
 ```json
-[{"instruction": "寻找两个二元分类问题的例子。", "input": "", "output": "1. 垃圾邮件过滤：将电子邮件分类为垃圾邮件或非垃圾邮件。\n2. 信用风险评估：将贷款申请人分类为高风险或低风险。"},
-{"instruction": "将给定的句子改写为修辞问题。", "input": "他以前从未见过大海。", "output": "他以前曾经见过大海吗？"}]
+[{"instruction": "寻找两个二元分类问题的例子。", "input": "", "output": "1. 垃圾邮件过滤：将电子邮件分类为垃圾邮件或非垃圾邮件。\n2. 信用风险评估：将贷款申请人分类为高风险或低风险。"},{"instruction": "将给定的句子改写为修辞问题。", "input": "他以前从未见过大海。", "output": "他以前曾经见过大海吗？"}]
 [{"instruction": "用不同的词重新表达给定的句子。", "input": "他总是试图在生活中走在前面。", "output": "他不断努力追求成功。"}]
 ```
 
-转换脚本内置按顺序打包数据集的实现，你也可以使用`--sequence-packing`开关来生成packing数据集，此时无需提前打包SFT样本
+转换脚本内置按顺序打包数据集的实现，你也可以将default_packing设置为true来生成packing数据集，此时无需提前打包SFT样本
 
 3. 在完成json格式数据打包后，运行下列命令来获得用于LLaMA3.1 SFT的packed mmap数据集
 ```
-bash run_build_packed_idxmap_sft_dataset.sh \
+bash run_build_idxmap_sft_dataset.sh \
 /workspace/llama-datasets/packed_qwen_sft.json \
 LLama3Tokenizer \
 2048 \
