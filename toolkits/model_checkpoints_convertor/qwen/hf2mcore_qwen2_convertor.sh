@@ -128,6 +128,7 @@ SLIDING_WINDOW=131072
 EXTRA_VOCAB_SIZE=293
 
 moe_options=" \
+            --moe-layer-freq 1 \
             --moe-router-topk ${NUM_EXPERTS_PER_TOPK} \
             --num-experts ${NUM_EXPERTS} \
             --target-expert-model-parallel-size ${EP}\

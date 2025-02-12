@@ -41,6 +41,7 @@ from megatron_patch.data import build_pretrain_dataset_from_original
 
 from megatron_patch.data.utils import get_batch_on_this_tp_rank_original, get_batch_on_this_tp_rank_idxmap_sft
 from megatron_patch.model.qwen2.layer_specs import (
+    get_gpt_decoder_block_spec,
     get_gpt_layer_local_spec,
     get_gpt_layer_with_transformer_engine_spec,
 )
@@ -62,17 +63,20 @@ def model_provider(
 
     config = core_transformer_config_from_args(args, Qwen2TransformerConfig)
     use_te = args.transformer_impl == "transformer_engine"
-
-    if use_te:
-        print_rank_0("building qwen2 model in TE...")
-        transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
-            args.num_experts, args.moe_grouped_gemm, args.qk_layernorm
-        )
+    if args.num_experts:
+        # Define the decoder block spec
+        transformer_layer_spec = get_gpt_decoder_block_spec(config, use_transformer_engine=use_te)
     else:
-        print_rank_0("building qwen2 model in Mcore...")
-        transformer_layer_spec = get_gpt_layer_local_spec(
-            args.num_experts, args.moe_grouped_gemm, args.qk_layernorm
-        )
+        if use_te:
+            print_rank_0("building qwen2 model in TE...")
+            transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
+                args.num_experts, args.moe_grouped_gemm, args.qk_layernorm
+            )
+        else:
+            print_rank_0("building qwen2 model in Mcore...")
+            transformer_layer_spec = get_gpt_layer_local_spec(
+                args.num_experts, args.moe_grouped_gemm, args.qk_layernorm
+            )
 
     model = GPTModel(
         config=config,

@@ -165,6 +165,35 @@ class TransformerLayer(MegatronModule, BaseTransformerLayer):
                 offset = 0
 
         return offset
+        
+        
+    @staticmethod
+    def get_layer_offset(config: TransformerConfig):
+
+        pipeline_rank = parallel_state.get_pipeline_model_parallel_rank()
+
+        num_layers_per_pipeline_rank = (
+            config.num_layers // parallel_state.get_pipeline_model_parallel_world_size()
+        )
+
+        if parallel_state.get_virtual_pipeline_model_parallel_world_size() is not None:
+            vp_rank = parallel_state.get_virtual_pipeline_model_parallel_rank()
+            vp_size = parallel_state.get_virtual_pipeline_model_parallel_world_size()
+
+            total_num_layers = config.num_layers
+            num_layers_per_virtual_rank = num_layers_per_pipeline_rank // vp_size
+            total_virtual_chunks = total_num_layers // vp_size
+            offset = vp_rank * total_virtual_chunks + (pipeline_rank * num_layers_per_virtual_rank)
+
+        else:
+            # Each stage gets a contiguous set of layers.
+            if parallel_state.get_pipeline_model_parallel_world_size() > 1:
+                offset = pipeline_rank * num_layers_per_pipeline_rank
+            else:
+                offset = 0
+
+        return offset
+        
 
     def forward(
         self,
