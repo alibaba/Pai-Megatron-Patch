@@ -72,8 +72,8 @@ class Encoder(object):
             for t1, t2 in zip(input_ids, all_ids):
                 assert t1 == t2, "The user input_ids are not a prefix of the full input_ids!"
 
-            all_ids[-1] = - 1 - all_ids[-1]
             y_ids = [-100] * (len(input_ids) - 1) + all_ids[len(input_ids):] + [-100]
+            all_ids[-1] = - 1 - all_ids[-1]
 
             if sum(sentence_lens) + len(all_ids) > self.seq_length:
                 if self.seq_length > sum(sentence_lens):

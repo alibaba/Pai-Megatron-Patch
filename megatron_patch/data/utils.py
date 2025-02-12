@@ -137,8 +137,12 @@ def get_batch_on_this_tp_rank_original(data_iterator, per_seq_average=False):
         labels = labels_[:, 1:].contiguous()
         # core/tensor_parallel/cross_entropy.py, target_mask = (target < vocab_start_index) | (target >= vocab_end_index)
         # labels[labels == tokenizer.eos_token_id] = -100
+        # NOTE: if eos == pad, we map <eos> to  - 1 - eos_id, map these tokens back
+        tokens[tokens < 0] = - 1 - tokens[tokens < 0]
+        eos_indices = (labels < 0).nonzero()
         labels[labels == tokenizer.pad_token_id] = -100
-
+        labels[eos_indices[:, 0], eos_indices[:, 1]] = - 1 - labels[eos_indices[:, 0], eos_indices[:, 1]]
+        
         attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
             labels,
             -100,
