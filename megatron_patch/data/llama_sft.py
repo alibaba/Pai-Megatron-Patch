@@ -34,6 +34,8 @@ class LLamaSFTDataset(torch.utils.data.Dataset):
         assert hasattr(self.tokenizer, 'apply_chat_template'), \
             "The LLama-SFT-Raw Dataset is valid for tokenizers with chat template, please provide a template."
         self.IGNORE_INDEX = self.tokenizer.pad_token_id
+        self.eos_token_id = self.tokenizer.eos_token_id
+        self.is_pad_token_eos_token = self.tokenizer.pad_token_id == self.eos_token_id
         self.max_padding_length = max_padding_length
 
         list_data_dict = load_dataset(
@@ -135,8 +137,11 @@ class LLamaSFTDataset(torch.utils.data.Dataset):
             if len(source) >= self.max_padding_length:
                 continue
 
-            if len(full) >= self.max_padding_length:
+            if len(full) > self.max_padding_length:
                 full = full[:self.max_padding_length]
+            elif self.is_pad_token_eos_token:
+                assert full[-1] == self.eos_token_id, f"Assume any untruncated sample ends with <eos>! But got: {self.tokenizer.detokenize(full)}"
+                full[-1] = - 1 - full[-1]
             
             if self.max_padding_length > len(full):
                 full = full + [self.IGNORE_INDEX] * (self.max_padding_length - len(full))
