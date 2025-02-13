@@ -36,19 +36,16 @@ from megatron.training.utils import (
     get_batch_on_this_cp_rank,
     get_batch_on_this_tp_rank,
 )
-
+from megatron.core.transformer import MLATransformerConfig
+from megatron.training.arguments import core_transformer_config_from_args
+from megatron.core.models.gpt import GPTModel
+from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_with_transformer_engine_spec
 
 from megatron_patch.arguments import get_patch_args
 from megatron_patch.tokenizer import build_tokenizer, get_tokenizer
 from megatron_patch.data import build_pretrain_dataset_from_original
 from megatron_patch.data.utils import get_batch_on_this_tp_rank_original, get_batch_on_this_tp_rank_idxmap_sft
 
-from megatron_patch.model.deepseek_v2.transformer_config  import core_transformer_config_from_args
-from megatron_patch.model.deepseek_v2.transformer_config import DeepSeekV2TransformerConfig
-from megatron_patch.model.deepseek_v2.model import GPTModel
-from megatron_patch.model.deepseek_v2.layer_specs import (
-    get_gpt_layer_with_transformer_engine_spec,
-)
 
 torch._dynamo.config.suppress_errors = True
 
@@ -59,11 +56,11 @@ def model_provider(
 
     args = get_args()
     build_tokenizer(args)
-    config = core_transformer_config_from_args(args, DeepSeekV2TransformerConfig)
+    config = core_transformer_config_from_args(args, MLATransformerConfig)
     use_te = args.transformer_impl == "transformer_engine"
 
     if use_te:
-        print_rank_0("building deepseek_v2 model in TE...")
+        print_rank_0("building deepseek_v3 model in TE...")
         transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
             args.num_experts, args.moe_grouped_gemm, args.qk_layernorm, multi_latent_attention=True, fp8=args.fp8
         )
