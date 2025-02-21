@@ -3,17 +3,8 @@ set -e
 ENV=$1
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-241113:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250217:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
-
-# Here are some configs controled by env
-if [ -z ${MP_DATASET_TYPE} ];then
-    MP_DATASET_TYPE="idxmap"
-fi
-
-if [ -z ${MP_AC_LAYERS} ];then
-    MP_AC_LAYERS=1
-fi
 
 if [ $ENV = dsw ]; then
     export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
@@ -26,17 +17,6 @@ elif [ $ENV = dlc ]; then
     NNODES=${WORLD_SIZE}
     NODE_RANK=${RANK}
     GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU}
-fi
-
-if [ -z ${MP_VP} ]; then
-    vp_options=""
-else
-    vp_options=" \
-        --num-layers-per-virtual-pipeline-stage ${MP_VP}"
-fi
-
-if [ -z ${MP_SFT_PACKING} ]; then
-    MP_SFT_PACKING=false
 fi
 
 
@@ -81,55 +61,24 @@ OUTPUT_BASEPATH=${26}
 ### OTHERS ###
 
 if [ $FL = true ]; then
-    export NVTE_FLASH_ATTN=1 NVTE_FUSED_ATTN=0
+    echo "MLA is not supported in flash-attn, set FL=false and rerun."
+    exit -1
 elif [ $FL = false ]; then
     export NVTE_FLASH_ATTN=0 NVTE_FUSED_ATTN=1
+    attn_backend_option=" \
+        --attention-backend fused
+    "
 fi
 
-if [ $MODEL_SIZE = A2.4B ]; then
+if [ $MODEL_SIZE = A37B ]; then
 
-HIDDEN_SIZE=2048
-NUM_ATTN_HEADS=16
-NUM_LAYERS=27
-INTERMEDIATE_SIZE=10944
-MOE_INTERMEDIATE_SIZE=1408
+HIDDEN_SIZE=7168
+NUM_ATTENTION_HEADS=128
+NUM_LAYERS=61
+INTERMEDIATE_SIZE=18432
+MOE_INTERMEDIATE_SIZE=2048
 MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
-EXTRA_VOCAB_SIZE=2400
-KV_LORA_RANK=512
-QK_NOPE_HEAD_DIM=128
-QK_ROPE_HEAD_DIM=64
-V_HEAD_DIM=128
-ROPE_THETA=10000
-SCALE_FACTOR=40
-NUM_EXPERTS=64
-ROUTER_TOPK=6
-NUM_SHARED_EXPERTS=2
-MOE_LAYER_FREQ=1
-RMS_NORM_EPS=1e-6
-
-moe_options=" \
-    --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
-    --moe-router-topk ${ROUTER_TOPK} \
-    --num-experts ${NUM_EXPERTS} \
-    --moe-layer-freq ${MOE_LAYER_FREQ} \
-    --moe-aux-loss-coeff 1e-2 \
-    --moe-shared-expert-intermediate-size $((${MOE_INTERMEDIATE_SIZE} * ${NUM_SHARED_EXPERTS} )) \
-    --expert-model-parallel-size ${EP} \
-    --kv-lora-rank ${KV_LORA_RANK} \
-    --qk-head-dim ${QK_NOPE_HEAD_DIM} \
-    --qk-pos-emb-head-dim ${QK_ROPE_HEAD_DIM} \
-    --v-head-dim ${V_HEAD_DIM} \
-    --moe-router-load-balancing-type aux_loss"
-
-elif [ $MODEL_SIZE = A21B ]; then
-
-HIDDEN_SIZE=5120
-NUM_ATTN_HEADS=128
-NUM_LAYERS=60
-INTERMEDIATE_SIZE=12288
-MOE_INTERMEDIATE_SIZE=1536
-MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
-EXTRA_VOCAB_SIZE=2400
+EXTRA_VOCAB_SIZE=467
 Q_LORA_RANK=1536
 KV_LORA_RANK=512
 QK_NOPE_HEAD_DIM=128
@@ -137,27 +86,49 @@ QK_ROPE_HEAD_DIM=64
 V_HEAD_DIM=128
 ROPE_THETA=10000
 SCALE_FACTOR=40
-NUM_EXPERTS=160
-ROUTER_TOPK=6
-NUM_SHARED_EXPERTS=2
-MOE_LAYER_FREQ=1
+NUM_EXPERTS=64
+ROUTER_TOPK=8
+NUM_SHARED_EXPERTS=1
 RMS_NORM_EPS=1e-6
 
 moe_options=" \
-    --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
+    --moe-grouped-gemm \
+    --moe-token-dispatcher-type alltoall \
     --moe-router-topk ${ROUTER_TOPK} \
     --num-experts ${NUM_EXPERTS} \
-    --moe-layer-freq ${MOE_LAYER_FREQ} \
-    --moe-aux-loss-coeff 1e-2 \
-    --moe-shared-expert-intermediate-size $((${MOE_INTERMEDIATE_SIZE} * ${NUM_SHARED_EXPERTS} )) \
     --expert-model-parallel-size ${EP} \
+    --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
+    --moe-router-load-balancing-type aux_loss \
+    --moe-aux-loss-coeff 0.001 \
+    --moe-layer-freq '([0]*3+[1]*58)' \
+    --moe-shared-expert-intermediate-size $((${MOE_INTERMEDIATE_SIZE} * ${NUM_SHARED_EXPERTS} )) \
     --q-lora-rank ${Q_LORA_RANK} \
     --kv-lora-rank ${KV_LORA_RANK} \
-    --qk-head-dim ${QK_NOPE_HEAD_DIM} \
-    --qk-pos-emb-head-dim ${QK_ROPE_HEAD_DIM} \
+    --qk-nope-head-dim ${QK_NOPE_HEAD_DIM} \
+    --qk-rope-head-dim ${QK_ROPE_HEAD_DIM} \
     --v-head-dim ${V_HEAD_DIM} \
-    --moe-router-load-balancing-type aux_loss"
+    "
 
+fi
+
+# Here are some configs controled by env
+if [ -z ${MP_DATASET_TYPE} ];then
+    MP_DATASET_TYPE="idxmap"
+fi
+
+if [ -z ${MP_AC_LAYERS} ];then
+    MP_AC_LAYERS=1
+fi
+
+if [ -z ${MP_VP} ]; then
+    vp_option=""
+else
+    vp_option=" \
+        --num-layers-per-virtual-pipeline-stage ${MP_VP}"
+fi
+
+if [ -z ${MP_SFT_PACKING} ]; then
+    MP_SFT_PACKING=false
 fi
 
 TP_COMM_OVERLAP=$(( ($TP > 1) ? 1 : 0 ))
@@ -225,23 +196,21 @@ if [ $OPTIMIZER_OFFLOAD != false ] && [ $DO = false ]; then
 fi
 
 if [ $DO = true ]; then
-    do_options=" \
+    do_option=" \
 		    --use-distributed-optimizer"
 
 elif [ $DO = false ]; then
-    do_options=" \
+    do_option=" \
                     "
 fi
 
-te_options=" \
-        --transformer-impl transformer_engine"
 
 if [ $SP = true ] && [ $TP -gt 1 ]; then
-    sp_options=" \
+    sp_option=" \
 		    --sequence-parallel"
 
 elif [ $SP = false ]; then
-    sp_options=" \
+    sp_option=" \
                     "
 fi
 
@@ -263,7 +232,7 @@ else
 fi
 
 if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
-    load_options=" \
+    load_option=" \
             --load $PRETRAIN_CHECKPOINT_PATH"
 fi
 
@@ -273,14 +242,13 @@ if [ $OPTIMIZER_OFFLOAD != false ]; then
         --use-precision-aware-optimizer \
         --optimizer-offload-fraction ${OPTIMIZER_OFFLOAD}"
 fi
- 
 
 if [ $SFT = true ]; then
     TRAIN_ITERS=${24}
     LR_WARMUP_ITERS=${25}
     LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
     PREFIX="finetune-mcore-deepseek-v2-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
-    sft_option=" \
+    sft_options=" \
          --eod-mask-loss \
          --calculate-per-token-loss \
          --train-mode finetune"
@@ -288,19 +256,19 @@ else
     TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
     LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
     LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
-    PREFIX="pretrain-mcore-deepseek-v2-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
-    sft_option=" \
+    PREFIX="pretrain-mcore-deepseek-v3-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
+    sft_options=" \
         --train-mode pretrain"
 fi
 
 if [ ${MP_DATASET_TYPE} = "raw" ]; then
-    dataset_option=" \
+    dataset_options=" \
         --train-data-path ${DATASET_PATH} \
         --valid-data-path ${VALID_DATASET_PATH} \
         --dataloader-type cyclic \
         --dataset JSON-SFT"
 else 
-    dataset_option=" \
+    dataset_options=" \
         --data-path ${DATASET_PATH} \
         --split 99,1,0 \
         --dataset MMAP"
@@ -346,7 +314,7 @@ megatron_options="  \
         --global-batch-size ${GLOBAL_BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
-        --num-attention-heads ${NUM_ATTN_HEADS} \
+        --num-attention-heads ${NUM_ATTENTION_HEADS} \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
@@ -384,11 +352,15 @@ megatron_options="  \
         --qk-layernorm \
         --multi-latent-attention \
         --ckpt-format torch \
+        --transformer-impl transformer_engine \
+        --use-rope-scaling \
+        --use-multi-token-prediction \
+        --num-mtp-predictor 1
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_deepseek.py
- ${megatron_options} ${dataset_option} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} \
- ${do_options} ${sp_options} ${moe_options} ${offload_option} ${sft_option} ${vp_options} ${packing_options} ${uneven_split_option}"
+ ${megatron_options} ${dataset_options} ${pr_options} ${load_option} ${activation_checkpoint_options} \
+ ${do_option} ${sp_option} ${moe_options} ${offload_option} ${sft_options} ${vp_option} ${packing_options} ${uneven_split_option} ${attn_backend_option}"
 
 echo ${run_cmd}
 eval ${run_cmd}

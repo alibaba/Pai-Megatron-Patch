@@ -3,7 +3,7 @@ set -e
 ENV=$1
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-241113:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250217:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export NVTE_APPLY_QK_LAYER_SCALING=0
 export NVTE_ALLOW_NONDETERMINISTIC_ALGO=1
@@ -194,9 +194,11 @@ elif [ $PR = fp8 ]; then
         --fp8-amax-history-len 1024"
 fi
 
-if [ $OPTIMIZER_OFFLOAD != false ] && [ $DO = false ]; then
-    echo "Offload optimizer is valid only if \$DO=true"
-    DO=true
+if [ $OPTIMIZER_OFFLOAD != false ]; then
+    offload_option=" \
+        --optimizer-cpu-offload \
+        --use-precision-aware-optimizer \
+        --optimizer-offload-fraction ${OPTIMIZER_OFFLOAD}"
 fi
 
 if [ $DO = true ]; then
@@ -208,15 +210,11 @@ elif [ $DO = false ]; then
                     "
 fi
 
-comm_overlap_option="\
-        --overlap-grad-reduce \
-        --overlap-param-gather"
+comm_overlap_option=""
 
 if [ $SP = true ] && [ $TP -gt 1 ]; then
     comm_overlap_option="\
         --tp-comm-overlap \
-        --overlap-grad-reduce \
-        --overlap-param-gather \
         --sequence-parallel"
 fi
 
@@ -314,7 +312,7 @@ megatron_options="  \
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
  ${megatron_options} ${dataset_option} ${pr_options} ${load_options} ${activation_checkpoint_options} \
- ${do_options} ${gqa_options} ${sft_option} ${tie_option} ${packing_options} ${uneven_split_option} ${vp_options} ${comm_overlap_option}"
+ ${do_options} ${gqa_options} ${sft_option} ${tie_option} ${packing_options} ${uneven_split_option} ${vp_options} ${comm_overlap_option} ${offload_option}"
 
 echo ${run_cmd}
 eval ${run_cmd}

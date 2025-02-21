@@ -14,7 +14,7 @@
 
 from megatron.core.fusions.fused_bias_dropout import get_bias_dropout_add
 
-from megatron.core.transformer.custom_layers.transformer_engine import (
+from megatron.core.extensions.transformer_engine import (
     TEDotProductAttention,
     TELayerNormColumnParallelLinear,
     TENorm,
@@ -30,11 +30,8 @@ from megatron.core.transformer.transformer_layer import TransformerLayer, Transf
 
 from megatron.core.transformer.mlp import MLP, MLPSubmodules
 from megatron.core.transformer.attention import SelfAttentionSubmodules
-if True:
-    # DEBUG ONLY
-    from .attention_vision import SelfAttention
-else:
-    from megatron.core.transformer.attention import SelfAttention
+
+from .attention_vision import SelfAttention
 from .attention import SelfAttention as Qwen2VLSelfAttention
 
 # Use this spec to use lower level Transformer Engine modules (required for fp8 training)

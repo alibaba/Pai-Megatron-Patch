@@ -12,50 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
 from typing import Union
 import argparse
-import dataclasses
-import torch.nn.functional as F
-from megatron.core.transformer import TransformerConfig
-
-def core_transformer_config_from_args(args, config_class=None):
-    # Config class.
-    config_class = config_class or TransformerConfig
-
-    # Translate args to core transformer configuration
-    kw_args = {}
-    for f in dataclasses.fields(config_class):
-        if hasattr(args, f.name):
-            kw_args[f.name] = getattr(args, f.name)
-    kw_args['persist_layer_norm'] = not args.no_persist_layer_norm
-    kw_args['layernorm_zero_centered_gamma'] = args.apply_layernorm_1p
-    kw_args['layernorm_epsilon'] = args.norm_epsilon
-    kw_args['deallocate_pipeline_outputs'] = True
-    kw_args['pipeline_dtype'] = args.params_dtype
-    kw_args['batch_p2p_comm'] = not args.overlap_p2p_comm
-    kw_args['num_moe_experts'] = args.num_experts
-    kw_args['rotary_interleaved'] = args.rotary_interleaved
-    kw_args['first_pipeline_num_layers'] = args.decoder_first_pipeline_num_layers
-    kw_args['last_pipeline_num_layers'] = args.decoder_last_pipeline_num_layers
-    if args.swiglu:
-        kw_args['activation_func'] = F.silu
-        kw_args['gated_linear_unit'] = True
-        kw_args['bias_activation_fusion'] = args.bias_swiglu_fusion
-    else:
-        kw_args['bias_activation_fusion'] = args.bias_gelu_fusion
-
-    if args.init_method_xavier_uniform:
-        kw_args['init_method'] = torch.nn.init.xavier_uniform_
-        kw_args['scaled_init_method'] = torch.nn.init.xavier_uniform_
-    if args.group_query_attention:
-        kw_args['num_query_groups'] = args.num_query_groups
-    else:
-        kw_args['num_query_groups'] = None
-    kw_args['config_logger_dir'] = args.config_logger_dir
-
-    # Return config.
-    return config_class(**kw_args)
 
 def patch_if_not_exist(
         group_or_parser: Union[argparse._ArgumentGroup, argparse.ArgumentParser],
@@ -467,7 +425,10 @@ def get_patch_args(parser):
         ),
     )
 
-    group.add_argument("--moe-ffn-hidden-size", type=int, default=None)
+    patch_if_not_exist(
+        group,
+        "--moe-ffn-hidden-size", type=int, default=None
+    )
 
     group.add_argument("--shared-moe-ffn-hidden-size", type=int, default=None)
 
@@ -493,7 +454,11 @@ def get_patch_args(parser):
     group.add_argument("--qk-nope-head-dim", type=int, default=None)
     group.add_argument("--qk-rope-head-dim", type=int, default=None)
     group.add_argument("--num-shared-experts", type=int, default=None)
-    group.add_argument("--moe-layer-freq", type=int, default=1)
+
+    patch_if_not_exist(
+        group,
+        "--moe-layer-freq", type=int, default=1
+    )
 
     patch_if_not_exist(
         group,
@@ -508,13 +473,11 @@ def get_patch_args(parser):
         "valid if base optimizer is HybridAdam.",
     )
 
-    group.add_argument(
-        "--optimizer-offload-fraction",
-        type=float,
-        default=0.5,
-        help="Optimizer Offload Fraction used by static offload policy, "
-        "valid if base optimizer is HybridAdam",
+    patch_if_not_exist(
+        group,
+        "--optimizer-offload-fraction", type=float, default=0.5
     )
+
     group.add_argument(
         "--train-mode", default="pretrain", type=str, help="pretrain or finetune"
     )
@@ -606,6 +569,13 @@ def get_patch_args(parser):
         choices=["nvlm", "internvl", ""],
         default="",  # Default: Image tag not used.
         help="Surround image tokens with tags.",
+    )
+
+    group.add_argument("--use-multi-token-prediction", action="store_true")
+
+    group.add_argument(
+        "--num-mtp-predictor",
+        type=int,
     )
 
     return parser

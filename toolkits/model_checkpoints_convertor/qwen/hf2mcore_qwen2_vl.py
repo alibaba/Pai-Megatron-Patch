@@ -16,6 +16,7 @@ import re
 import json
 import torch
 import copy
+import logging
 from collections import defaultdict
 from typing import List, Dict, Tuple
 from transformers import (
@@ -116,7 +117,7 @@ def load_megatron_model(args):
         and args.pipeline_model_parallel_size == 1
     ):
         checkpoint_name = get_checkpoint_name(model_path, iteration, release, None, None, None, None, None)
-        state_dict = torch.load(checkpoint_name)['model']
+        state_dict = torch.load(checkpoint_name, weights_only=False)['model']
 
     elif (
         args.tensor_model_parallel_size > 1
@@ -125,14 +126,16 @@ def load_megatron_model(args):
         for tp_rank in range(args.tensor_model_parallel_size):
             checkpoint_name = get_checkpoint_name(model_path, iteration, release, None, tp_rank, None, None, None)
             print(f'load {checkpoint_name}')
-            split_state = torch.load(checkpoint_name, map_location="cpu")['model']
+            split_state = torch.load(checkpoint_name, map_location="cpu", weights_only=False)['model']
             for k, v in split_state.items():
                 if k.startswith('vision_model'):
                     vision_state_dicts[(tp_rank, 0)][k] = v
                 else:
                     mid_state[k].append(v)
         for k, v in mid_state.items():
-            if not isinstance(v[0], torch.Tensor) or 'norm' in k:
+            if 'extra_state' in k:
+                continue
+            elif not isinstance(v[0], torch.Tensor) or 'norm' in k:
                 target_v = v[0]
             elif 'embedding' in k or 'output_layer' in k:
                 target_v = torch.cat(v, dim=0)
@@ -161,7 +164,7 @@ def load_megatron_model(args):
                 keys = ['model']
                 if args.virtual_pipeline_model_parallel_size is not None:
                     keys = [f'model{i}' for i in range(args.virtual_pipeline_model_parallel_size)]
-                split_state = torch.load(checkpoint_name, map_location="cpu")
+                split_state = torch.load(checkpoint_name, map_location="cpu", weights_only=False)
                 for vpp_id, key in enumerate(keys):
                     for k, v in split_state[key].items():
                         if k.startswith('vision_model'):
@@ -179,7 +182,9 @@ def load_megatron_model(args):
                             mid_state[k].append(v)
 
         for k, v in mid_state.items():
-            if not isinstance(v[0], torch.Tensor) or 'norm' in k:
+            if 'extra_state' in k:
+                continue
+            elif not isinstance(v[0], torch.Tensor) or 'norm' in k:
                 target_v = v[0]
             elif 'embedding' in k or 'output_layer' in k:
                 target_v = torch.cat(v, dim=0)
@@ -197,12 +202,14 @@ def load_megatron_model(args):
             else:
                 raise ValueError
             state_dict[k] = target_v
-
     else:
         raise ValueError('not support yet')
 
     load_split_state_dict_to_vision_model(vision_state_dicts, model.vision_model, args)
-    model.load_state_dict(state_dict, strict=False)
+    _missing, _unexpected = model.load_state_dict(state_dict, strict=False)
+    missing = list(filter(lambda k: 'extra_state' not in k and not k.startswith('vision_model'), _missing))
+    unexpected = list(filter(lambda k: 'extra_state' not in k and not k.startswith('vision_model'), _unexpected))
+    print(f"missing keys: {missing}; unexpected keys: {unexpected}")
     return model
 
 """
@@ -277,7 +284,7 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
     copied_numel += safe_copy(mgprojector.encoder.linear_fc1.bias, hfprojector.mlp[0].bias)
     copied_numel += safe_copy(mgprojector.encoder.linear_fc2.weight, hfprojector.mlp[2].weight)
     copied_numel += safe_copy(mgprojector.encoder.linear_fc2.bias, hfprojector.mlp[2].bias)
-    n_params = sum([t.numel() for t in mgvision.state_dict().values() if isinstance(t, torch.Tensor)])
+    n_params = sum([t.numel() for k, t in mgvision.state_dict().items() if isinstance(t, torch.Tensor) and 'extra_state' not in k])
     assert n_params == copied_numel
 
     # 3. llm [just Qwen2]
@@ -313,7 +320,7 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
     if args.untie_embeddings_and_output_weights:
         safe_copy(mgllm.output_layer.weight, hfmodel.lm_head.weight)
     
-    n_params = sum([t.numel() for t in hfllm.state_dict().values() if isinstance(t, torch.Tensor)])
+    n_params = sum([t.numel() for k, t in hfllm.state_dict().items() if isinstance(t, torch.Tensor) and 'extra_state' not in k])
     assert n_params == copied_numel
 
 @torch.inference_mode()
@@ -436,6 +443,12 @@ def split_vision_model(mgvision, args, prefix="vision_model") -> Dict[Tuple, Dic
     ENCODER_NUM_ATTENTION_HEADS = 16
 
     full_model = mgvision.state_dict_for_save_checkpoint()
+    for k in list(full_model.keys()):
+        if 'extra_state' in k:
+            # NOTE: since TE 1.14, fp8 metadata will be saved as tensor. 
+            # Always drop these values in the MG ckpt to avoid potential issue.
+            # This should work fine because fp8 metadata is not supported by HF ckpt.
+            full_model[k] = None
     num_query_groups = mgvision.config.num_query_groups
     group_per_split = num_query_groups // tp
 
@@ -566,7 +579,12 @@ def save_mgmodel(mgmodel, args):
     full_model = mgmodel.state_dict_for_save_checkpoint()
     
     for k in list(full_model.keys()):
-        if full_model[k] is None:
+        if 'extra_state' in k:
+            # NOTE: since TE 1.14, fp8 metadata will be saved as tensor. 
+            # Always drop these values in the MG ckpt to avoid potential issue.
+            # This should work fine because fp8 metadata is not supported by HF ckpt.
+            full_model[k] = None
+        elif full_model[k] is None:
             full_model.pop(k)
 
     if (

@@ -9,7 +9,7 @@
 
 ## 安装
 
-请在阿里云人工智能平台PAI产品中填写专属镜像地址： `dsw-registry.cn-wulanchabu.cr.aliyuncs.com/pai/pai-megatron-patch-vlm:24.11` 
+请在阿里云人工智能平台PAI产品中填写专属镜像地址： `dsw-registry.cn-wulanchabu.cr.aliyuncs.com/pai/pai-megatron-patch:25.01` 
 
 运行下列代码克隆Pai-Megatron-Patch
 ```bash
@@ -131,7 +131,7 @@ SP=${13}                        # 是否启用序列并行: true, false
 DO=${14}                        # 是否使用Megatron版Zero-1降显存优化器: true, false
 FL=${15}                        # 是否优先使用Flash Attention: true, false
 AC=${16}                        # 激活检查点模式: sel, full, offload, false
-OPTIMIZER_OFFLOAD=${17}         # 是否启用Offload optimizer: false, static, auto
+OPTIMIZER_OFFLOAD=${17}         # 是否启用Offload optimizer: false, 或输入0～1的小数作为参数offload比例
 SAVE_INTERVAL=${18}             # 保存ckpt的间隔
 DATASET_PATH=${19}              # 训练数据集路径
 VALID_DATASET_PATH=${20}        # 验证数据集路径
