@@ -473,13 +473,11 @@ def get_patch_args(parser):
         "valid if base optimizer is HybridAdam.",
     )
 
-    group.add_argument(
-        "--optimizer-offload-fraction",
-        type=float,
-        default=0.5,
-        help="Optimizer Offload Fraction used by static offload policy, "
-        "valid if base optimizer is HybridAdam",
+    patch_if_not_exist(
+        group,
+        "--optimizer-offload-fraction", type=float, default=0.5
     )
+
     group.add_argument(
         "--train-mode", default="pretrain", type=str, help="pretrain or finetune"
     )
@@ -571,6 +569,13 @@ def get_patch_args(parser):
         choices=["nvlm", "internvl", ""],
         default="",  # Default: Image tag not used.
         help="Surround image tokens with tags.",
+    )
+
+    group.add_argument("--use-multi-token-prediction", action="store_true")
+
+    group.add_argument(
+        "--num-mtp-predictor",
+        type=int,
     )
 
     return parser

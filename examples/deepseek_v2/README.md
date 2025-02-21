@@ -14,7 +14,7 @@
 
 ## 安装
 
-请在阿里云人工智能平台PAI产品中填写专属镜像地址： `dsw-registry.cn-wulanchabu.cr.aliyuncs.com/pai/pai-megatron-patch-vlm:24.11` 
+请在阿里云人工智能平台PAI产品中填写专属镜像地址： `dsw-registry.cn-wulanchabu.cr.aliyuncs.com/pai/pai-megatron-patch:25.01` 
 
 运行下列代码克隆Pai-Megatron-Patch
 ```bash
@@ -59,7 +59,6 @@ text \
 wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/deepseek-datasets/mmap_deepseekv2_datasets_text_document.bin
 wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/deepseek-datasets/mmap_deepseekv2_datasets_text_document.idx
 ```
-
 
 ## Megatron-Core-MoE模型训练流程
 ### Megatron-Core-MoE模型格式转换
@@ -129,7 +128,7 @@ DO=${15}                        # 是否使用Megatron版Zero-1降显存优化�
 FL=${16}                        # 是否优先使用Flash Attention: true, false
 SFT=${17}                       # 是否执行微调训练: true, false
 AC=${18}                        # 激活检查点模式: sel, full, offload, false
-OPTIMIZER_OFFLOAD=${19}         # 是否启用Offload optimizer: false, static, auto
+OPTIMIZER_OFFLOAD=${19}         # 是否启用Offload optimizer: false
 SAVE_INTERVAL=${20}             # 保存ckpt的间隔
 DATASET_PATH=${21}              # 训练数据集路径
 VALID_DATASET_PATH=${22}        # 验证数据集路径

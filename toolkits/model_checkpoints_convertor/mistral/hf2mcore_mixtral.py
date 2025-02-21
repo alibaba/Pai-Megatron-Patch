@@ -21,30 +21,10 @@ import types
 from collections import OrderedDict
 
 from transformers import AutoModelForCausalLM, AutoConfig, AutoTokenizer, MixtralConfig
-from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint
-
-import numpy as np
-from collections.abc import Mapping, Sequence
-@torch.inference_mode()
-def clone_state_dict(elem):
-    """clone all tensors in the elem to cpu device.
-    """
-    elem_type = type(elem)
-    if isinstance(elem, torch.Tensor):
-        elem = elem.clone()
-    elif isinstance(elem, (np.ndarray, str)):
-        pass
-    elif isinstance(elem, Mapping):
-        elem = dict(elem)
-        for k, v in elem.items():
-            elem[k] = clone_state_dict(v)
-        elem = elem_type(elem)
-    elif isinstance(elem, Sequence):
-        elem = list(elem)
-        for i in range(len(elem)):
-            elem[i] = clone_state_dict(elem[i])
-        elem = elem_type(elem)
-    return elem
+from toolkits.model_checkpoints_convertor.utils import (
+    save_state_dict,
+    save_hfmodel
+)
 
 def add_args(parser):
     parser.add_argument('--megatron-path',
@@ -258,7 +238,7 @@ def get_megatron_sharded_states(args, tp_size, pp_size, ep_size, pp_rank):
             print(f"Loading {sub_dir_name}...")
             checkpoint_name = os.listdir(os.path.join(args.load_path, sub_dir_name))[0]
             checkpoint_path = os.path.join(args.load_path, sub_dir_name, checkpoint_name)
-            state_dict = torch.load(checkpoint_path, map_location="cpu")
+            state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
             ep_length = len([i for i in state_dict['model'] if 'linear_fc2.weight' in i and 'decoder.layers.0' in i])
             # combine experts within a tensor_parallel
             for key, value in list(state_dict['model'].items()):
@@ -531,14 +511,15 @@ def convert_checkpoint_from_transformers_to_megatron(args):
 
                 params = internal_state_dict[layer_name].to(dtype)
                 # handle layernorm
+                extra_state_name = None
                 if op_name.startswith("input_layernorm") and weight_or_bias == "weight":
                     out_name = "self_attention.linear_qkv"
                     layer_name = f"layers.{layer}.{out_name}.layer_norm_weight"
-
+                    extra_state_name = f"layers.{layer}.{out_name}._extra_state"
                 elif op_name.startswith("post_attention_layernorm") and weight_or_bias == "weight":
-                    out_name = "mlp.linear_fc1.layer_norm_weight"
-                    layer_name = f"layers.{layer}.{out_name}"
-
+                    out_name = "pre_mlp_layernorm"
+                    layer_name = f"layers.{layer}.{out_name}.weight"
+                    extra_state_name = f"layers.{layer}.{out_name}._extra_state"
                 # handle attention K, V, Q weights
                 elif op_name.startswith("self_attn.query") and weight_or_bias == "weight":
                     # transformers stores D X (3*D) but Megatron-LM expects (3*D) X D.
@@ -550,7 +531,6 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                         hidden_size_per_head,
                     )
                     layer_name = f"layers.{layer}.{op_name}.{weight_or_bias}"
-
                 elif op_name.startswith("self_attn.key_value") and weight_or_bias == "weight":
                     # transformers stores D X (3*D) but Megatron-LM expects (3*D) X D.
                     params = transformers_to_megatron_fix_query_key_value_ordering(
@@ -561,14 +541,14 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                         hidden_size_per_head,
                     )
                     layer_name = f"layers.{layer}.{op_name}.{weight_or_bias}"
-
                 # handle attention and mlp weights
                 elif weight_or_bias == "weight":
                     out_name = internal_to_output_mapping.get(op_name, None)
                     if out_name is None:
                         continue
                     layer_name = f"layers.{layer}.{out_name}.{weight_or_bias}"
-
+                    if out_name not in ['linear_fc1_1', 'mlp.router', 'linear_fc1_2']:
+                        extra_state_name = f"layers.{layer}.{out_name}._extra_state"
                 # skip
                 else:
                     continue
@@ -583,6 +563,9 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                         params[i].clone() if (
                                     op_name + "." + weight_or_bias in tensor_parallel_params) else params.clone()
                     )
+                    if extra_state_name is not None:
+                        if 'linear_fc1_' not in extra_state_name:
+                            params_dict["decoder." + extra_state_name] = None
 
             for i in range(args.target_tensor_model_parallel_size):
 
@@ -616,6 +599,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 group_qkv_weight = torch.cat([group_query_weight, group_kv_weight], dim=1)
                 params_dict["decoder." + f"layers.{layer}.self_attention.linear_qkv.weight"] = \
                     group_qkv_weight.view(-1, hidden_size)
+                params_dict["decoder." + f"layers.{layer}.self_attention.linear_qkv._extra_state"] = None
 
         if pp_rank == args.target_pipeline_model_parallel_size - 1:
             # handle final layernorm
@@ -625,6 +609,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 for i in range(args.target_tensor_model_parallel_size):
                     params_dict = get_element_from_dict_by_path(output_state_dict[i], "model")
                     params_dict[layer_name] = params.clone()
+                    params_dict["decoder.final_layernorm._extra_state"] = None
 
             # add the embedding
             for i in range(args.target_tensor_model_parallel_size):
@@ -664,8 +649,12 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                     expert_group_id = expert_group_mapping[eid]
                     local_expert_id = expert_local_mapping[eid]
                     keywords[6] = str(local_expert_id)
-                    ep_state_dict[expert_group_id][".".join(keywords)] = output_state_dict[tp_rank]['model'][
-                        key].clone()
+
+                    ep_state_dict[expert_group_id][".".join(keywords)] = (
+                        output_state_dict[tp_rank]['model'][key].clone() 
+                        if hasattr(output_state_dict[tp_rank]['model'][key], 'clone') 
+                        else output_state_dict[tp_rank]['model'][key]
+                    )
                     output_state_dict[tp_rank]['model'].pop(key)
 
             for ep_rank in range(args.target_expert_model_parallel_size):
@@ -676,7 +665,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 checkpoint_name = "model_optim_rng.pt"
                 checkpoint_path = os.path.join(save_dir, checkpoint_name)
                 output_state_dict[tp_rank]['model'].update(ep_state_dict[ep_rank])
-                torch.save(clone_state_dict(output_state_dict[tp_rank]), checkpoint_path)
+                save_state_dict(args, [output_state_dict[tp_rank]['model']], checkpoint_path, save_args=False)
 
 
 def convert_checkpoint_from_megatron_to_transformers(args):
@@ -694,7 +683,12 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     # Saving config and tokenzier files
     os.system("cp -rf " + args.load_path + "/*.json " + args.save_path)
     os.system("cp -rf " + args.load_path + "/tokenizer.model " + args.save_path)
-    args.load_path = os.path.join(args.load_path, 'release')
+
+    tracker_filepath = os.path.join(args.load_path, "latest_checkpointed_iteration.txt")
+    with open(tracker_filepath, "r") as f:
+        tag = f.readline()
+
+    args.load_path = os.path.join(args.load_path, tag)
     import glob
     if glob.glob(args.load_path + "/mp_rank*/distrib*"):
         # if os.path.exists(args.load_path+"/mp_rank*/distrib*"):
@@ -913,39 +907,15 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     if args.print_checkpoint_structure:
         recursive_print(None, output_state_dict)
 
-    # # Store the config to file.
-    # print("Saving config")
-    # config.save_pretrained(args.save_path)
-
-    # Store the state_dict to file.
     max_shard_size = int(args.max_shard_size) if args.max_shard_size.isdigit() else args.max_shard_size
-    shards, index = shard_checkpoint(output_state_dict, max_shard_size=max_shard_size)
-
-    # Save the model
-    if not os.path.exists(args.save_path):
-        os.system(f'mkdir -p {args.save_path}')
-    for shard_file, shard in shards.items():
-        torch.save(clone_state_dict(shard), os.path.join(args.save_path, shard_file))
-
-    if index is None:
-        print(f"Model weights saved in {os.path.join(args.save_path, WEIGHTS_NAME)}")
-    else:
-        save_index_file = os.path.join(args.save_path, WEIGHTS_INDEX_NAME)
-        # Save the index as well
-        with open(save_index_file, "w", encoding="utf-8") as f:
-            content = json.dumps(index, indent=2, sort_keys=True) + "\n"
-            f.write(content)
-        print(
-            f"The model is bigger than the maximum size per checkpoint ({args.max_shard_size}) and is going to be "
-            f"split in {len(shards)} checkpoint shards. You can find where each parameters has been saved in the "
-            f"index located at {save_index_file}."
-        )
-
+    args.save_safetensors = False
+    save_hfmodel(args, output_state_dict, max_shard_size)
 
 def main():
     parser = argparse.ArgumentParser()
     parser = add_args(parser)
     args = parser.parse_args()
+    args.save = args.save_path
     if args.convert_checkpoint_from_megatron_to_transformers:
         convert_checkpoint_from_megatron_to_transformers(args)
     else:

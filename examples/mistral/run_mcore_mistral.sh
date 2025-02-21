@@ -255,6 +255,7 @@ if [ $SFT = true ]; then
     PREFIX="finetune-mcore-mistral-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
     sft_option=" \
          --eod-mask-loss \
+         --calculate-per-token-loss \
          --train-mode finetune"
 else
     TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
@@ -270,12 +271,12 @@ if [ ${MP_DATASET_TYPE} = "raw" ]; then
         --train-data-path ${DATASET_PATH} \
         --valid-data-path ${VALID_DATASET_PATH} \
         --dataloader-type cyclic \
-        --dataset LLama-SFT-Raw"
+        --dataset JSON-SFT"
 else
     dataset_option=" \
         --data-path ${DATASET_PATH} \
         --split 99,1,0 \
-        --dataset LLama-Pretrain-Idxmap"
+        --dataset MMAP"
 fi
 
 if [ ${MP_SFT_PACKING} = true ]; then
@@ -351,6 +352,7 @@ megatron_options="  \
         --position-embedding-type rope \
         --rotary-base ${ROPE_THETA}
         --disable-bias-linear \
+        --ckpt-format torch \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_mcore_mistral.py

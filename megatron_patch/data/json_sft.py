@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Alibaba PAI Team.
+# Copyright (c) 2025 Alibaba PAI Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,13 +26,19 @@ from tqdm import tqdm
 
 from megatron_patch.tokenizer import get_tokenizer
 
-class LLamaSFTDataset(torch.utils.data.Dataset):
-    """A class for processing a LLama text dataset"""
+class JSONSFTDataset(torch.utils.data.Dataset):
+    """
+    Experimental: This dataset is aimed for SFT of arbitrary models with a default chat_template, 
+    but not tested on all cases.
+
+    A class for processing a conversation dataset
+    """
 
     def __init__(self, path, max_padding_length, split='train'):
+        super().__init__()
         self.tokenizer = get_tokenizer()
         assert hasattr(self.tokenizer, 'apply_chat_template'), \
-            "The LLama-SFT-Raw Dataset is valid for tokenizers with chat template, please provide a template."
+            "The SFT-Raw Dataset is valid for tokenizers with chat template, please provide a template."
         self.IGNORE_INDEX = self.tokenizer.pad_token_id
         self.eos_token_id = self.tokenizer.eos_token_id
         self.is_pad_token_eos_token = self.tokenizer.pad_token_id == self.eos_token_id
@@ -157,35 +163,6 @@ class LLamaSFTDataset(torch.utils.data.Dataset):
             labels.append(label)
 
         return dict(input_ids=input_ids, labels=labels)
-
-    def tokenize(self, strings, tokenizer):
-        """
-        This API is only for consistency and not used in the SFT dataset.
-        """
-
-        tokenized_list = [
-            tokenizer(
-                text,
-                return_tensors='pt',
-                padding='max_length',
-                max_length=self.max_padding_length,
-                truncation=True,
-                add_special_tokens=False
-            ) for text in strings
-        ]
-        input_ids = labels = [
-            tokenized.input_ids[0] for tokenized in tokenized_list
-        ]
-        input_ids_lens = labels_lens = [
-            (tokenized.input_ids != tokenizer.pad_token_id).sum().item()
-            for tokenized in tokenized_list
-        ]
-        return dict(
-            input_ids=input_ids,
-            labels=labels,
-            input_ids_lens=input_ids_lens,
-            labels_lens=labels_lens,
-        )
 
     def gpt_convert_example_to_feature(self, sample):
         """
