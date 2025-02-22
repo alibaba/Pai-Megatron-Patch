@@ -67,7 +67,7 @@ wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models
 MODEL_SIZE=$1                  # 模型参数：A37B
 SOURCE_CKPT_PATH=$2            # 源路径
 TARGET_CKPT_PATH=$3            # 目标路径
-TP=$4                          # 模型并行度, 当前只能设置为1
+TP=$4                          # 模型并行度
 PP=$5                          # 流水并行度
 EP=$6                          # 专家并行度
 PR=$7                          # 转换精度
@@ -82,10 +82,10 @@ cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/deepseek
 bash hf2mcore_deepseek_v3_moe_convertor.sh \
 A37B \
 /mnt/deepseek-ckpts/DeepSeek-V3 \
-/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep16  \
+/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep8  \
 8 \
 8  \
-16 \
+8 \
 bf16 \
 false 
 ```
@@ -113,7 +113,7 @@ SP=${14}                        # 是否使用序列并行: true, false
 DO=${15}                        # 是否使用Megatron版Zero-1降显存优化器: true, false
 FL=${16}                        # 是否优先使用Flash Attention: false
 SFT=${17}                       # 是否执行微调训练: true, false
-AC=${18}                        # 激活检查点模式: sel, full, offload, false
+AC=${18}                        # 激活检查点模式: sel, full, offload, none
 OPTIMIZER_OFFLOAD=${19}         # 是否启用Offload optimizer: false, 或输入0～1的小数作为参数offload比例
 SAVE_INTERVAL=${20}             # 保存ckpt的间隔
 DATASET_PATH=${21}              # 训练数据集路径
@@ -144,7 +144,7 @@ bf16  \
 8   \
 8  \
 1 \
-16 \
+8 \
 true \
 true   \
 false \
@@ -154,7 +154,7 @@ false \
 100000  \
 /mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
 /mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
-/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep16  \
+/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep8  \
 1000000000  \
 10000   \
 /workspace/output_mcore_deepseek_pretrain
@@ -190,7 +190,7 @@ false \
 100000  \
 /mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
 /mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
-/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep16  \
+/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep8  \
 10000  \
 100   \
 /workspace/output_mcore_deepseek_finetune
@@ -223,7 +223,7 @@ false \
 100000  \
 /mnt/deepseek-datasets/alpaca_zh-train.json    \
 /mnt/deepseek-datasets/alpaca_zh-train.json   \
-/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep16  \
+/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep8  \
 10000  \
 100   \
 /workspace/output_mcore_deepseek_finetune
@@ -238,7 +238,7 @@ false \
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/deepseek
 bash hf2mcore_deepseek_v3_moe_convertor.sh \
 A37B \
-/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep16  \
+/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep8  \
 /mnt/deepseek-ckpts/DeepSeek-V3-mcore-to-hf    \
 1  \
 4  \
