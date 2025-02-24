@@ -447,7 +447,7 @@ def save_mgmodel(mgmodel, args):
                                     if expert_rank // num_local_experts != ep_rank:
                                         continue
                                     expert_local_rank = expert_rank % num_local_experts
-                                    k = k.replace(f'experts.{expert_rank}', f'experts.{expert_local_rank}')
+                                    k = k.replace(f'weight{expert_rank}', f'weight{expert_local_rank}')
                             target_v = v
                         elif 'linear_q_down_proj' in k or 'linear_kv_down_proj' in k:
                             #seg = v.shape[0] // args.tensor_model_parallel_size
@@ -466,6 +466,9 @@ def save_mgmodel(mgmodel, args):
                         elif 'linear_proj' in k and 'mtp_predictor' not in k:
                             seg = v.shape[1] // args.tensor_model_parallel_size
                             target_v = v[:, seg * tp_rank: seg * (tp_rank + 1)]
+                        elif 'mtp_predictor.mtp_modules.0.decoder.layers.0.self_attention.linear_proj' in k:
+                            seg = v.shape[1] // args.tensor_model_parallel_size
+                            target_v = v[:, seg * tp_rank: seg * (tp_rank + 1)]
                         elif 'decoder.layers.0.mlp.linear_fc2' in k or 'decoder.layers.1.mlp.linear_fc2' in k or 'decoder.layers.2.mlp.linear_fc2' in k:
                             seg = v.shape[1] // args.tensor_model_parallel_size
                             target_v = v[:, seg * tp_rank: seg * (tp_rank + 1)]
@@ -478,8 +481,8 @@ def save_mgmodel(mgmodel, args):
                             if expert_rank // num_local_experts != ep_rank:
                                 continue
                             expert_local_rank = expert_rank % num_local_experts
-                            k = k.replace(f'experts.{expert_rank}', f'experts.{expert_local_rank}')
-
+                            k = k.replace(f'weight{expert_rank}', f'weight{expert_local_rank}')
+                            """
                             if 'linear_fc1' in k:
                                 viewed = v.view(-1, args.moe_ffn_hidden_size, args.hidden_size)
                                 seg = args.moe_ffn_hidden_size // args.tensor_model_parallel_size
@@ -487,6 +490,8 @@ def save_mgmodel(mgmodel, args):
                             elif 'linear_fc2' in k:
                                 seg = v.shape[1] // args.tensor_model_parallel_size
                                 target_v = v[:, seg * tp_rank: seg * (tp_rank + 1)]
+                            """
+                            target_v = v
                         elif 'shared_experts' in k and 'gate' not in k:
                             if 'linear_fc1' in k:
                                 viewed = v.view(-1, args.moe_shared_expert_intermediate_size,
@@ -502,9 +507,11 @@ def save_mgmodel(mgmodel, args):
                         else:
                             target_v = v
 
-                        if "word_embeddings" in k:
+                        if "embedding.word_embeddings" in k and "mtp_embedding" not in k:
                             if pp_rank == 0:
                                 model_split[k] = target_v
+                        elif "mtp_embedding.word_embeddings" in k:
+                            model_split[k] = target_v
                         elif "output_layer" in k or "final_layernorm" in k or "mtp_modules" in k:
                             if pp_rank == args.pipeline_model_parallel_size - 1:
                                 model_split[k] = target_v
