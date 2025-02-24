@@ -32,11 +32,12 @@ wget -P $python_path/flashattn_hopper https://raw.githubusercontent.com/Dao-AILa
 ## 预训练数据集和模型下载
 
 ```bash
-# cd /mnt
-# mkdir deepseek-ckpts
-# cd deepseek-ckpts
-# git clone https://www.modelscope.cn/models/deepseek-ai/DeepSeek-V3
+cd /mnt
+mkdir deepseek-ckpts
+cd deepseek-ckpts
+git clone https://www.modelscope.cn/models/deepseek-ai/DeepSeek-V3
 
+cd /mnt
 mkdir deepseek-datasets
 wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/deepseek-datasets/SlimPajama.json
 wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/deepseek-datasets/alpaca_zh-train-general.json
@@ -82,10 +83,10 @@ cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/deepseek
 bash hf2mcore_deepseek_v3_moe_convertor.sh \
 A37B \
 /mnt/deepseek-ckpts/DeepSeek-V3 \
-/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep8  \
+/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep16  \
 8 \
 8  \
-8 \
+16 \
 bf16 \
 false 
 ```
@@ -105,7 +106,7 @@ MIN_LR=$6                       # 最小学习率
 SEQ_LEN=$7                      # 序列长度
 PAD_LEN=$8                      # Padding长度
 PR=${9}                         # 训练精度: fp16, bf16, fp8
-TP=${10}                        # 模型并行度，当前只能设置为1
+TP=${10}                        # 模型并行度
 PP=${11}                        # 流水并行度
 CP=${12}                        # 上下文并行度
 EP=${13}                        # 专家并行度
@@ -144,17 +145,17 @@ bf16  \
 8   \
 8  \
 1 \
-8 \
+16 \
 true \
 true   \
 false \
 false \
 sel   \
-false \
+1.0 \
 100000  \
 /mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
 /mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
-/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep8  \
+/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep16  \
 1000000000  \
 10000   \
 /workspace/output_mcore_deepseek_pretrain
@@ -186,11 +187,11 @@ true   \
 false \
 true \
 sel   \
-false \
+1.0 \
 100000  \
 /mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
 /mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
-/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep8  \
+/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep16  \
 10000  \
 100   \
 /workspace/output_mcore_deepseek_finetune
@@ -210,20 +211,20 @@ A37B   \
 1024  \
 1024  \
 bf16  \
-1   \
-4  \
+8   \
+8  \
 1 \
-2 \
+16 \
 true \
 true   \
 false \
 true \
 sel   \
-false \
+1.0 \
 100000  \
 /mnt/deepseek-datasets/alpaca_zh-train.json    \
 /mnt/deepseek-datasets/alpaca_zh-train.json   \
-/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep8  \
+/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep16  \
 10000  \
 100   \
 /workspace/output_mcore_deepseek_finetune
@@ -238,7 +239,7 @@ false \
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/deepseek
 bash hf2mcore_deepseek_v3_moe_convertor.sh \
 A37B \
-/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep8  \
+/mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep16  \
 /mnt/deepseek-ckpts/DeepSeek-V3-mcore-to-hf    \
 1  \
 4  \
