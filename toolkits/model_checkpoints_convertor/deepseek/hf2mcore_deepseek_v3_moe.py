@@ -463,7 +463,7 @@ def save_mgmodel(mgmodel, args):
                         elif 'linear_kv_up_proj' in k and 'layer_norm_weight' not in k:
                             seg = v.shape[0] // args.tensor_model_parallel_size
                             target_v = v[seg * tp_rank:seg * (tp_rank + 1)]
-                        elif 'linear_proj' in k or 'mtp_predictor' not in k:
+                        elif 'linear_proj' in k and 'mtp_predictor' not in k:
                             seg = v.shape[1] // args.tensor_model_parallel_size
                             target_v = v[:, seg * tp_rank: seg * (tp_rank + 1)]
                         elif 'decoder.layers.0.mlp.linear_fc2' in k or 'decoder.layers.1.mlp.linear_fc2' in k or 'decoder.layers.2.mlp.linear_fc2' in k:
