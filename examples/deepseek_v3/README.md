@@ -80,9 +80,12 @@ HG_CKPT_PATH=$9                # HF的CKPT的路径
 ```bash
 export MP_PP0_LAYERS=5
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/deepseek
+
+python fp8_cast_bf16.py --input-fp8-hf-path /mnt/deepseek-ckpts/DeepSeek-V3 --output-bf16-hf-path /mnt/deepseek-ckpts/DeepSeek-V3-bf16
+
 bash hf2mcore_deepseek_v3_moe_convertor.sh \
 A37B \
-/mnt/deepseek-ckpts/DeepSeek-V3 \
+/mnt/deepseek-ckpts/DeepSeek-V3-bf16 \
 /mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep16  \
 8 \
 8  \
