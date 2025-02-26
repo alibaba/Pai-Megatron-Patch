@@ -304,6 +304,32 @@ def get_batch_on_this_tp_rank_original(data_iterator, per_seq_average=False):
 
     return batch
 
+def get_position_id_on_this_tp_rank_idxmap_sft_packing(data_iterator):
+    args = get_args()
+    tokenizer = get_tokenizer()
+    def _broadcast(item):
+        if item is None:
+            return
+        torch.distributed.broadcast(item, mpu.get_tensor_model_parallel_src_rank(),
+                                    group=mpu.get_tensor_model_parallel_group())
+        
+    if mpu.get_tensor_model_parallel_rank() == 0:
+        if isinstance(data_iterator, dict):
+            data = data_iterator
+        else:
+            data = next(data_iterator)
+
+        actual_seqlen = args.seq_length
+        data['tokens'] = data['tokens'].long()
+        tokens = data['tokens'][..., :actual_seqlen]
+        position_ids = get_ltor_position_ids_packed_seq(tokens).cuda(non_blocking=True)
+    else:
+        # dtype: long
+        position_ids = torch.empty((args.micro_batch_size, args.seq_length), dtype=torch.int64,
+                                   device=torch.cuda.current_device())
+    _broadcast(position_ids)
+    return position_ids
+
 def get_batch_on_this_tp_rank_idxmap_sft(data_iterator, per_seq_average=False):
     args = get_args()
     tokenizer = get_tokenizer()

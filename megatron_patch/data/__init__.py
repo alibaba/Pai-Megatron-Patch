@@ -88,6 +88,11 @@ def is_dataset_built_on_rank():
         mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()
     ) and mpu.get_tensor_model_parallel_rank() == 0
 
+
+def is_dataset_built_on_rank_packing():
+    return mpu.get_tensor_model_parallel_rank() == 0
+
+
 def build_dataset(args, train_val_test_num_samples):
     from megatron.core.datasets.gpt_dataset import (
         GPTDataset,
@@ -105,13 +110,16 @@ def build_dataset(args, train_val_test_num_samples):
     elif args.dataset == 'MMAP':
         config = core_gpt_dataset_config_from_args(args)
         dataset_type = MockGPTDataset if config.mock else GPTDataset
+        should_build_dataset = is_dataset_built_on_rank
         if args.train_mode != "pretrain":
             # NOTE: in data preparation scripts, the sequence is collect into (seq, labels)
             # therefore we need to double the seqlen
             config.sequence_length = config.sequence_length * 2
+            if args.reset_position_ids:
+                should_build_dataset = is_dataset_built_on_rank_packing
 
         train_dataset, val_dataset, test_dataset = BlendedMegatronDatasetBuilder(
-            dataset_type, train_val_test_num_samples, is_dataset_built_on_rank, config
+            dataset_type, train_val_test_num_samples, should_build_dataset, config
         ).build()
         print_rank_0("> finished creating GPT datasets ...")
     else:
