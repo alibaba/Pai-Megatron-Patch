@@ -31,7 +31,8 @@ from megatron.core.packed_seq_params import PackedSeqParams
 from megatron_patch.data.utils import (
     get_batch_on_this_tp_rank_original, 
     get_batch_on_this_tp_rank_idxmap_sft,
-    _get_batch_on_this_tp_rank
+    _get_batch_on_this_tp_rank,
+    get_position_id_on_this_tp_rank_idxmap_sft_packing
 )
 
 _TORCH_MAJOR, _TORCH_MINOR = torch.__version__.split('.')[:2]
@@ -64,12 +65,27 @@ if int(_TORCH_MAJOR) >= 2 and int(_TORCH_MINOR) >= 6:
 
 def get_batch(data_iterator):
     """Generate a batch."""
+    args = get_args()
 
     # TODO: this is pretty hacky, find a better way
     if (not mpu.is_pipeline_first_stage()) and (not mpu.is_pipeline_last_stage()):
-        return None, None, None, None, None, None, None
+        packed_seq_params = None
+        if args.dataset == 'MMAP' and args.train_mode == "finetune" and args.reset_position_ids:
+            position_ids = get_position_id_on_this_tp_rank_idxmap_sft_packing(data_iterator)
+            position_ids = position_ids[0] # shape: [seq_length]
+            start_indices = (position_ids == 0).nonzero(as_tuple=True)[0]
+            seqlens = start_indices[1:] - start_indices[:-1]
+            # NOTE: cu_seqlens: [0, A1, A1+A2, A1+A2+A3, ..., seq_len]
+            cu_seqlens = torch.zeros(start_indices.shape[0] + 1, device=position_ids.device, dtype=torch.int)
+            cu_seqlens[1:-1] = torch.cumsum(seqlens, dim=0)
+            cu_seqlens[-1] = position_ids.shape[0]
+            packed_seq_params = PackedSeqParams(
+                cu_seqlens_q=cu_seqlens,
+                cu_seqlens_kv=cu_seqlens,
+                qkv_format='thd'
+            )
 
-    args = get_args()
+        return None, None, None, None, None, None, packed_seq_params
 
     if args.dataset == 'JSON-SFT':
         if args.train_mode == "pretrain":
@@ -189,8 +205,3 @@ def forward_step(data_iterator, model):
     output_tensor = model(tokens, position_ids, attention_mask, labels=labels, packed_seq_params=packed_seq_params)
 
     return output_tensor, partial(loss_func, loss_mask, num_seqs)
-
-def is_dataset_built_on_rank():
-    return (
-        mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()
-    ) and mpu.get_tensor_model_parallel_rank() == 0
