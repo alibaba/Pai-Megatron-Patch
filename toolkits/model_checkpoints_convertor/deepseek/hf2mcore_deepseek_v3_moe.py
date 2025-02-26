@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import safetensors.torch
 import sys
 import os
@@ -544,6 +545,8 @@ def main():
         hf_model = AutoModelForCausalLM.from_pretrained(args.load, trust_remote_code=True, torch_dtype=config.torch_dtype)
         mg_model = model_provider()
         convert_checkpoint_from_transformers_to_megatron(hf_model, mg_model, args)
+        del hf_model
+        gc.collect()
         save_mgmodel(mg_model, args)
 
 if __name__ == "__main__":

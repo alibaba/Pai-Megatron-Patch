@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import json
 import logging
+import gc
 
 from transformers.modeling_utils import (
     WEIGHTS_INDEX_NAME, 
@@ -166,3 +167,5 @@ def save_state_dict(args, model_chunks, checkpoint_name, has_vpp: bool=False, sa
     os.makedirs(os.path.dirname(checkpoint_name), exist_ok=True)
     print(f'save model part {checkpoint_name}')
     torch.save(clone_state_dict(state_dict), checkpoint_name)
+    del state_dict
+    gc.collect()
