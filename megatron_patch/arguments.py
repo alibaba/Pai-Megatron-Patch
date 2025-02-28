@@ -292,13 +292,6 @@ def get_patch_args(parser):
     group.add_argument("--cvcuda-image-processing", action="store_true")
 
     group.add_argument(
-        "--expert-tensor-parallelism",
-        action="store_true",
-        default=False,
-        help="use tensor parallelism for expert layers in MoE",
-    )
-
-    group.add_argument(
         "--expert-interval",
         type=int,
         default=2,

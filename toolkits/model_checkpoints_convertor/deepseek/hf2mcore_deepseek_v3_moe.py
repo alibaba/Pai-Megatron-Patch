@@ -406,7 +406,7 @@ def save_mgmodel(mgmodel, args):
         num_local_experts = args.num_experts // args.expert_model_parallel_size if args.num_experts else 0
 
     if (
-        args.tensor_model_parallel_size > 1
+        args.tensor_model_parallel_size >= 1
         and args.pipeline_model_parallel_size > 1
         and args.num_experts % args.expert_model_parallel_size == 0
     ):
@@ -442,13 +442,6 @@ def save_mgmodel(mgmodel, args):
                             continue
 
                         if not isinstance(v, torch.Tensor):
-                            if 'experts' in k:
-                                if 'extra_state' not in k:
-                                    expert_rank = int(re.findall(pattern, k)[0])
-                                    if expert_rank // num_local_experts != ep_rank:
-                                        continue
-                                    expert_local_rank = expert_rank % num_local_experts
-                                    k = k.replace(f'weight{expert_rank}', f'weight{expert_local_rank}')
                             target_v = v
                         elif 'linear_q_down_proj' in k or 'linear_kv_down_proj' in k:
                             #seg = v.shape[0] // args.tensor_model_parallel_size
