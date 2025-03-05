@@ -178,8 +178,8 @@ def load_megatron_model(args):
                                 local_expert_rank = int(re.findall(pattern, k)[0])
                                 expert_rank = local_expert_rank + num_local_experts * ep_rank
                                 k = k.replace(f'local_experts.{local_expert_rank}', f'local_experts.{expert_rank}')
-                            pattern = re.compile(r'\d+')
-                            res = pattern.findall(k)
+                            layer_pattern = re.compile(r'\d+')
+                            res = layer_pattern.findall(k)
                             tgt = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy[(pp_rank, int(res[0]))]), k)
                             if 'linear_proj' in k or 'linear_q_proj' in k or 'linear_q_down_proj' in k or 'linear_q_up_proj'in k or \
                                     'linear_kv_up_proj' in k or 'linear_kv_down_proj' in k or 'decoder.layers.0.mlp.linear_fc2' in k or \
