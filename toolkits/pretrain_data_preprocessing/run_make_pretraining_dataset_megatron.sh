@@ -10,6 +10,7 @@ tokenizer=$2
 json_keys=$3
 output_data_dir=$4
 load_dir=$5
+dataset_name=$6
 
 INPUT="${input_data_dir}"
 
@@ -70,6 +71,18 @@ elif [ $tokenizer = "LLama3Tokenizer" ]; then
   --workers 16 \
   --partitions 1 \
   --keep-sequential-samples \
+  --append-eod
+
+elif [ $tokenizer = "GPT2BPETokenizer" ]; then
+  python preprocess_data_megatron.py \
+  --input ${INPUT} \
+  --output-prefix ${output_data_dir}/mmap_${dataset_name}_datasets \
+  --patch-tokenizer-type GPT2BPETokenizer \
+  --workers 16 \
+  --partitions 1 \
+  --keep-sequential-samples \
+  --vocab-file /mnt/data/jerry.lp/Megatron-LM/gpt2-vocab.json \
+  --merge-file /mnt/data/jerry.lp/Megatron-LM/gpt2-merges.txt \
   --append-eod
 
 fi

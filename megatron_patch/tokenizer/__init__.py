@@ -449,8 +449,8 @@ def build_tokenizer(args):
         args.padded_vocab_size = 49152
 
     elif args.patch_tokenizer_type == 'GPT2BPETokenizer':
-        from megatron import get_tokenizer
-        tokenizer = get_tokenizer()
+        from megatron.training.tokenizer.tokenizer import _GPT2BPETokenizer
+        tokenizer = _GPT2BPETokenizer(args.vocab_file, args.merge_file)
         
     elif args.patch_tokenizer_type == 'LLama2Tokenizer' or args.patch_tokenizer_type == 'MixtralTokenizer':
         from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer

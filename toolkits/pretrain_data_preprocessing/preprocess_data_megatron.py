@@ -68,7 +68,10 @@ class Encoder(object):
         return json.dumps(output), len(json_line), total_token_count
 
     def encode(self, json_line):
-        data = json.loads(json_line)
+        try:
+            data = json.loads(json_line)
+        except:
+            return {}, {}, 0, 0
         ids = {}
         lens = {}
         for key in self.args.json_keys:
@@ -83,6 +86,8 @@ class Encoder(object):
             for sentence in sentences:
                 if self.args.patch_tokenizer_type in ["DeepSeekV2Tokenizer", "Qwen2Tokenizer", "LLama3Tokenizer", "LLama2Tokenizer"]:
                     sentence_ids = Encoder.tokenizer.tokenizer(sentence, add_special_tokens=False)['input_ids']
+                elif self.args.patch_tokenizer_type == "GPT2BPETokenizer":
+                    sentence_ids = Encoder.tokenizer.tokenize(sentence)
                 else:
                     sentence_ids = Encoder.tokenizer(sentence, add_special_tokens=False)['input_ids']
                 if not sentence_ids:
@@ -241,7 +246,7 @@ def get_args():
         '--patch-tokenizer-type',
         type=str,
         required=True,
-        choices=['Qwen2Tokenizer', 'LLamaTokenizer', 'DeepSeekV2Tokenizer', 'LLama3Tokenizer', 'LLama2Tokenizer'],
+        choices=['Qwen2Tokenizer', 'LLamaTokenizer', 'DeepSeekV2Tokenizer', 'LLama3Tokenizer', 'LLama2Tokenizer', 'GPT2BPETokenizer'],
         help='What type of tokenizer to use.',
     )
     group.add_argument('--load',
