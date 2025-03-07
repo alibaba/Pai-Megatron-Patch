@@ -501,7 +501,10 @@ def save_mgmodel(mgmodel, args):
                         else:
                             target_v = v
 
-                        if "embedding.word_embeddings" in k and "mtp_embedding" not in k:
+                        if 'experts' in k and 'shared_experts' not in k:
+                            if tp_rank == 0:
+                                model_split[k] = target_v
+                        elif "embedding.word_embeddings" in k and "mtp_embedding" not in k:
                             if pp_rank == 0:
                                 model_split[k] = target_v
                         elif "mtp_embedding.word_embeddings" in k:
