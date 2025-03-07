@@ -505,7 +505,8 @@ def save_mgmodel(mgmodel, args):
                             if pp_rank == 0:
                                 model_split[k] = target_v
                         elif "mtp_embedding.word_embeddings" in k:
-                            model_split[k] = target_v
+                            if pp_rank == args.pipeline_model_parallel_size - 1:
+                                model_split[k] = target_v
                         elif "output_layer" in k or "final_layernorm" in k or "mtp_modules" in k:
                             if pp_rank == args.pipeline_model_parallel_size - 1:
                                 model_split[k] = target_v
