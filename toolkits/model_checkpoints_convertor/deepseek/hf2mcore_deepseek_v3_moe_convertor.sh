@@ -143,6 +143,7 @@ torchrun ${DISTRIBUTED_ARGS} hf2mcore_deepseek_v3_moe.py \
     --use-rope-scaling \
     --use-multi-token-prediction \
     --num-mtp-predictor 1 \
+    --no-initialization \
     ${moe_options} \
     ${convert_options} \
     ${pr_options} \
