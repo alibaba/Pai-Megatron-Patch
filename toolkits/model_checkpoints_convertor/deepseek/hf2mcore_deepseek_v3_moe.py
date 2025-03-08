@@ -420,7 +420,7 @@ def save_mgmodel(mgmodel, args):
             pp_layers_per_stage = [args.num_layers // args.pipeline_model_parallel_size] * args.pipeline_model_parallel_size
 
         for tp_rank in range(args.tensor_model_parallel_size):
-            for ep_rank in range(args.expert_model_parallel_size):
+            for ep_rank in range(tp_rank, args.expert_model_parallel_size, args.tensor_model_parallel_size):
                 for pp_rank in range(args.pipeline_model_parallel_size):
                     model_split = {}
                     layer_offset = sum(pp_layers_per_stage[:pp_rank])
