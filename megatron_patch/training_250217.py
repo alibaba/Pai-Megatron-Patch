@@ -21,13 +21,12 @@ import time
 # The earliest we can measure the start time.
 _TRAIN_START_TIME = time.time()
 import torch
-
+from megatron.core.fp8_utils import is_float8tensor
 from megatron.core import mpu, tensor_parallel
 from megatron.core.utils import (
     check_param_hashes_across_dp_replicas,
     get_model_config,
     StragglerDetector,
-    is_float8tensor,
 )
 from megatron.training.checkpointing import load_checkpoint
 from megatron.training.checkpointing import save_checkpoint

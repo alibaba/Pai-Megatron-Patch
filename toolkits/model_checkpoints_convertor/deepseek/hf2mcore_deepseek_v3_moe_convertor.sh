@@ -17,7 +17,7 @@ HF_CKPT_PATH=$9
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
-export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250217
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM
 
 if [ $MODEL_SIZE = A37B ]; then
 
@@ -48,7 +48,16 @@ moe_options=" \
     --target-expert-model-parallel-size ${EP} \
     --expert-tensor-parallel-size 1 \
     --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
-    --moe-router-load-balancing-type aux_loss \
+    --moe-router-load-balancing-type seq_aux_loss \
+    --moe-router-topk-scaling-factor 2.5 \
+    --moe-shared-expert-overlap \
+    --moe-router-enable-expert-bias \
+    --mscale 1.0 \
+    --mscale-all-dim 1.0 \
+    --moe-token-drop-policy probs \
+    --moe-router-pre-softmax \
+    --moe-router-score-function sigmoid \
+    --moe-router-bias-update-rate 0.001 \
     --moe-aux-loss-coeff 0.001 \
     --moe-layer-freq ([0]*3+[1]*58) \
     --moe-shared-expert-intermediate-size $((${MOE_INTERMEDIATE_SIZE} * ${NUM_SHARED_EXPERTS} )) \

@@ -3,7 +3,7 @@ set -e
 ENV=$1
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250217:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250310:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
 if [ $ENV = dsw ]; then
@@ -16,7 +16,7 @@ if [ $ENV = dsw ]; then
 elif [ $ENV = dlc ]; then
     NNODES=${WORLD_SIZE}
     NODE_RANK=${RANK}
-    GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU}
+    GPUS_PER_NODE=8
 fi
 
 
@@ -64,9 +64,8 @@ if [ $FL = true ]; then
     echo "MLA is not supported in flash-attn, set FL=false and rerun."
     exit -1
 elif [ $FL = false ]; then
-    export NVTE_FLASH_ATTN=0 NVTE_FUSED_ATTN=1
     attn_backend_option=" \
-        --attention-backend fused
+        --attention-backend auto
     "
 fi
 
@@ -95,11 +94,22 @@ moe_options=" \
     --moe-grouped-gemm \
     --moe-token-dispatcher-type alltoall \
     --moe-router-topk ${ROUTER_TOPK} \
+    --moe-router-group-topk 4 \
+    --moe-router-num-groups 8 \
     --num-experts ${NUM_EXPERTS} \
     --expert-model-parallel-size ${EP} \
     --expert-tensor-parallel-size 1 \
     --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
-    --moe-router-load-balancing-type aux_loss \
+    --moe-router-load-balancing-type seq_aux_loss \
+    --moe-router-topk-scaling-factor 2.5 \
+    --moe-shared-expert-overlap \
+    --moe-router-enable-expert-bias \
+    --mscale 1.0 \
+    --mscale-all-dim 1.0 \
+    --moe-token-drop-policy probs \
+    --moe-router-pre-softmax \
+    --moe-router-score-function sigmoid \
+    --moe-router-bias-update-rate 0.001 \
     --moe-aux-loss-coeff 0.001 \
     --moe-layer-freq '([0]*3+[1]*58)' \
     --moe-shared-expert-intermediate-size $((${MOE_INTERMEDIATE_SIZE} * ${NUM_SHARED_EXPERTS} )) \
@@ -293,7 +303,7 @@ mkdir -p ${TENSORBOARD_DIR}
 SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 mkdir -p ${SAVED_PRETRAIN_CHECKPOINT_PATH}
-find -L ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
+#find -L ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
 #find -L ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "merges.txt" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
 
 megatron_options="  \
@@ -341,7 +351,6 @@ megatron_options="  \
         --normalization RMSNorm \
         --norm-epsilon ${RMS_NORM_EPS} \
         --use-rotary-position-embeddings \
-        --no-bias-swiglu-fusion \
         --no-rope-fusion \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
@@ -354,9 +363,10 @@ megatron_options="  \
         --multi-latent-attention \
         --ckpt-format torch \
         --transformer-impl transformer_engine \
+        --no-masked-softmax-fusion \
         --use-rope-scaling \
         --use-multi-token-prediction \
-        --num-mtp-predictor 1
+        --num-mtp-predictor 1 \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_deepseek.py

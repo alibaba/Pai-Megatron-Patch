@@ -75,6 +75,7 @@ In the reinforcement learning section, the patch offers PPO training workflows, 
 
 
 ## Technical Reports
+- [基于 Megatron 的多模态大模型训练加速技术解析](https://mp.weixin.qq.com/s/USMOkRuy-J5UpxyluqsBmg)
 - [Pai-Megatron-Patch：围绕Megatron-Core打造大模型训练加速生态](https://mp.weixin.qq.com/s/BGyiJ90ZB75s3EP74KogeA)
 - [Meta Llama3.1模型在PAI-Megatron-Patch的最佳实践](https://help.aliyun.com/zh/pai/use-cases/best-practice-for-llama-3-1-in-pai-megatron-patch?spm=a2c4g.11186623.0.0.4cef730eqWHNY7)
 - [基于Megatron-Core的稀疏大模型训练工具：阿里云MoE大模型最佳实践](https://mp.weixin.qq.com/s/DkrWEEJ7IxirwWd3qB9Bng)
