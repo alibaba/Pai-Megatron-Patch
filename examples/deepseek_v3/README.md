@@ -156,8 +156,8 @@ false \
 sel   \
 1.0 \
 100000  \
-/mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
-/mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
+/mnt/deepseek-datasets/mmap_deepseekv3_datasets_text_document   \
+/mnt/deepseek-datasets/mmap_deepseekv3_datasets_text_document   \
 /mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep16  \
 1000000000  \
 10000   \
@@ -192,8 +192,8 @@ true \
 sel   \
 1.0 \
 100000  \
-/mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
-/mnt/deepseek-datasets/mmap_deepseekv2_datasets_text_document   \
+/mnt/deepseek-datasets/mmap_deepseekv3_datasets_text_document   \
+/mnt/deepseek-datasets/mmap_deepseekv3_datasets_text_document   \
 /mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-ep16  \
 10000  \
 100   \
