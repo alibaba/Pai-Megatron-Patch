@@ -76,7 +76,7 @@ NUM_ATTENTION_HEADS=128
 NUM_LAYERS=61
 INTERMEDIATE_SIZE=18432
 MOE_INTERMEDIATE_SIZE=2048
-MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
+MAX_POSITION_EMBEDDINGS=163840
 EXTRA_VOCAB_SIZE=467
 Q_LORA_RANK=1536
 KV_LORA_RANK=512
@@ -106,8 +106,6 @@ moe_options=" \
     --moe-router-enable-expert-bias \
     --mscale 1.0 \
     --mscale-all-dim 1.0 \
-    --moe-token-drop-policy probs \
-    --moe-router-pre-softmax \
     --moe-router-score-function sigmoid \
     --moe-router-bias-update-rate 0.001 \
     --moe-aux-loss-coeff 0.001 \
