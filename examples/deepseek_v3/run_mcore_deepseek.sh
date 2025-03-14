@@ -3,7 +3,7 @@ set -e
 ENV=$1
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250310:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250314:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
 if [ $ENV = dsw ]; then
@@ -16,7 +16,7 @@ if [ $ENV = dsw ]; then
 elif [ $ENV = dlc ]; then
     NNODES=${WORLD_SIZE}
     NODE_RANK=${RANK}
-    GPUS_PER_NODE=8
+    GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}
 fi
 
 
@@ -37,27 +37,28 @@ PR=$9
 TP=${10}
 PP=${11}
 CP=${12}
-EP=${13}
-SP=${14}
-DO=${15}
-FL=${16}
-SFT=${17}
+ETP=${13}
+EP=${14}
+SP=${15}
+DO=${16}
+FL=${17}
+SFT=${18}
 ### PARALLEL / BOOL OPTION ###
 
 ### OTHERS ###
-AC=${18}
-OPTIMIZER_OFFLOAD=${19}
-SAVE_INTERVAL=${20}
-DATASET_PATH=${21}
-VALID_DATASET_PATH=${22}
-PRETRAIN_CHECKPOINT_PATH=${23}
+AC=${19}
+OPTIMIZER_OFFLOAD=${20}
+SAVE_INTERVAL=${21}
+DATASET_PATH=${22}
+VALID_DATASET_PATH=${23}
+PRETRAIN_CHECKPOINT_PATH=${24}
 
 # the following two values will not be used when SFT is true
-TRAIN_TOKENS=${24}
-WARMUP_TOKENS=${25}
+TRAIN_TOKENS=${25}
+WARMUP_TOKENS=${26}
 ###############################
 
-OUTPUT_BASEPATH=${26}
+OUTPUT_BASEPATH=${27}
 ### OTHERS ###
 
 if [ $FL = true ]; then
@@ -98,7 +99,7 @@ moe_options=" \
     --moe-router-num-groups 8 \
     --num-experts ${NUM_EXPERTS} \
     --expert-model-parallel-size ${EP} \
-    --expert-tensor-parallel-size 1 \
+    --expert-tensor-parallel-size ${ETP} \
     --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
     --moe-router-load-balancing-type seq_aux_loss \
     --moe-router-topk-scaling-factor 2.5 \
@@ -118,6 +119,9 @@ moe_options=" \
     --v-head-dim ${V_HEAD_DIM} \
     "
 
+mtp_options=" \
+    --use-multi-token-prediction \
+    --num-mtp-predictor 1"
 fi
 
 # Here are some configs controled by env
@@ -363,13 +367,11 @@ megatron_options="  \
         --transformer-impl transformer_engine \
         --no-masked-softmax-fusion \
         --use-rope-scaling \
-        --use-multi-token-prediction \
-        --num-mtp-predictor 1 \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_deepseek.py
  ${megatron_options} ${dataset_options} ${pr_options} ${load_option} ${activation_checkpoint_options} \
- ${do_option} ${sp_option} ${moe_options} ${offload_option} ${sft_options} ${vp_option} ${packing_options} ${uneven_split_option} ${attn_backend_option}"
+ ${do_option} ${sp_option} ${moe_options} ${offload_option} ${sft_options} ${vp_option} ${packing_options} ${uneven_split_option} ${attn_backend_option} ${mtp_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
