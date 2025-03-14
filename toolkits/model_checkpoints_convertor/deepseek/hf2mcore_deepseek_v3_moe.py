@@ -38,6 +38,7 @@ from toolkits.model_checkpoints_convertor.utils import (
     save_state_dict,
     save_hfmodel
 )
+import math
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -45,6 +46,57 @@ torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
 torch.backends.cuda.enable_mem_efficient_sdp(False)
 torch.backends.cuda.enable_flash_sdp(False)
+
+def generate_rank_group(
+    tensor_model_parallel_size,
+    expert_tensor_parallel_size,
+    expert_model_parallel_size,
+    pipeline_model_parallel_size
+):
+    """
+        This function attempts to generate group rank on the minimal practicable world_size.
+        Support Decoder-Only model currently.
+    """
+    tp, etp, ep, pp = (
+        tensor_model_parallel_size,
+        expert_tensor_parallel_size,
+        expert_model_parallel_size,
+        pipeline_model_parallel_size
+    )
+    minimal_worldsize = pp * math.lcm(tp, etp * ep)
+    print(f"The given parallel config should be run on at least {minimal_worldsize} cards")
+    dp = minimal_worldsize // (pp * tp)
+    edp = minimal_worldsize // (pp * ep * etp)
+    # NOTE: If user want to scale up cp_size, he should downscale 
+    # dp_size or scale up world_size, i.e., edp_size
+    cp = 1
+    
+    # TODO: support other orders
+    order="tp-cp-ep-dp-pp"
+    # In training:
+    # Dense: 
+    # global_rank = tp_rank + cp_rank * tp_size + dp_rank * cp_size * tp_size + pp_rank * dp_size * cp_size * tp_size
+    # MoE:
+    # global_rank = etp_rank + ep_rank * etp_size + edp_rank * ep_size * etp_size + pp_rank * edp_size * ep_size * etp_size
+
+    # In ckpt loading, each rank will load a checkpoint according to its (tp_rank, pp_rank, ep_rank)
+    # Thus, (tp_rank, ep_rank) should map to a unique etp_rank
+    rank_mappings = dict()
+    local_ids = []
+    for global_rank in range(minimal_worldsize):
+        tp_rank = global_rank % tp
+        etp_rank = global_rank % etp
+        ep_rank = (global_rank // etp) % ep
+        pp_rank = global_rank // (dp * tp)
+
+        if (tp_rank, ep_rank) not in rank_mappings:
+            rank_mappings[(tp_rank, ep_rank)] = etp_rank
+        
+        if rank_mappings[(tp_rank, ep_rank)] != etp_rank:
+            raise ValueError("The legacy checkpoint format cannot support this parallel config.")
+
+        local_ids.append((tp_rank, etp_rank, ep_rank, pp_rank))
+    return local_ids
 
 def add_model_args(parser):
 
@@ -62,6 +114,12 @@ def add_model_args(parser):
 
     parser.add_argument(
         "--target-expert-model-parallel-size",
+        type=int,
+        default=1
+    )
+
+    parser.add_argument(
+        "--target-expert-tensor-parallel-size",
         type=int,
         default=1
     )
@@ -269,7 +327,6 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
         hfmodel.model.norm.weight.copy_(mgmodel.decoder.final_layernorm.weight)
         hfmodel.lm_head.weight.copy_(mgmodel.output_layer.weight)
 
-
 def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
 
     if args.fp16:
@@ -339,17 +396,20 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
         for layer_idx, (mglayer, hflayer) in enumerate(zip(mgmodel.decoder.layers, hfmodel.model.layers)):
             print(layer_idx)
             mglayer.input_layernorm.weight.copy_(hflayer.input_layernorm.weight)
-            mglayer.pre_mlp_layernorm.weight.copy_(hflayer.post_attention_layernorm.weight)
 
-            mglayer.self_attention.linear_q_down_proj.weight.copy_(hflayer.self_attn.q_a_proj.weight)
-            mglayer.self_attention.linear_q_up_proj.weight.copy_(hflayer.self_attn.q_b_proj.weight)
-            mglayer.self_attention.linear_q_up_proj.layer_norm_weight.copy_(hflayer.self_attn.q_a_layernorm.weight)
+            if args.q_lora_rank is None:
+                mglayer.self_attention.linear_q_proj.weight.copy_(hflayer.self_attn.q_proj.weight)
+            else:
+                mglayer.self_attention.linear_q_down_proj.weight.copy_(hflayer.self_attn.q_a_proj.weight)
+                mglayer.self_attention.linear_q_up_proj.weight.copy_(hflayer.self_attn.q_b_proj.weight)
+                mglayer.self_attention.linear_q_up_proj.layer_norm_weight.copy_(hflayer.self_attn.q_a_layernorm.weight)
 
             mglayer.self_attention.linear_kv_down_proj.weight.copy_(hflayer.self_attn.kv_a_proj_with_mqa.weight)
             mglayer.self_attention.linear_kv_up_proj.weight.copy_(hflayer.self_attn.kv_b_proj.weight)
             mglayer.self_attention.linear_kv_up_proj.layer_norm_weight.copy_(hflayer.self_attn.kv_a_layernorm.weight)
             mglayer.self_attention.linear_proj.weight.copy_(hflayer.self_attn.o_proj.weight)
-            if layer_idx < 3:
+            if not hasattr(mglayer.mlp, 'router'):
+                mglayer.mlp.linear_fc1.layer_norm_weight.copy_(hflayer.post_attention_layernorm.weight)
                 mglayer.mlp.linear_fc1.weight.copy_(
                     torch.cat([hflayer.mlp.gate_proj.weight, hflayer.mlp.up_proj.weight]))
                 mglayer.mlp.linear_fc2.weight.copy_(hflayer.mlp.down_proj.weight)
@@ -363,6 +423,7 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
                     linear_fc2_weighti = getattr(mglayer.mlp.experts.linear_fc2, 'weight' + str(i))
                     linear_fc2_weighti.copy_(hf_expert.down_proj.weight)
 
+                mglayer.pre_mlp_layernorm.weight.copy_(hflayer.post_attention_layernorm.weight)
                 shared_fc1_weight = torch.cat(
                     [hflayer.mlp.shared_experts.gate_proj.weight, hflayer.mlp.shared_experts.up_proj.weight])
                 mglayer.mlp.shared_experts.linear_fc1.weight.copy_(shared_fc1_weight)
@@ -372,6 +433,19 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
         if args.untie_embeddings_and_output_weights:
             mgmodel.output_layer.weight.copy_(hfmodel.lm_head.weight)
 
+def contains(key, str_list):
+    for s in str_list:
+        if s in key:
+            return True
+    return False
+
+def split_column_parallel(tensor, tp_rank, tp_size):
+    seg = tensor.shape[0] // tp_size
+    return tensor[seg * tp_rank: seg * (tp_rank + 1)]
+
+def split_row_parallel(tensor, tp_rank, tp_size):
+    seg = tensor.shape[1] // tp_size
+    return tensor[:, seg * tp_rank: seg * (tp_rank + 1)]
 
 def check_layer(layers_to_copy, k):
     pattern = re.compile(r"decoder.layers.\d+")
@@ -379,16 +453,18 @@ def check_layer(layers_to_copy, k):
     return res and res[0] in layers_to_copy.keys()
 
 def save_mgmodel(mgmodel, args):
-
+    # tp, etp, ep, pp
     args.tensor_model_parallel_size = args.target_tensor_model_parallel_size
     args.pipeline_model_parallel_size = args.target_pipeline_model_parallel_size
 
     if args.num_experts is not None:
         args.expert_model_parallel_size = args.target_expert_model_parallel_size
+        args.expert_tensor_parallel_size = args.target_expert_tensor_parallel_size
 
     os.makedirs(args.save, exist_ok=True)
     os.system("cp -rf " + args.load + "/*config.json " + args.save)
     os.system("cp -rf " + args.load + "/tokenizer* " + args.save)
+    os.system("cp -rf " + args.load + "/*tok* " + args.save)
 
     tracker_filepath = os.path.join(args.save, 'latest_checkpointed_iteration.txt')
     with open(tracker_filepath, "w") as f:
@@ -396,128 +472,117 @@ def save_mgmodel(mgmodel, args):
 
     full_model = mgmodel.state_dict_for_save_checkpoint()
     for k in list(full_model.keys()):
-        if full_model[k] is None and '_extra_state' not in k:
-            full_model.pop(k)
-            continue
-        if '_extra_state' in k and isinstance(full_model[k], torch.Tensor):
+        if 'extra_state' in k:
+            # NOTE: since TE 1.14, fp8 metadata will be saved as tensor. 
+            # Always drop these values in the MG ckpt to avoid potential issue.
+            # This should work fine because fp8 metadata is not supported by HF ckpt.
             full_model[k] = None
+        elif full_model[k] is None:
+            full_model.pop(k)
 
     if args.num_experts is not None:
         pattern = r'weight(\d+)'
+        assert args.num_experts % args.expert_model_parallel_size == 0
         num_local_experts = args.num_experts // args.expert_model_parallel_size if args.num_experts else 0
 
-    if (
-        args.tensor_model_parallel_size >= 1
-        and args.pipeline_model_parallel_size > 1
-        and args.num_experts % args.expert_model_parallel_size == 0
-    ):
-
-        if args.target_decoder_first_pipeline_num_layers is not None:
-            remained_layers = args.num_layers - args.target_decoder_first_pipeline_num_layers
-            remained_stages = args.pipeline_model_parallel_size - 1
-            assert remained_layers % remained_stages == 0
-            pp_layers_per_stage = [ args.target_decoder_first_pipeline_num_layers] +([remained_layers // remained_stages] * remained_stages)
-        else:
-            pp_layers_per_stage = [args.num_layers // args.pipeline_model_parallel_size] * args.pipeline_model_parallel_size
-
-        for tp_rank in range(args.tensor_model_parallel_size):
-            for ep_rank in range(tp_rank, args.expert_model_parallel_size, args.tensor_model_parallel_size):
-                for pp_rank in range(args.pipeline_model_parallel_size):
-                    model_split = {}
-                    layer_offset = sum(pp_layers_per_stage[:pp_rank])
-                    layers_to_copy = {}
-                    for layer in range(pp_layers_per_stage[pp_rank]):
-                        pp_layer_id = layer + layer_offset
-                        layers_to_copy[f"decoder.layers.{pp_layer_id}"] = layer
-                    if args.expert_model_parallel_size > 1:
-                        checkpoint_name = get_checkpoint_name(args.save, 0, True, True, tp_rank, pp_rank, True, ep_rank)
-                    elif args.expert_model_parallel_size == 1:
-                        checkpoint_name = get_checkpoint_name(args.save, 0, True, True, tp_rank, pp_rank, False)
-                    print(f'tensor_parallel & pipeline_parallel & expert_parallel, save model to {checkpoint_name}')
-                    for k, v in full_model.items():
-                        if check_layer(layers_to_copy, k):
-                            layer_pattern = re.compile(r'\d+')
-                            res = layer_pattern.findall(k)
-                            k = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy["decoder.layers." + res[0]]), k)
-                        elif not ("word_embeddings" in k or "output_layer" in k or "final_layernorm" in k or "mtp_modules" in k):
-                            continue
-
-                        if not isinstance(v, torch.Tensor):
-                            target_v = v
-                        elif 'linear_q_down_proj' in k or 'linear_kv_down_proj' in k:
-                            seg = v.shape[0] // args.tensor_model_parallel_size
-                            target_v = v[seg * tp_rank: seg * (tp_rank + 1)]
-                            #target_v = v
-                        elif 'linear_q_up_proj.layer_norm_weight' in k or 'linear_kv_up_proj.layer_norm_weight' in k:
-                            #seg = v.shape[0] // args.tensor_model_parallel_size
-                            #target_v = v[seg * tp_rank: seg * (tp_rank + 1)]
-                            target_v = v
-                        elif 'linear_q_up_proj' in k and 'layer_norm_weight' not in k:
-                            seg = v.shape[0] // args.tensor_model_parallel_size
-                            target_v = v[seg * tp_rank:seg * (tp_rank + 1)]
-                        elif 'linear_kv_up_proj' in k and 'layer_norm_weight' not in k:
-                            seg = v.shape[0] // args.tensor_model_parallel_size
-                            target_v = v[seg * tp_rank:seg * (tp_rank + 1)]
-                        elif 'linear_proj' in k and 'mtp_predictor' not in k:
-                            seg = v.shape[1] // args.tensor_model_parallel_size
-                            target_v = v[:, seg * tp_rank: seg * (tp_rank + 1)]
-                        elif 'mtp_predictor.mtp_modules.0.decoder.layers.0.self_attention.linear_proj' in k:
-                            seg = v.shape[1] // args.tensor_model_parallel_size
-                            target_v = v[:, seg * tp_rank: seg * (tp_rank + 1)]
-                        elif 'decoder.layers.0.mlp.linear_fc2' in k or 'decoder.layers.1.mlp.linear_fc2' in k or 'decoder.layers.2.mlp.linear_fc2' in k:
-                            seg = v.shape[1] // args.tensor_model_parallel_size
-                            target_v = v[:, seg * tp_rank: seg * (tp_rank + 1)]
-                        elif 'decoder.layers.0.mlp.linear_fc1' in k or 'decoder.layers.1.mlp.linear_fc1'in k or 'decoder.layers.2.mlp.linear_fc1' in k:
-                            seg = args.ffn_hidden_size // args.tensor_model_parallel_size
-                            viewed = v.view(-1, args.ffn_hidden_size, args.hidden_size)
-                            target_v = viewed[:, seg * tp_rank: seg * (tp_rank + 1), :].reshape(-1, args.hidden_size)
-                        elif 'experts' in k and 'shared_experts' not in k:
-                            expert_rank = int(re.findall(pattern, k)[0])
-                            if expert_rank // num_local_experts != ep_rank:
-                                continue
-                            expert_local_rank = expert_rank % num_local_experts
-                            k = k.replace(f'weight{expert_rank}', f'weight{expert_local_rank}')
-                            """
-                            if 'linear_fc1' in k:
-                                viewed = v.view(-1, args.moe_ffn_hidden_size, args.hidden_size)
-                                seg = args.moe_ffn_hidden_size // args.tensor_model_parallel_size
-                                target_v = viewed[:, seg * tp_rank: seg * (tp_rank + 1), :].reshape(-1, args.hidden_size)
-                            elif 'linear_fc2' in k:
-                                seg = v.shape[1] // args.tensor_model_parallel_size
-                                target_v = v[:, seg * tp_rank: seg * (tp_rank + 1)]
-                            """
-                            target_v = v
-                        elif 'shared_experts' in k and 'gate' not in k:
-                            if 'linear_fc1' in k:
-                                viewed = v.view(-1, args.moe_shared_expert_intermediate_size,
-                                                args.hidden_size)
-                                seg = args.moe_shared_expert_intermediate_size // args.tensor_model_parallel_size
-                                target_v = viewed[:, seg * tp_rank: seg * (tp_rank + 1), :].reshape(-1, args.hidden_size)
-                            elif 'linear_fc2' in k:
-                                seg = v.shape[1] // args.tensor_model_parallel_size
-                                target_v = v[:, seg * tp_rank: seg * (tp_rank + 1)]
-                        elif "word_embeddings" in k or "output_layer" in k:
-                            seg = v.shape[0] // args.tensor_model_parallel_size
-                            target_v = v[seg * tp_rank: seg * (tp_rank + 1)]
-                        else:
-                            target_v = v
-
-                        if "embedding.word_embeddings" in k and "mtp_embedding" not in k:
-                            if pp_rank == 0:
-                                model_split[k] = target_v
-                        elif "mtp_embedding.word_embeddings" in k:
-                            if pp_rank == args.pipeline_model_parallel_size - 1:
-                                model_split[k] = target_v
-                        elif "output_layer" in k or "final_layernorm" in k or "mtp_modules" in k:
-                            if pp_rank == args.pipeline_model_parallel_size - 1:
-                                model_split[k] = target_v
-                        else:
-                            model_split[k] = target_v
-                    save_state_dict(args, [model_split], checkpoint_name)
-
+    if args.target_decoder_first_pipeline_num_layers is not None:
+        assert args.pipeline_model_parallel_size > 1, "decoder_first_pipeline_num_layers is only valid when pp_size > 1"
+        remained_layers = args.num_layers - args.target_decoder_first_pipeline_num_layers
+        remained_stages = args.pipeline_model_parallel_size - 1
+        assert remained_layers % remained_stages == 0
+        pp_layers_per_stage = [ args.target_decoder_first_pipeline_num_layers] +([remained_layers // remained_stages] * remained_stages)
     else:
-        raise ValueError('Something is wrong, please check your tp/pp/ep size')
+        pp_layers_per_stage = [args.num_layers // args.pipeline_model_parallel_size] * args.pipeline_model_parallel_size
 
+    tp_size = args.tensor_model_parallel_size
+    etp_size = args.expert_tensor_parallel_size
+    for (tp_rank, etp_rank, ep_rank, pp_rank) in generate_rank_group(
+        args.tensor_model_parallel_size,
+        args.expert_tensor_parallel_size,
+        args.expert_model_parallel_size,
+        args.pipeline_model_parallel_size
+    ):
+        model_split = {}
+        layer_offset = sum(pp_layers_per_stage[:pp_rank])
+        layers_to_copy = {}
+        for layer in range(pp_layers_per_stage[pp_rank]):
+            pp_layer_id = layer + layer_offset
+            layers_to_copy[f"decoder.layers.{pp_layer_id}"] = layer
+        checkpoint_name = get_checkpoint_name(
+            args.save, 0, True, 
+            args.pipeline_model_parallel_size > 1, 
+            tp_rank, 
+            pp_rank, 
+            args.expert_model_parallel_size > 1, 
+            ep_rank
+        )
+        print(f'save model to {checkpoint_name}')
+        for k, v in full_model.items():
+            # NOTE: If k not in current pp_rank, skipping
+            if check_layer(layers_to_copy, k):
+                layer_pattern = re.compile(r'\d+')
+                res = layer_pattern.findall(k)
+                k = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy["decoder.layers." + res[0]]), k)
+            elif not contains(k, ["word_embeddings", "output_layer", "final_layernorm", "mtp_modules"]):
+                continue
+
+            if not isinstance(v, torch.Tensor):
+                target_v = v
+            elif contains(k, ['linear_q_down_proj', 'linear_kv_down_proj', 'linear_q_proj', 'linear_q_up_proj', 'linear_kv_up_proj', 'linear_q_proj']) and 'norm' not in k:
+                target_v = split_column_parallel(v, tp_rank, tp_size)
+            elif 'linear_proj' in k and 'mtp_predictor' not in k:
+                target_v = split_row_parallel(v, tp_rank, tp_size)
+            elif 'mtp_predictor.mtp_modules.0.decoder.layers.0.self_attention.linear_proj' in k:
+                target_v = split_row_parallel(v, tp_rank, tp_size)
+            elif contains(k, ['decoder.layers.0.mlp.linear_fc2', 'decoder.layers.1.mlp.linear_fc2', 'decoder.layers.2.mlp.linear_fc2']):
+                target_v = split_row_parallel(v, tp_rank, tp_size)
+            elif contains(k, ['decoder.layers.0.mlp.linear_fc1', 'decoder.layers.1.mlp.linear_fc1','decoder.layers.2.mlp.linear_fc1']) and 'norm' not in k:
+                # Split Gated Column Linear
+                seg = args.ffn_hidden_size // args.tensor_model_parallel_size
+                viewed = v.view(-1, args.ffn_hidden_size, args.hidden_size)
+                target_v = viewed[:, seg * tp_rank: seg * (tp_rank + 1), :].reshape(-1, args.hidden_size)
+            elif 'experts' in k and 'shared_experts' not in k:
+                # NOTE: If k not in current ep_rank, skipping
+                expert_rank = int(re.findall(pattern, k)[0])
+                if expert_rank // num_local_experts != ep_rank:
+                    continue
+                expert_local_rank = expert_rank % num_local_experts
+                k = k.replace(f'weight{expert_rank}', f'weight{expert_local_rank}')
+                if 'linear_fc1' in k:
+                    viewed = v.view(-1, args.moe_ffn_hidden_size, args.hidden_size)
+                    seg = args.moe_ffn_hidden_size // etp_size
+                    target_v = viewed[:, seg * etp_rank: seg * (etp_rank + 1), :].reshape(-1, args.hidden_size)
+                elif 'linear_fc2' in k:
+                    target_v = split_row_parallel(v, etp_rank, etp_size)
+                else:
+                    raise NotImplementedError()
+            elif 'shared_experts' in k and 'gate' not in k:
+                # SharedExperts is from MLP, split by tp_rank
+                if 'linear_fc1' in k:
+                    viewed = v.view(-1, args.moe_shared_expert_intermediate_size, args.hidden_size)
+                    seg = args.moe_shared_expert_intermediate_size // tp_size
+                    target_v = viewed[:, seg * tp_rank: seg * (tp_rank + 1), :].reshape(-1, args.hidden_size)
+                elif 'linear_fc2' in k:
+                    target_v = split_row_parallel(v, tp_rank, tp_size)
+                else:
+                    raise NotImplementedError()
+            elif "word_embeddings" in k or "output_layer" in k:
+                target_v = split_column_parallel(v, tp_rank, tp_size)
+            else:
+                target_v = v
+
+            if "embedding.word_embeddings" in k and "mtp_embedding" not in k:
+                if pp_rank == 0:
+                    model_split[k] = target_v
+            elif "mtp_embedding.word_embeddings" in k:
+                if pp_rank == args.pipeline_model_parallel_size - 1:
+                    model_split[k] = target_v
+            elif "output_layer" in k or "final_layernorm" in k or "mtp_modules" in k:
+                if pp_rank == args.pipeline_model_parallel_size - 1:
+                    model_split[k] = target_v
+            else:
+                model_split[k] = target_v
+        save_state_dict(args, [model_split], checkpoint_name)
     print(f'megatron model is save to {args.save}')
 
 def add_extra_args(parser):

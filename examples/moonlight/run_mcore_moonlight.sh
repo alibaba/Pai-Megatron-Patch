@@ -3,19 +3,20 @@ set -e
 ENV=$1
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250310:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250314:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
 if [ $ENV = dsw ]; then
     export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
     MASTER_ADDR=localhost
+    MASTER_PORT=$(shuf -n 1 -i 10000-65535)
     NNODES=1
     NODE_RANK=0
     GPUS_PER_NODE=8
 elif [ $ENV = dlc ]; then
     NNODES=${WORLD_SIZE}
     NODE_RANK=${RANK}
-    GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU}
+    GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}
 fi
 
 
@@ -36,82 +37,88 @@ PR=$9
 TP=${10}
 PP=${11}
 CP=${12}
-EP=${13}
-SP=${14}
-DO=${15}
-FL=${16}
-SFT=${17}
+ETP=${13}
+EP=${14}
+SP=${15}
+DO=${16}
+FL=${17}
+SFT=${18}
 ### PARALLEL / BOOL OPTION ###
 
 ### OTHERS ###
-AC=${18}
-OPTIMIZER_OFFLOAD=${19}
-SAVE_INTERVAL=${20}
-DATASET_PATH=${21}
-VALID_DATASET_PATH=${22}
-PRETRAIN_CHECKPOINT_PATH=${23}
+AC=${19}
+OPTIMIZER_OFFLOAD=${20}
+SAVE_INTERVAL=${21}
+DATASET_PATH=${22}
+VALID_DATASET_PATH=${23}
+PRETRAIN_CHECKPOINT_PATH=${24}
 
 # the following two values will not be used when SFT is true
-TRAIN_TOKENS=${24}
-WARMUP_TOKENS=${25}
+TRAIN_TOKENS=${25}
+WARMUP_TOKENS=${26}
 ###############################
 
-OUTPUT_BASEPATH=${26}
+OUTPUT_BASEPATH=${27}
 ### OTHERS ###
 
-OPTIMIZER=${27}
-
 if [ $FL = true ]; then
-#    echo "MLA is not supported in flash-attn, set FL=false and rerun."
-#    exit -1
-    export NVTE_FLASH_ATTN=1 NVTE_FUSED_ATTN=0
-    attn_backend_option=" \
-        --attention-backend flash
-    "
+    echo "MLA is not supported in flash-attn, set FL=false and rerun."
+    exit -1
 elif [ $FL = false ]; then
-    export NVTE_FLASH_ATTN=0 NVTE_FUSED_ATTN=1
     attn_backend_option=" \
-        --attention-backend fused
+        --attention-backend auto
     "
 fi
 
-if [ $MODEL_SIZE = A14B ]; then
+if [ $MODEL_SIZE = A3B ]; then
+    # moonshotai/Moonlight-16B-A3B-Instruct
+    HIDDEN_SIZE=2048
+    NUM_ATTENTION_HEADS=16
+    NUM_LAYERS=27
+    INTERMEDIATE_SIZE=11264
+    MOE_INTERMEDIATE_SIZE=1408
+    MAX_POSITION_EMBEDDINGS=8192
+    EXTRA_VOCAB_SIZE=0
+    Q_LORA_RANK=0
+    KV_LORA_RANK=512
+    QK_NOPE_HEAD_DIM=128
+    QK_ROPE_HEAD_DIM=64
+    V_HEAD_DIM=128
+    ROPE_THETA=50000
+    SCALE_FACTOR=1
+    NUM_EXPERTS=64
+    ROUTER_TOPK=8
+    NUM_SHARED_EXPERTS=2
+    RMS_NORM_EPS=1e-5
 
-HIDDEN_SIZE=3584
-NUM_ATTENTION_HEADS=28
-NUM_LAYERS=28
-INTERMEDIATE_SIZE=18944
-MOE_INTERMEDIATE_SIZE=2560
-MAX_POSITION_EMBEDDINGS=131072
-EXTRA_VOCAB_SIZE=293
-NUM_KEY_VALUE_HEADS=4
-ROPE_THETA=1000000
-NUM_EXPERTS=64
-ROUTER_TOPK=8
-NUM_SHARED_EXPERTS=1
-RMS_NORM_EPS=1e-6
-SHARED_EXPERT_INTERMEDIATE_SIZE=20480
+    moe_options=" \
+        --moe-grouped-gemm \
+        --moe-token-dispatcher-type alltoall \
+        --moe-router-topk ${ROUTER_TOPK} \
+        --moe-router-group-topk 1 \
+        --moe-router-num-groups 1 \
+        --num-experts ${NUM_EXPERTS} \
+        --expert-model-parallel-size ${EP} \
+        --expert-tensor-parallel-size ${ETP} \
+        --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
+        --moe-router-load-balancing-type seq_aux_loss \
+        --moe-router-topk-scaling-factor 2.446 \
+        --moe-shared-expert-overlap \
+        --moe-router-enable-expert-bias \
+        --mscale 1.0 \
+        --mscale-all-dim 1.0 \
+        --moe-router-score-function sigmoid \
+        --moe-router-bias-update-rate 0.001 \
+        --moe-aux-loss-coeff 0.001 \
+        --moe-layer-freq '([0]*1+[1]*26)' \
+        --moe-shared-expert-intermediate-size $((${MOE_INTERMEDIATE_SIZE} * ${NUM_SHARED_EXPERTS} )) \
+        --kv-lora-rank ${KV_LORA_RANK} \
+        --qk-nope-head-dim ${QK_NOPE_HEAD_DIM} \
+        --qk-rope-head-dim ${QK_ROPE_HEAD_DIM} \
+        --v-head-dim ${V_HEAD_DIM} \
+        "
 
-moe_options=" \
-    --moe-grouped-gemm \
-    --moe-token-dispatcher-type alltoall \
-    --moe-router-topk ${ROUTER_TOPK} \
-    --num-experts ${NUM_EXPERTS} \
-    --expert-tensor-parallel-size 1 \
-    --expert-model-parallel-size ${EP} \
-    --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
-    --moe-router-load-balancing-type seq_aux_loss \
-    --moe-aux-loss-coeff 0.001 \
-    --moe-layer-freq '([1]*28)' \
-    --moe-shared-expert-intermediate-size ${SHARED_EXPERT_INTERMEDIATE_SIZE} \
-    --moe-layer-recompute \
-    --moe-shared-expert-overlap \
-    "
-
-#    --moe-permute-fusion \
-#    --moe-router-score-function sigmoid \
-#    --moe-shared-expert-overlap \
-
+mtp_options=""
 fi
 
 # Here are some configs controled by env
@@ -138,7 +145,7 @@ TP_COMM_OVERLAP=$(( ($TP > 1) ? 1 : 0 ))
 comm_overlap_option="\
     --overlap-grad-reduce \
     --overlap-param-gather"
-
+ 
 
 if [ $TP_COMM_OVERLAP -eq 1 ]; then
     comm_overlap_option="\
@@ -250,7 +257,7 @@ if [ $SFT = true ]; then
     TRAIN_ITERS=${24}
     LR_WARMUP_ITERS=${25}
     LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
-    PREFIX="finetune-mcore-qwen2-megatron-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
+    PREFIX="finetune-mcore-deepseek-v2-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
     sft_options=" \
          --eod-mask-loss \
          --calculate-per-token-loss \
@@ -259,7 +266,7 @@ else
     TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
     LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
     LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
-    PREFIX="pretrain-mcore-qwen2-megatron-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
+    PREFIX="pretrain-mcore-deepseek-v3-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
     sft_options=" \
         --train-mode pretrain"
 fi
@@ -278,10 +285,8 @@ else
 fi
 
 if [ ${MP_SFT_PACKING} = true ]; then
-    packing_options=" \
-      --reset-position-ids \
-      --no-create-attention-mask-in-dataloader
-    "
+    echo "Currently MLA do not support THD format attention, thus sequence packing can not be used..."
+    packing_options=""
 else
     packing_options=""
 fi
@@ -297,7 +302,7 @@ mkdir -p ${TENSORBOARD_DIR}
 SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 mkdir -p ${SAVED_PRETRAIN_CHECKPOINT_PATH}
-find -L ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
+#find -L ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
 #find -L ${PRETRAIN_CHECKPOINT_PATH} -maxdepth 1 -type f -name "merges.txt" -print0 | xargs -0 cp -t ${SAVED_PRETRAIN_CHECKPOINT_PATH}
 
 megatron_options="  \
@@ -305,7 +310,7 @@ megatron_options="  \
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style cosine \
-        --weight-decay 0.01 \
+        --weight-decay 0.1 \
         --adam-beta1 0.9 \
         --adam-beta2 0.95 \
         --clip-grad 1.0 \
@@ -338,34 +343,32 @@ megatron_options="  \
         --context-parallel-size ${CP} \
         --no-load-optim \
         --no-load-rng \
-        --num-workers 32 \
+        --num-workers 8 \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
-        --patch-tokenizer-type Qwen2Tokenizer \
+        --patch-tokenizer-type DeepSeekV2Tokenizer \
         --swiglu \
         --normalization RMSNorm \
         --norm-epsilon ${RMS_NORM_EPS} \
         --use-rotary-position-embeddings \
+        --no-rope-fusion \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear \
         --rotary-base ${ROPE_THETA} \
+        --rotary-scaling-factor ${SCALE_FACTOR} \
         --no-save-optim \
+        --kv-channels ${V_HEAD_DIM} \
+        --qk-layernorm \
+        --multi-latent-attention \
         --ckpt-format torch \
         --transformer-impl transformer_engine \
-        --group-query-attention \
-        --num-query-groups ${NUM_KEY_VALUE_HEADS} \
-        --add-qkv-bias \
-        --optimizer ${OPTIMIZER} \
-        --cross-entropy-loss-fusion \
+        --no-masked-softmax-fusion \
+        --use-rope-scaling \
         "
 
-#        --no-rope-fusion \
-#        --no-bias-swiglu-fusion \
-
-
-run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen2_moe.py
+run_cmd="torchrun $DISTRIBUTED_ARGS ../deepseek_v3/pretrain_deepseek.py
  ${megatron_options} ${dataset_options} ${pr_options} ${load_option} ${activation_checkpoint_options} \
- ${do_option} ${sp_option} ${moe_options} ${offload_option} ${sft_options} ${vp_option} ${packing_options} ${uneven_split_option} ${attn_backend_option}"
+ ${do_option} ${sp_option} ${moe_options} ${offload_option} ${sft_options} ${vp_option} ${packing_options} ${uneven_split_option} ${attn_backend_option} ${mtp_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

@@ -20,62 +20,7 @@ CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
 export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250314
 
-if [ $MODEL_SIZE = A37B ]; then
-
-HIDDEN_SIZE=7168
-NUM_ATTENTION_HEADS=128
-NUM_LAYERS=61
-INTERMEDIATE_SIZE=18432
-MOE_INTERMEDIATE_SIZE=2048
-EXTRA_VOCAB_SIZE=467
-Q_LORA_RANK=1536
-KV_LORA_RANK=512
-QK_NOPE_HEAD_DIM=128
-QK_ROPE_HEAD_DIM=64
-V_HEAD_DIM=128
-ROPE_THETA=10000
-SCALE_FACTOR=40
-NUM_EXPERTS=256
-ROUTER_TOPK=8
-NUM_SHARED_EXPERTS=1
-MOE_LAYER_FREQ=1
-RMS_NORM_EPS=1e-6
-
-moe_options=" \
-    --moe-grouped-gemm \
-    --moe-token-dispatcher-type alltoall \
-    --moe-router-topk ${ROUTER_TOPK} \
-    --num-experts ${NUM_EXPERTS} \
-    --target-expert-model-parallel-size ${EP} \
-    --target-expert-tensor-parallel-size ${ETP} \
-    --expert-tensor-parallel-size 1 \
-    --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
-    --moe-router-load-balancing-type seq_aux_loss \
-    --moe-router-topk-scaling-factor 2.5 \
-    --moe-shared-expert-overlap \
-    --moe-router-enable-expert-bias \
-    --mscale 1.0 \
-    --mscale-all-dim 1.0 \
-    --moe-router-score-function sigmoid \
-    --moe-router-bias-update-rate 0.001 \
-    --moe-aux-loss-coeff 0.001 \
-    --moe-layer-freq '([0]*3+[1]*58)' \
-    --moe-shared-expert-intermediate-size $((${MOE_INTERMEDIATE_SIZE} * ${NUM_SHARED_EXPERTS} )) \
-    --q-lora-rank ${Q_LORA_RANK} \
-    --kv-lora-rank ${KV_LORA_RANK} \
-    --qk-nope-head-dim ${QK_NOPE_HEAD_DIM} \
-    --qk-rope-head-dim ${QK_ROPE_HEAD_DIM} \
-    --v-head-dim ${V_HEAD_DIM} \
-    "
-
-cpu_options=" \
-            --use-cpu-initialization"
-
-mtp_options=" \
-    --use-multi-token-prediction \
-    --num-mtp-predictor 1"
-
-elif [ $MODEL_SIZE = A3B ]; then
+if [ $MODEL_SIZE = A3B ]; then
 # moonshotai/Moonlight-16B-A3B-Instruct
 HIDDEN_SIZE=2048
 NUM_ATTENTION_HEADS=16
@@ -165,10 +110,9 @@ else
     exit -1
 fi
 
-
 DISTRIBUTED_ARGS="--nproc_per_node 1 --nnodes 1 --node_rank 0 --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-cmd="torchrun ${DISTRIBUTED_ARGS} hf2mcore_deepseek_v3_moe.py \
+cmd="torchrun ${DISTRIBUTED_ARGS} ../deepseek/hf2mcore_deepseek_v3_moe.py \
     --load ${SOURCE_CKPT_PATH} \
     --save ${TARGET_CKPT_PATH} \
     --target-tensor-model-parallel-size ${TP} \

@@ -136,7 +136,7 @@ def _allreduce_word_embedding_grads(model: List[torch.nn.Module], config: Transf
             torch.distributed.all_reduce(grad, group=parallel_state.get_embedding_group())
             setattr(weight, grad_attr, _reshard_if_dtensor(grad, orig_grad))
 
-        if model_module.use_multi_token_prediction:
+        if getattr(model_module, 'use_multi_token_prediction', False):
             weight = model_module.share_embedding_or_mtp_embedding()
             grad_attr = "main_grad" if hasattr(weight, "main_grad") else "grad"
             orig_grad = getattr(weight, grad_attr)
