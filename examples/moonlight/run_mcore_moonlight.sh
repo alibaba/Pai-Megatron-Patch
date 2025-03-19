@@ -5,6 +5,7 @@ CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
 export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250314:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true # for PyTorch >= 2.6
 
 if [ $ENV = dsw ]; then
     export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
@@ -254,8 +255,8 @@ if [ $OPTIMIZER_OFFLOAD != false ]; then
 fi
 
 if [ $SFT = true ]; then
-    TRAIN_ITERS=${24}
-    LR_WARMUP_ITERS=${25}
+    TRAIN_ITERS=${25}
+    LR_WARMUP_ITERS=${26}
     LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
     PREFIX="finetune-mcore-deepseek-v2-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
     sft_options=" \

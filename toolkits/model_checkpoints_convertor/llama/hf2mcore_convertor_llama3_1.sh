@@ -4,7 +4,7 @@ set -e
 if [ -z $CUDA_VISIBLE_DEVICES ];then
     export CUDA_VISIBLE_DEVICES=0
 fi
-
+export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true # for PyTorch >= 2.6
 if [ -z $NAIVE_CHECK ];then
     NAIVE_CHECK=false
 fi

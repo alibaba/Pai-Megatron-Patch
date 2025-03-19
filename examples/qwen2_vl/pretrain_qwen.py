@@ -567,24 +567,6 @@ def cyclic_iter(iter):
         for x in iter:
             yield x
 
-def add_torchload_allowed_objects():
-    # NOTE: since PyTorch 2.6.0, the default value of `weights_only`
-    # in torch.load is changed to True.
-    from argparse import Namespace
-    from megatron.core.transformer.enums import AttnBackend
-    from megatron.core.enums import ModelType
-    from megatron.core.rerun_state_machine import (
-        RerunMode, 
-        RerunState, 
-        RerunDiagnostic
-    )
-
-    torch.serialization.add_safe_globals([
-        Namespace, AttnBackend, ModelType, RerunMode, 
-        RerunState, RerunDiagnostic])
-
-add_torchload_allowed_objects()
-
 if __name__ == "__main__":
     train_valid_test_dataloaders_provider.is_distributed = True
 

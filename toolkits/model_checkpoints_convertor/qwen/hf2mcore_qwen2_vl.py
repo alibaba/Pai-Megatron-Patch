@@ -592,7 +592,7 @@ def save_mgmodel(mgmodel, args):
         and args.pipeline_model_parallel_size == 1
     ):
         checkpoint_name = get_checkpoint_name(args.save, 0, True)
-        save_state_dict(args, full_model, checkpoint_name)
+        save_state_dict(args, [full_model], checkpoint_name)
     elif (
         args.tensor_model_parallel_size > 1
         and args.pipeline_model_parallel_size == 1
