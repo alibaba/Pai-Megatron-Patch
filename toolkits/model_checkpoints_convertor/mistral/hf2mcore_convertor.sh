@@ -3,6 +3,7 @@
 set -e
 START_TIME=$SECONDS
 export CUDA_VISIBLE_DEVICES=0
+export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true # for PyTorch >= 2.6
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1

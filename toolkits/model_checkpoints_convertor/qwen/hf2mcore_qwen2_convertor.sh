@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 export CUDA_VISIBLE_DEVICES=7
+export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true # for PyTorch >= 2.6
 START_TIME=$SECONDS
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)

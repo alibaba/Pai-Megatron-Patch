@@ -35,34 +35,6 @@ from megatron_patch.data.utils import (
     get_position_id_on_this_tp_rank_idxmap_sft_packing
 )
 
-_TORCH_MAJOR, _TORCH_MINOR = torch.__version__.split('.')[:2]
-if int(_TORCH_MAJOR) >= 2 and int(_TORCH_MINOR) >= 6:
-    def add_torchload_allowed_objects():
-        # NOTE: since PyTorch 2.6.0, the default value of `weights_only`
-        # in torch.load is changed to True.
-        from argparse import Namespace
-        from megatron.core.enums import ModelType
-        safe_objs = [Namespace, ModelType]
-        try:
-            # Since 250217
-            from megatron.core.transformer.enums import AttnBackend
-            from megatron.core.rerun_state_machine import (
-                RerunMode, 
-                RerunState, 
-                RerunDiagnostic
-            )
-            safe_objs.extend([
-                AttnBackend,
-                RerunMode, 
-                RerunState, 
-                RerunDiagnostic
-            ])
-        except:
-            pass
-        
-        torch.serialization.add_safe_globals(safe_objs)
-    add_torchload_allowed_objects()
-
 def get_batch(data_iterator):
     """Generate a batch."""
     args = get_args()
