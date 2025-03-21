@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Pretrain Qwen2-VL."""
+"""Pretrain Qwen2.5-VL."""
 
 import os
 from functools import partial
@@ -39,13 +39,13 @@ from megatron_patch.model.qwen2_vl.layer_specs import (
     get_mlp_module_spec
 
 )
-from megatron_patch.model.qwen2_vl.model import Qwen2VLModel
+from megatron_patch.model.qwen2_5_vl.model import Qwen2_5VLModel
 
 from megatron_patch.tokenizer import build_tokenizer, get_tokenizer
 from megatron_patch.tensor_parallel import broadcast_data
 
 torch._dynamo.config.suppress_errors = True
-from megatron_patch.model.qwen2_vl.transformer_config import (
+from megatron_patch.model.qwen2_5_vl.transformer_config import (
     Qwen2VLTransformerConfig,
     get_vision_model_config,
     get_vision_projection_config
@@ -66,7 +66,7 @@ from megatron.energon import (
 
 def model_provider(
     pre_process=True, post_process=True, add_encoder=True, add_decoder=True
-) -> Union[Qwen2VLModel]:
+) -> Union[Qwen2_5VLModel]:
     args = get_args()
     build_tokenizer(args)
     print_rank_0("start building qwen2-vl model ...")
@@ -86,13 +86,13 @@ def model_provider(
     vision_config.first_pipeline_num_layers = None
     vision_projector_config = get_vision_projection_config(deepcopy(config), vision_config.hidden_size, args.spatial_merge_size)
     
-    print_rank_0("building Qwen2-VL model in TE...")
+    print_rank_0("building Qwen2-5-VL model in TE...")
     # Layer Specs of vit, llm and projector
     transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.qk_layernorm)
     vision_model_spec = get_qwen2vl_vision_model_spec()
     vision_projector_spec = get_mlp_module_spec(add_norm=False).submodules
 
-    model = Qwen2VLModel(
+    model = Qwen2_5VLModel(
         language_transformer_config=config,
         language_transformer_layer_spec=transformer_layer_spec,
         language_vocab_size=args.padded_vocab_size,
@@ -129,11 +129,12 @@ def model_provider(
 
     return model
 
-# Slightly modified from Qwen2VLForConditionalGeneration.get_rope_index
+# Slightly modified from Qwen2_5VLForConditionalGeneration.get_rope_index
 def get_rope_index(
-    input_ids: torch.LongTensor,
+    input_ids: Optional[torch.LongTensor] = None,
     image_grid_thw: Optional[torch.LongTensor] = None,
     video_grid_thw: Optional[torch.LongTensor] = None,
+    second_per_grid_ts: Optional[torch.Tensor] = None,
     attention_mask: Optional[torch.Tensor] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
@@ -142,7 +143,7 @@ def get_rope_index(
     Explanation:
         Each embedding sequence contains vision embedding and text embedding or just contains text embedding.
 
-        For pure text embedding sequence, the rotary position embedding has no difference with mordern LLMs.
+        For pure text embedding sequence, the rotary position embedding has no difference with modern LLMs.
         Examples:
             input_ids: [T T T T T], here T is for text.
             temporal position_ids: [0, 1, 2, 3, 4]
@@ -150,16 +151,23 @@ def get_rope_index(
             width position_ids: [0, 1, 2, 3, 4]
 
         For vision and text embedding sequence, we calculate 3D rotary position embedding for vision part
-        and 1D rotary position embeddin for text part.
+        and 1D rotary position embedding for text part.
         Examples:
-            Assume we have a video input with 3 temporal patches, 2 height patches and 2 width patches.
+            Temporal (Time): 3 patches, representing different segments of the video in time.
+            Height: 2 patches, dividing each frame vertically.
+            Width: 2 patches, dividing each frame horizontally.
+            We also have some important parameters:
+            fps (Frames Per Second): The video's frame rate, set to 1. This means one frame is processed each second.
+            tokens_per_second: This is a crucial parameter. It dictates how many "time-steps" or "temporal tokens" are conceptually packed into a one-second interval of the video. In this case, we have 25 tokens per second. So each second of the video will be represented with 25 separate time points. It essentially defines the temporal granularity.
+            temporal_patch_size: The number of frames that compose one temporal patch. Here, it's 2 frames.
+            interval: The step size for the temporal position IDs, calculated as tokens_per_second * temporal_patch_size / fps. In this case, 25 * 2 / 1 = 50. This means that each temporal patch will be have a difference of 50 in the temporal position IDs.
             input_ids: [V V V V V V V V V V V V T T T T T], here V is for vision.
-            vision temporal position_ids: [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2]
+            vision temporal position_ids: [0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]
             vision height position_ids: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
             vision width position_ids: [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
-            text temporal position_ids: [3, 4, 5, 6, 7]
-            text height position_ids: [3, 4, 5, 6, 7]
-            text width position_ids: [3, 4, 5, 6, 7]
+            text temporal position_ids: [101, 102, 103, 104, 105]
+            text height position_ids: [101, 102, 103, 104, 105]
+            text width position_ids: [101, 102, 103, 104, 105]
             Here we calculate the text start position_ids as the max vision position_ids plus 1.
 
     Args:
@@ -170,6 +178,8 @@ def get_rope_index(
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
+        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -182,20 +192,28 @@ def get_rope_index(
     """
     args = get_args()
     tokenizer = get_tokenizer()
-
     spatial_merge_size = args.spatial_merge_size
     image_token_id = tokenizer.image_token_id
     video_token_id = tokenizer.video_token_id
     vision_start_token_id = tokenizer.vision_start_token_id
+    tokens_per_second = 2
+    if second_per_grid_ts is not None:
+        second_per_grid_ts = second_per_grid_ts.cpu()
+
     mrope_position_deltas = []
     if image_grid_thw is not None or video_grid_thw is not None:
         total_input_ids = input_ids
         if attention_mask is None:
             attention_mask = torch.ones_like(total_input_ids)
         position_ids = torch.ones(
-            3, input_ids.shape[0], input_ids.shape[1], dtype=input_ids.dtype, device=input_ids.device
+            3,
+            input_ids.shape[0],
+            input_ids.shape[1],
+            dtype=input_ids.dtype,
+            device=input_ids.device,
         )
         image_index, video_index = 0, 0
+        attention_mask = attention_mask.to(total_input_ids.device)
         for i, input_ids in enumerate(total_input_ids):
             input_ids = input_ids[attention_mask[i] == 1]
             image_nums, video_nums = 0, 0
@@ -222,15 +240,21 @@ def get_rope_index(
                         image_grid_thw[image_index][1],
                         image_grid_thw[image_index][2],
                     )
+                    second_per_grid_t = 0
                     image_index += 1
                     remain_images -= 1
                     ed = ed_image
+
                 else:
                     t, h, w = (
                         video_grid_thw[video_index][0],
                         video_grid_thw[video_index][1],
                         video_grid_thw[video_index][2],
                     )
+                    if second_per_grid_ts is not None:
+                        second_per_grid_t = second_per_grid_ts[video_index]
+                    else:
+                        second_per_grid_t = 1.0
                     video_index += 1
                     remain_videos -= 1
                     ed = ed_video
@@ -244,7 +268,14 @@ def get_rope_index(
                 st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
                 llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
 
-                t_index = torch.arange(llm_grid_t).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
+                range_tensor = torch.arange(llm_grid_t).view(-1, 1)
+                expanded_range = range_tensor.expand(-1, llm_grid_h * llm_grid_w)
+
+                time_tensor = expanded_range * second_per_grid_t * tokens_per_second
+
+                time_tensor_long = time_tensor.long()
+                t_index = time_tensor_long.flatten()
+
                 h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
                 w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(llm_grid_t, llm_grid_h, -1).flatten()
                 llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + text_len + st_idx)
@@ -287,6 +318,7 @@ def get_ltor_masks_and_position_ids(
         video_thw_grids,
         target, 
         pad_token, 
+        second_per_grid_ts,
         ignore_index=None
     ):
     """Build masks and position id for left to right model."""
@@ -295,6 +327,7 @@ def get_ltor_masks_and_position_ids(
         input_ids=input_ids,
         image_grid_thw=image_thw_grids,
         video_grid_thw=video_thw_grids,
+        second_per_grid_ts=second_per_grid_ts,
         attention_mask=input_ids != pad_token
     )
 
@@ -336,6 +369,9 @@ def get_batch(data_iterator):
     image_thw_grids = broadcast_data(["image_thw_grids"], data, torch.long)["image_thw_grids"]
     # shape: n_video_samples
     video_thw_grids = broadcast_data(["video_thw_grids"], data, torch.long)["video_thw_grids"]
+    # shape: n_video_samples
+    second_per_grid_ts = broadcast_data(['second_per_grid_ts'], data, torch.float32)['second_per_grid_ts']
+
 
     image_input_mask = broadcast_data(["image_input_mask"], data, torch.bool)["image_input_mask"]
     video_input_mask = broadcast_data(["video_input_mask"], data, torch.bool)["video_input_mask"]
@@ -353,7 +389,7 @@ def get_batch(data_iterator):
     # NOTE: no sequence packing in LLM inputs
     torch.cuda.nvtx.range_push("get_ltor_masks_and_position_ids")
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-        tokens, image_thw_grids, video_thw_grids, labels, tokenizer.pad_token_id
+        tokens, image_thw_grids, video_thw_grids, labels, tokenizer.pad_token_id, second_per_grid_ts
     )
     torch.cuda.nvtx.range_pop()
 
@@ -400,7 +436,7 @@ def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
 
     return loss[0] * args.context_parallel_size, {"lm loss": averaged_loss}
 
-def forward_step(data_iterator, model: Qwen2VLModel):
+def forward_step(data_iterator, model: Qwen2_5VLModel):
     """Forward training step.
 
     Args:

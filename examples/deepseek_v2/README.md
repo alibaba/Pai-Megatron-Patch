@@ -136,6 +136,7 @@ OUTPUT_BASEPATH=${26}           # 训练输出日志文件路径
 备注：当`AC=offload`或`full`时，可设置`MP_AC_LAYERS`环境变量来控制Checkpointing或Offload的TransformerLayer层数（默认值：`1`）。
 
 ```bash
+export MP_PP0_LAYERS=6
 cd /workspace/Pai-Megatron-Patch/examples/deepseek_v2
 sh run_mcore_deepseek.sh  \
 dsw  \
@@ -171,6 +172,7 @@ false \
 当准备好微调数据集后，将SFT开关设置为`true`即可进行指令微调。
 
 ```bash
+export MP_PP0_LAYERS=6
 cd /workspace/Pai-Megatron-Patch/examples/deepseek_v2
 sh run_mcore_deepseek.sh  \
 dsw  \
@@ -202,6 +204,7 @@ false \
 ```
 通过设置MP_DATASET_TYPE环境变量，本脚本还可使用json格式的数据集进行指令微调
 ```bash
+export MP_PP0_LAYERS=6
 export MP_DATASET_TYPE="raw"
 cd /workspace/Pai-Megatron-Patch/examples/deepseek_v2
 sh run_mcore_deepseek.sh  \
@@ -239,6 +242,7 @@ false \
 您需要将训练/微调后保存的Megatron-Core转换为HuggingFace格式来进行推理评估。
 
 ```bash
+export MP_PP0_LAYERS=6
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/deepseek
 bash hf2mcore_deepseek_v2_moe_convertor.sh \
 A2.4B \

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoProcessor
 
 def _vocab_size_with_padding(orig_vocab_size, args):
     """Pad vocab size so it is divisible by model parallel size and
@@ -257,6 +257,15 @@ def build_tokenizer(args):
                 self.vision_start_token = '<|vision_start|>'
                 self.vision_end_token = '<|vision_end|>'
 
+                proc = AutoProcessor.from_pretrained(
+                    tokenizer_path,
+                    use_fast=False,
+                    trust_remote_code=True
+                )
+                # NOTE: In Qwen2-VL, template in chat_template.json is same within tokenizer_config.json and both can be used.
+                # However, in Qwen 2.5-VL, the two templates are different and only the one in chat_template.json is OK.
+                self.chat_template = proc.chat_template
+
             def __call__(self, text, return_tensors=None,
                          padding=None, max_length=None, truncation=None, add_special_tokens=None):
 
@@ -264,7 +273,7 @@ def build_tokenizer(args):
                         max_length=max_length, truncation=truncation, add_special_tokens=add_special_tokens)
 
             def apply_chat_template(self, conversations, tokenize:bool=True, **kwargs):
-                return self.tokenizer.apply_chat_template(conversations, tokenize=tokenize, **kwargs)
+                return self.tokenizer.apply_chat_template(conversations, tokenize=tokenize, chat_template=self.chat_template, **kwargs)
             
             @property
             def vocab_size(self):
