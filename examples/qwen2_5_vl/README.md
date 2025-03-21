@@ -1,4 +1,4 @@
-# Qwen2-VL模型在Pai-Megatron-Patch的最佳实践
+# Qwen2.5-VL模型在Pai-Megatron-Patch的最佳实践
 
 ## Table of Contents
    * [安装](#安装)
@@ -21,9 +21,10 @@ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 
 ```bash
 cd /mnt
-mkdir qwen2-vl-ckpts
-cd qwen2-vl-ckpts
-git clone https://www.modelscope.cn/Qwen/Qwen2-VL-7B-Instruct.git
+mkdir qwen2.5-vl-ckpts
+cd qwen2.5-vl-ckpts
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/qwen-ckpts/Qwen2.5-VL-3B-Instruct.tar
+tar -xvf Qwen2.5-VL-3B-Instruct.tar
 cd ..
 
 mkdir llava-datasets
@@ -62,7 +63,7 @@ tar -zxf wds.tgz
 
 ## Megatron-Core模型训练流程
 ### Megatron-Core模型格式转换
-运行`hf2mcore_qwen2_vl_convertor.sh`脚本，需要传入的参数列表如下
+运行`hf2mcore_qwen2.5_vl_convertor.sh`脚本，需要传入的参数列表如下
 ```bash
 MODEL_SIZE=$1                 # 模型参数：2B/7B/72B
 SOURCE_CKPT_PATH=$2           # 源llm checkpoint路径
@@ -77,10 +78,10 @@ HF_CKPT_PATH=$8               # HF的CKPT的路径【可选，mg2hf=true时必�
 
 ```bash
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen
-bash hf2mcore_qwen2_vl_convertor.sh \
-7B \
-/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct \
-/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct-tp2pp2 \
+bash hf2mcore_qwen2.5_vl_convertor.sh \
+3B \
+/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct \
+/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-tp2pp2 \
 2  \
 2  \
 false \
@@ -93,30 +94,30 @@ bf16
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen
 bash hf2mcore_qwen2_vl_convertor.sh \
 7B \
-/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct-tp2pp2 \
-/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct-tp2pp2-back \
+/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-tp2pp2 \
+/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-tp2pp2-back \
 2  \
 2  \
 true \
 bf16 \
-/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct
+/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct
 ```
 
 此外，如果您需要在继续预训练时设置不对称PP切分来达到最佳吞吐，在准备模型权重时，与训练阶段类似，您需要手动调整以下环境变量来确定第一个pipeline stage中的Transformer层数
 ```bash
-export MP_PP0_LAYERS=12
+export MP_PP0_LAYERS=16
 ```
 
 ### Megatron-Core预训练
 
-> 关于attention: Qwen2-VL调用了varlen attention，若您使用Hopper架构GPU，推荐将FL设为false以使用FusedAttention后端来获得最佳性能；
+> 关于attention: Qwen2.5-VL调用了varlen attention，若您使用Hopper架构GPU，推荐将FL设为false以使用FusedAttention后端来获得最佳性能；
 对于其他NVIDIA GPU，由于FusedAttention不支持varlen，请将FL设置为true。此外，目前观察到Flash-Attention 3会出现不正常的grad norm，不推荐使用。
 
 #### 预训练命令描述
 需要传入的参数列表如下：
 ```bash
 ENV=$1                          # 运行环境配置开关: dsw单机训练训练，dlc表示多机训练环境
-MODEL_SIZE=$2                   # 模型结构参数量级: 2B/7B/72B
+MODEL_SIZE=$2                   # 模型结构参数量级: 3B/7B/72B
 BATCH_SIZE=$3                   # 一次迭代一个数据并行内的样本数
 GLOBAL_BATCH_SIZE=$4            # 一次迭代多个数据并行的总样本数
 LR=$5                           # 学习率
@@ -142,13 +143,13 @@ OUTPUT_BASEPATH=${24}           # 训练输出日志文件路径
 ```
 
 #### 预训练示例
-使用以下命令启动对Qwen2-VL的继续预训练。
+使用以下命令启动对Qwen2.5-VL的继续预训练。
 
 ```bash
-cd /workspace/Pai-Megatron-Patch/examples/qwen2_vl
-sh run_mcore_qwen.sh  \
+cd /workspace/Pai-Megatron-Patch/examples/qwen2_5_vl
+bash run_mcore_qwen.sh  \
 dsw  \
-7B   \
+3B   \
 1    \
 32 \
 1e-5   \
@@ -167,19 +168,19 @@ false \
 100000  \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
-/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct-tp2pp2 \
+/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-tp2pp2 \
 20000  \
 200   \
-/workspace/output_mcore_qwen2vl_pretrain
+/workspace/output_mcore_qwen2_5_vl_pretrain
 ```
 
 由于PP切分时，PP Rank 0额外的ViT会导致其负载略高于其他PP Rank，为了达到最佳性能，您可能需要调整`MP_PP0_LAYERS`变量降低PP Rank 0的LLM层数。
 
 ```bash
-cd /workspace/Pai-Megatron-Patch/examples/qwen2_vl
-MP_PP0_LAYERS=12 sh run_mcore_qwen.sh  \
+cd /workspace/Pai-Megatron-Patch/examples/qwen2_5_vl
+MP_PP0_LAYERS=16 sh run_mcore_qwen.sh  \
 dsw  \
-7B   \
+3B   \
 1    \
 32 \
 1e-5   \
@@ -198,8 +199,8 @@ false \
 100000  \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
-/mnt/qwen2-vl-ckpts/Qwen2-VL-7B-Instruct-tp2pp2 \
+/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-tp2pp2 \
 20000  \
 200   \
-/workspace/output_mcore_qwen2vl_pretrain
+/workspace/output_mcore_qwen2_5_vl_pretrain
 ```

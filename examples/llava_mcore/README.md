@@ -33,7 +33,7 @@ cd LLaVA-Pretrain
 unzip images.zip
 
 #convert to webdataset format:
-cd /workspace/Pai-Megatron-Patch/toolkits/pretrain_data_preprocessing
+cd /workspace/Pai-Megatron-Patch/toolkits/multimodal_data_preprocessing
 python convert_llava_pretrain_to_wds.py /mnt/llava-datasets/LLaVA-Pretrain/
 
 #convert to megatron-energon format:

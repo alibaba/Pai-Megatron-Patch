@@ -39,13 +39,27 @@ def convert(dataset_dir, json_name, sort_function=sorted, max_count=10000):
                 image_datas.append(cv2.imread(os.path.join(dataset_dir, image), cv2.IMREAD_UNCHANGED))
             
             video_datas = []
+            second_per_grid_ts = []
             for video in entry.pop('videos', []):
                 video_noext, _ = os.path.splitext(video)
                 frame_folder = os.path.join(dataset_dir, video_noext)
+                # NOTE: we implicitly require a `${frame_folder}.json`` file containing fps rates of each video
+                # otherwise fps will be regarded as `1` by default.
+                if os.path.exists(frame_folder + '.json'):
+                    with open(frame_folder + '.json', 'r') as f:
+                        fps = float(json.load(f)['fps'])
+                else:
+                    fps = 2.0
+
                 frames = []
                 for frame in sort_function(os.listdir(frame_folder)):
                     frames.append(cv2.imread(os.path.join(frame_folder, frame), cv2.IMREAD_UNCHANGED))
+                
+                if len(frames) % 2 == 1:
+                    frames = frames[:-1]
                 video_datas.append(frames)
+                second_per_grid_ts.append(1 / fps)
+
 
             if has_idx is None:
                 has_idx = 'id' in entry
@@ -55,7 +69,10 @@ def convert(dataset_dir, json_name, sort_function=sorted, max_count=10000):
                 "__key__": entry.pop('id', str(idx)), 
                 "jpgs": image_datas,
                 'videos': video_datas,
-                "json": json.dumps(entry['conversations']).encode("utf-8"),
+                "json": json.dumps({
+                    'conversations': entry['conversations'],
+                    'second_per_grid_ts': second_per_grid_ts
+                }).encode("utf-8"),
             }
             shard_writer.write(sample)
     

@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 from collections import defaultdict
 
-from image_processing import get_visual_transform
+from megatron_patch.data.image_processing import get_visual_transform
 import numpy as np
 import torch
 from torchvision import transforms as T
@@ -49,6 +49,8 @@ class ImageTaskSample:
     video_thw_grids: np.ndarray
     image_input_mask: np.ndarray
     video_input_mask: np.ndarray
+    second_per_grid_ts: np.ndarray # (n_videos, )
+
     text: np.ndarray
     target: np.ndarray
 
@@ -64,6 +66,8 @@ class VQATaskBatch(Batch):
     video_thw_grids: torch.Tensor
     image_input_mask: torch.Tensor
     video_input_mask: torch.Tensor
+    second_per_grid_ts: torch.Tensor # (n_videos, ), read from metadata?
+
     # (n, seq_len)
     text: torch.Tensor
     # (n, seq_len)
@@ -178,13 +182,21 @@ class TaskEncoder(DefaultTaskEncoder[Union[VQASample, ChatMLSample], ImageTaskSa
         # TODO: modify get_visual_transform to add more augmentations
         imgs = [get_visual_transform(img)[0] for img in sample.imgs]
         videos = [[get_visual_transform(frame)[0] for frame in video] for video in sample.videos]
-        
+        # NOTE: make n_frames even foreach video
+        for i, video in enumerate(videos):
+            videos[i] = video[:len(video) // 2 * 2]
+
         # NOTE: flatten all images
         flattened_imgs, image_thw_grids = self._flatten_visual_inputs(imgs, is_image=True)
         flattened_videos, video_thw_grids = self._flatten_visual_inputs(videos, is_image=False)
 
         # NOTE: generate qwen2vl conversations
         conversation = json.loads(sample.conversation) if isinstance(sample.conversation, (str, bytes)) else sample.conversation
+        second_per_grid_ts = [1 / 2.0] * len(video_thw_grids)
+        if 'conversations' in conversation:
+            second_per_grid_ts = conversation.get('second_per_grid_ts', second_per_grid_ts)
+            second_per_grid_ts = [float(i) for i in second_per_grid_ts]
+            conversation = conversation['conversations']
  
         role_key = 'from' if 'from' in conversation[0] else 'role'
         content_key = 'value' if 'from' in conversation[0] else 'content'
@@ -310,6 +322,7 @@ class TaskEncoder(DefaultTaskEncoder[Union[VQASample, ChatMLSample], ImageTaskSa
 
             image_thw_grids=image_thw_grids,
             video_thw_grids=video_thw_grids,
+            second_per_grid_ts = np.array(second_per_grid_ts, dtype=np.float32),
 
             image_input_mask=image_input_mask,
             video_input_mask=video_input_mask,
@@ -397,6 +410,7 @@ class TaskEncoder(DefaultTaskEncoder[Union[VQASample, ChatMLSample], ImageTaskSa
 
             image_input_mask=image_input_mask,
             video_input_mask=None,
+            second_per_grid_ts=np.zeros(0, dtype=np.float32),
             
             text=input_ids,
             target=target,
@@ -423,6 +437,12 @@ class TaskEncoder(DefaultTaskEncoder[Union[VQASample, ChatMLSample], ImageTaskSa
             videos = torch.cat([torch.from_numpy(video) for video in videos])
         else:
             videos = torch.empty([0, 3 * self.temporal_patch_size * self.patch_size * self.patch_size], dtype=torch.float32)
+        
+        second_per_grid_ts = [second_per_grid for s in samples for second_per_grid in s.second_per_grid_ts]
+        if len(second_per_grid_ts) > 0:
+            second_per_grid_ts = torch.from_numpy(np.array(second_per_grid_ts)).float()
+        else:
+            second_per_grid_ts = torch.empty([0, ], dtype=torch.float32)
         
         video_thw_grids = [thw_grids for s in samples for thw_grids in s.video_thw_grids]
         if len(video_thw_grids) > 0:
@@ -462,6 +482,7 @@ class TaskEncoder(DefaultTaskEncoder[Union[VQASample, ChatMLSample], ImageTaskSa
             videos=videos,
             image_thw_grids=image_thw_grids,
             video_thw_grids=video_thw_grids,
+            second_per_grid_ts=second_per_grid_ts,
             image_input_mask=torch.from_numpy(image_input_masks),    
             video_input_mask=torch.from_numpy(video_input_masks),
             text=torch.from_numpy(text_mat),
