@@ -16,7 +16,8 @@ EP=$6
 ETP=$7
 PR=$8
 MG2HF=$9
-HF_CKPT_PATH=$10
+HF_CKPT_PATH=${10}
+
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
