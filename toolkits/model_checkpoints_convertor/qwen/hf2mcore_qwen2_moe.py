@@ -207,8 +207,7 @@ def load_megatron_model(args):
 
         layers_to_copy = {}
         for tp_rank in range(args.tensor_model_parallel_size):
-            ep_start = tp_rank if args.tensor_model_parallel_size>1 else 0
-            for ep_rank in range(ep_start, args.expert_model_parallel_size, args.tensor_model_parallel_size):
+            for ep_rank in range(tp_rank, args.expert_model_parallel_size, args.tensor_model_parallel_size):
                 for pp_rank in range(args.pipeline_model_parallel_size):
                     layer_offset = sum(pp_layers_per_stage[:pp_rank])
                     for layer in range(pp_layers_per_stage[pp_rank]):
@@ -249,10 +248,9 @@ def load_megatron_model(args):
                                 if ep_rank == tp_rank and pp_rank == args.pipeline_model_parallel_size - 1:
                                     mid_state[k].append(v)
                             else:
-                               raise ValueError(f"{k} is missing!! ")
+                                raise ValueError(f"{k} is missing!! ")
 
         for k, v in mid_state.items():
-            # print(k, len(v))
             if 'extra_state' in k:
                 continue
             elif not isinstance(v[0], torch.Tensor) or 'router' in k or 'gate' in k:
@@ -271,21 +269,98 @@ def load_megatron_model(args):
                 target_v = v[0]
             elif 'experts.linear_fc1' in k and "shared_experts" not in k:
                 target_v = v[0]
-                # todo: ETP>1
-                # viewed = [x.view(2, -1, args.hidden_size) for x in v]
-                # target_v = torch.cat(viewed, dim=1).view(-1, args.hidden_size)
             elif 'shared_experts.linear_fc1' in k:
                 viewed = [x.view(2, -1, args.hidden_size) for x in v]
                 target_v = torch.cat(viewed, dim=1).view(-1, args.hidden_size)
             elif "shared_experts.linear_fc2" in k:
                 target_v = torch.cat(v, dim=1)
-            elif "shared_experts.gate_weight" in k:
+            elif "shared_experts.gate_weight" in k or 'layer_norm_weight' in k or 'pre_mlp_layernorm' in k or 'final_layernorm' in k:
                 target_v = v[0]
-            elif 'layer_norm_weight' in k: 
+            else:
+                raise ValueError(f"{k} is missing!")
+            state_dict[k] = target_v
+
+    elif (
+        args.tensor_model_parallel_size >= 1
+        and args.pipeline_model_parallel_size >= 1
+        and args.expert_model_parallel_size >= 1
+        and args.num_experts % args.expert_model_parallel_size == 0
+        and args.expert_tensor_parallel_size > 1
+    ):
+        if args.target_decoder_first_pipeline_num_layers is not None:
+            remained_layers = args.num_layers - args.target_decoder_first_pipeline_num_layers
+            remained_stages = args.pipeline_model_parallel_size - 1
+            assert remained_layers % remained_stages == 0
+            pp_layers_per_stage = [args.target_decoder_first_pipeline_num_layers] +([remained_layers // remained_stages] * remained_stages)
+        else:
+            pp_layers_per_stage = [args.num_layers // args.pipeline_model_parallel_size] * args.pipeline_model_parallel_size
+
+        layers_to_copy = {}
+        for tp_rank in range(args.tensor_model_parallel_size):
+            for ep_rank in range(args.expert_model_parallel_size):
+                for pp_rank in range(args.pipeline_model_parallel_size):
+                    layer_offset = sum(pp_layers_per_stage[:pp_rank])
+                    for layer in range(pp_layers_per_stage[pp_rank]):
+                        pp_layer_id = layer + layer_offset
+                        layers_to_copy[(pp_rank, layer)] = pp_layer_id
+
+                    if args.expert_model_parallel_size > 1:
+                        checkpoint_name = get_checkpoint_name(model_path, iteration, release, True, tp_rank, pp_rank, True,
+                                                              ep_rank)
+                    elif args.expert_model_parallel_size == 1:
+                        checkpoint_name = get_checkpoint_name(model_path, iteration, release, True, tp_rank, pp_rank,
+                                                              False)
+                    print(f'load {checkpoint_name}')
+                    split_state = torch.load(checkpoint_name, map_location="cpu", weights_only=False)['model']
+                    for k, v in split_state.items():
+                        if "_extra_state" in k:
+                            continue
+                        try:
+                            if 'experts' in k and "shared_experts" not in k:
+                                pattern = r'weight(\d+)'
+                                local_expert_rank = int(re.findall(pattern, k)[0])
+                                expert_rank = local_expert_rank + num_local_experts * ep_rank
+                                k = k.replace(f'weight{local_expert_rank}', f'weight{expert_rank}')
+                            pattern = re.compile(r'\d+')
+                            res = pattern.findall(k)
+                            tgt = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy[(pp_rank, int(res[0]))]), k)
+                            if 'linear_proj' in k or 'shared_experts.linear_fc1' in k or 'shared_experts.linear_fc2' in k or \
+                                "linear_qkv" in k:
+                                if ep_rank == 0:
+                                    mid_state[tgt].append(v)
+                            else:
+                                mid_state[tgt].append(v)
+                        except:
+                            if "word_embeddings" in k:
+                                if ep_rank == 0 and pp_rank == 0:
+                                    mid_state[k].append(v)
+                            elif "output_layer" in k or "final_layernorm" in k:
+                                if ep_rank == 0 and pp_rank == args.pipeline_model_parallel_size - 1:
+                                    mid_state[k].append(v)
+                            else:
+                                raise ValueError(f"{k} is missing!! ")
+
+        for k, v in mid_state.items():
+            if 'extra_state' in k:
+                continue
+            elif not isinstance(v[0], torch.Tensor) or 'router' in k or 'gate' in k:
                 target_v = v[0]
-            elif 'pre_mlp_layernorm' in k:
-                target_v = v[0]
-            elif 'final_layernorm' in k:
+            elif 'word_embeddings' in k or 'output_layer' in k:
+                target_v = torch.cat(v, dim=0)
+            elif 'linear_proj' in k:
+                target_v = torch.cat(v, dim=1)
+            elif 'linear_qkv.weight' in k:
+                viewed = [x.view(group_per_split, -1, head_dim, args.hidden_size) for x in v]
+                target_v = torch.cat(viewed, dim=0).view(-1, args.hidden_size)
+            elif 'linear_qkv.bias' in k:
+                viewed = [x.view(group_per_split, -1) for x in v]
+                target_v = torch.cat(viewed, dim=0).view(-1)
+            elif 'linear_fc1' in k:
+                viewed = [x.view(2, -1, args.hidden_size) for x in v]
+                target_v = torch.cat(viewed, dim=1).view(-1, args.hidden_size)
+            elif "linear_fc2" in k:
+                target_v = torch.cat(v, dim=1)
+            elif "shared_experts.gate_weight" in k or 'layer_norm_weight' in k or 'pre_mlp_layernorm' in k or 'final_layernorm' in k:
                 target_v = v[0]
             else:
                 raise ValueError(f"{k} is missing!")
