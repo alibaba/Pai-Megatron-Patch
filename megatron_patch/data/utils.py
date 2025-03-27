@@ -372,8 +372,8 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator, per_seq_average=False):
 
         num_seqs = None
         if per_seq_average:
+            num_seqs = torch.ones(position_ids.shape[0], device=torch.cuda.current_device(), dtype=torch.int64)
             if args.reset_position_ids:
-                num_seqs = torch.zeros(position_ids.shape[0], device=torch.cuda.current_device(), dtype=torch.int64)
                 for b in range(position_ids.shape[0]):
                     p = position_ids[b]
                     start_indices = (p == 0).nonzero(as_tuple=True)[0]
@@ -388,8 +388,7 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator, per_seq_average=False):
                         assert subseq.sum() > 0
                         loss_mask[b, start_idx: start_idx + seqlen] /= subseq.sum()
             else:
-                num_seqs = loss_mask.sum(dim=-1).long() # [mbs]
-                loss_mask = loss_mask / num_seqs.view(-1, 1)                  
+                loss_mask = loss_mask / loss_mask.sum(dim=-1, keepdims=True) # [mbs]       
                 
         # dtype: long, long, float, bool, long
         batch = {

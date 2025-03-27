@@ -388,7 +388,7 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
                  mtp_dict["model.layers.61.mlp.shared_experts.up_proj.weight"]])
             mtplayer.mlp.shared_experts.linear_fc1.weight.copy_(shared_fc1_weight)
             mtplayer.mlp.shared_experts.linear_fc2.weight.copy_(mtp_dict["model.layers.61.mlp.shared_experts.down_proj.weight"])
-            mtplayer.final_layernorm.weight.copy_(mtp_dict["model.layers.61.shared_head.norm.weight"])
+            mgmodel.mtp_predictor.mtp_modules[0].decoder.final_layernorm.weight.copy_(mtp_dict["model.layers.61.shared_head.norm.weight"])
             mgmodel.output_layer.weight.copy_(hfmodel.lm_head.weight)
 
     with torch.no_grad():
