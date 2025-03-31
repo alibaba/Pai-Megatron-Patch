@@ -144,8 +144,14 @@ def build_layer_id_mapping(args):
             offset += num_layers
     return ltog, gtol
 
-def safe_copy(src_tensor: torch.Tensor, dst_tensor: torch.Tensor):
-    assert src_tensor.dtype == dst_tensor.dtype
+def safe_copy(
+    src_tensor: torch.Tensor, 
+    dst_tensor: torch.Tensor,
+    skip_dtype_assert: bool = False,
+):
+    if not skip_dtype_assert:
+        if src_tensor.dtype != dst_tensor.dtype:
+            raise ValueError(f"Get source dtype {src_tensor.dtype}, but target dtype {dst_tensor.dtype}")
     assert src_tensor.shape == dst_tensor.shape
     dst_tensor.data.copy_(src_tensor.data)
     return src_tensor.numel()

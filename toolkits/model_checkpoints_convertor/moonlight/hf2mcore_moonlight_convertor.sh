@@ -15,11 +15,11 @@ ETP=$6
 EP=$7
 PR=$8
 MG2HF=$9
-HF_CKPT_PATH=$10
+HF_CKPT_PATH=${10}
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
-export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250314
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250328
 
 if [ $MODEL_SIZE = A3B ]; then
 # moonshotai/Moonlight-16B-A3B-Instruct
@@ -80,6 +80,10 @@ if [ $MG2HF = true ]; then
                 --convert-checkpoint-from-megatron-to-transformers \
                 --hf-ckpt-path ${HF_CKPT_PATH}"
 
+    mkdir -p ${TARGET_CKPT_PATH}
+    find -L ${HF_CKPT_PATH} -maxdepth 1 -type f -name "configuration.json" -print0 | xargs -0 cp -t ${TARGET_CKPT_PATH}
+    find -L ${HF_CKPT_PATH} -maxdepth 1 -type f -name "tiktoken.model" -print0 | xargs -0 cp -t ${TARGET_CKPT_PATH}
+    find -L ${HF_CKPT_PATH} -maxdepth 1 -type f -name "tiktoken.model" -print0 | xargs -0 cp -t ${SOURCE_CKPT_PATH}
 elif [ $MG2HF = false ]; then
     convert_options=""
 fi

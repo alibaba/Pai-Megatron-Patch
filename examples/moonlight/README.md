@@ -14,7 +14,7 @@
 
 ## 安装
 
-请在阿里云人工智能平台PAI产品中填写专属镜像地址： `dsw-registry.cn-wulanchabu.cr.aliyuncs.com/pai/pai-megatron-patch:25.01` 
+请在阿里云人工智能平台PAI产品中填写专属镜像地址： `dsw-registry.cn-wulanchabu.cr.aliyuncs.com/pai/pai-megatron-patch:25.02` 
 
 运行下列代码克隆Pai-Megatron-Patch
 ```bash
@@ -72,7 +72,7 @@ mg2hf=$9                       # 是否执行mcore2hf转换
 HG_CKPT_PATH=$10               # HF的CKPT的路径
 ```
 例如，使用下述脚本将checkpoint转换到MCore-MoE并检查输出。
-注意对于A3B模型由于它有27层，当TP=2时需要执行非均匀切分策略设置`MP_PP0_LAYERS=13`。
+注意对于A3B模型由于它有27层，当PP=2时需要执行非均匀切分策略设置`MP_PP0_LAYERS=13`。
 ```bash
 cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/moonlight
 

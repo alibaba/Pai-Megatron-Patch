@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import json
 import gc
 import safetensors.torch
 import sys
@@ -25,6 +25,7 @@ from transformers import (
     AutoTokenizer,
 )
 
+from safetensors import safe_open
 from megatron.training.initialize import initialize_megatron
 from megatron.training import get_args
 from megatron.training.checkpointing import get_checkpoint_name, get_checkpoint_tracker_filename, read_metadata
@@ -36,7 +37,8 @@ from megatron_patch.arguments import get_patch_args
 
 from toolkits.model_checkpoints_convertor.utils import (
     save_state_dict,
-    save_hfmodel
+    save_hfmodel,
+    safe_copy
 )
 import math
 
@@ -131,6 +133,12 @@ def add_model_args(parser):
     )
 
     parser.add_argument(
+        "--target-decoder-last-pipeline-num-layers",
+        type=int,
+        default=None
+    )
+
+    parser.add_argument(
         "--hf-ckpt-path",
         type=str
     )
@@ -156,9 +164,8 @@ def load_megatron_model(args):
 
     args.tensor_model_parallel_size = args.target_tensor_model_parallel_size
     args.pipeline_model_parallel_size = args.target_pipeline_model_parallel_size
-
-    if args.num_experts is not None:
-        args.expert_model_parallel_size = args.target_expert_model_parallel_size
+    args.expert_model_parallel_size = args.target_expert_model_parallel_size
+    args.expert_tensor_parallel_size = args.target_expert_tensor_parallel_size
 
     if args.tensor_model_parallel_size > 1:
         args.sequence_parallel = True
@@ -169,94 +176,105 @@ def load_megatron_model(args):
     q_head_dim = args.qk_head_dim + args.qk_pos_emb_head_dim
     group_per_split = args.num_attention_heads // args.tensor_model_parallel_size
     if args.num_experts is not None:
-        pattern = r'weight(\d+)'
+        ep_pattern = r'weight(\d+)'
         num_local_experts = args.num_experts // args.expert_model_parallel_size
     state_dict = {}
     mid_state = defaultdict(list)
 
-    if (
-        args.tensor_model_parallel_size >= 1
-        and args.pipeline_model_parallel_size >= 1
-        and args.expert_model_parallel_size >= 1
-        and args.num_experts % args.expert_model_parallel_size == 0
-    ):
-        #assert args.num_layers % args.pipeline_model_parallel_size == 0
-        if args.target_decoder_first_pipeline_num_layers is not None:
-            remained_layers = args.num_layers - args.target_decoder_first_pipeline_num_layers
-            remained_stages = args.pipeline_model_parallel_size - 1
-            assert remained_layers % remained_stages == 0
-            pp_layers_per_stage = [args.target_decoder_first_pipeline_num_layers] +([remained_layers // remained_stages] * remained_stages)
-        else:
-            pp_layers_per_stage = [args.num_layers // args.pipeline_model_parallel_size] * args.pipeline_model_parallel_size
+    assert args.num_experts % args.expert_model_parallel_size == 0, "The amount of experts should be evenly split across EP ranks."
 
-        layers_to_copy = {}
-        for tp_rank in range(args.tensor_model_parallel_size):
-            for ep_rank in range(args.expert_model_parallel_size):
-                for pp_rank in range(args.pipeline_model_parallel_size):
-                    layer_offset = sum(pp_layers_per_stage[:pp_rank])
-                    for layer in range(pp_layers_per_stage[pp_rank]):
-                        pp_layer_id = layer + layer_offset
-                        layers_to_copy[(pp_rank, layer)] = pp_layer_id
+    pp_layers_per_stage = []
+    remained_layers = args.num_layers
+    remained_stages = args.pipeline_model_parallel_size
+    if args.target_decoder_first_pipeline_num_layers is not None:
+        remained_layers -= args.target_decoder_first_pipeline_num_layers
+        remained_stages -= 1
+        pp_layers_per_stage = [args.target_decoder_first_pipeline_num_layers]
+    
+    if args.target_decoder_last_pipeline_num_layers is not None:
+        remained_layers -= args.target_decoder_last_pipeline_num_layers
+        remained_stages -= 1
 
-                    if args.expert_model_parallel_size > 1:
-                        checkpoint_name = get_checkpoint_name(model_path, iteration, release, True, tp_rank, pp_rank, True,
-                                                              ep_rank)
-                    elif args.expert_model_parallel_size == 1:
-                        checkpoint_name = get_checkpoint_name(model_path, iteration, release, True, tp_rank, pp_rank,
-                                                              False)
-                    print(f'load {checkpoint_name}')
-                    split_state = torch.load(checkpoint_name, map_location="cpu", weights_only=False)['model']
-                    for k, v in split_state.items():
-                        try:
-                            if 'experts' in k:
-                                local_expert_rank = int(re.findall(pattern, k)[0])
-                                expert_rank = local_expert_rank + num_local_experts * ep_rank
-                                k = k.replace(f'experts.{local_expert_rank}', f'experts.{expert_rank}')
-                            pattern = re.compile(r'\d+')
-                            res = pattern.findall(k)
-                            tgt = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy[(pp_rank, int(res[0]))]), k)
-                            if 'linear_proj' in k or 'linear_q_down_proj' in k or 'linear_q_up_proj'in k or 'linear_kv_up_proj' in k or 'linear_kv_down_proj' in k or\
-                                    'decoder.layers.0.mlp.linear_fc1' in k or 'decoder.layers.1.mlp.linear_fc1' in k or 'decoder.layers.2.mlp.linear_fc1' in k or \
-                                    'decoder.layers.0.mlp.linear_fc2' in k or 'decoder.layers.1.mlp.linear_fc2' in k or 'decoder.layers.2.mlp.linear_fc2' in k or \
-                                    'shared_experts.linear_fc1' in k or 'shared_experts.linear_fc2' in k:
-                                if ep_rank ==0:
-                                    mid_state[tgt].append(v)
-                            else:
-                                mid_state[tgt].append(v)
-                        except:
-                            if "word_embeddings" in k:
-                                if ep_rank ==0 and pp_rank == 0:
-                                    mid_state[k].append(v)
-                            elif "output_layer" in k or "final_layernorm" in k:
-                                if ep_rank ==0 and pp_rank == args.pipeline_model_parallel_size - 1:
-                                    mid_state[k].append(v)
-                            else:
-                                raise ValueError(f"{k} is missing! ")
+    assert remained_layers % remained_stages == 0
+    pp_layers_per_stage.extend([remained_layers // remained_stages] * remained_stages)
+    if args.target_decoder_last_pipeline_num_layers is not None:
+        pp_layers_per_stage.append(args.target_decoder_last_pipeline_num_layers)
 
-        for k, v in mid_state.items():
+    layers_to_copy = {}
+    for (tp_rank, etp_rank, ep_rank, pp_rank) in generate_rank_group(
+            args.tensor_model_parallel_size,
+            args.expert_tensor_parallel_size,
+            args.expert_model_parallel_size,
+            args.pipeline_model_parallel_size
+        ):
+            layer_offset = sum(pp_layers_per_stage[:pp_rank])
+            for layer in range(pp_layers_per_stage[pp_rank]):
+                pp_layer_id = layer + layer_offset
+                layers_to_copy[(pp_rank, layer)] = pp_layer_id
+
+            checkpoint_name = get_checkpoint_name(
+                model_path, 
+                iteration, 
+                release, 
+                args.pipeline_model_parallel_size > 1, 
+                tp_rank, 
+                pp_rank, 
+                args.expert_model_parallel_size > 1,
+                ep_rank
+            )
+
+            print(f'load {checkpoint_name}')
+            split_state = torch.load(checkpoint_name, map_location="cpu")['model']
+            for k, v in split_state.items():
+                if '_extra_state' in k:
+                    continue
+                try:
+                    pattern = re.compile(r'\d+')
+                    res = pattern.findall(k)
+                    tgt_layer_id = layers_to_copy[(pp_rank, int(res[0]))]
+                    tgt = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(tgt_layer_id), k)
+
+                    if 'experts' in k and 'shared_experts' not in k:
+                        local_expert_rank = int(re.findall(ep_pattern, k)[0])
+                        expert_rank = local_expert_rank + num_local_experts * ep_rank
+                        tgt = tgt.replace(f'weight{local_expert_rank}', f'weight{expert_rank}')
+                        if tgt not in mid_state:
+                            mid_state[tgt] = [None] * args.target_expert_tensor_parallel_size
+                        # NOTE: deduplicate MoE params by individual ETP
+                        if mid_state[tgt][etp_rank] is not None:
+                            # NOTE: Here we can add a check to ensure parameters saved by mcore are synchronized.
+                            pass
+                        mid_state[tgt][etp_rank] = v                       
+                    else:
+                        if tgt not in mid_state:
+                            mid_state[tgt] = [None] * args.target_tensor_model_parallel_size
+                        if mid_state[tgt][tp_rank] is not None:
+                            # NOTE: Here we can add a check to ensure parameters saved by mcore are synchronized.
+                            pass
+                        mid_state[tgt][tp_rank] = v
+                except:
+                    if contains(k, ["word_embeddings", "output_layer"]):
+                        if k not in mid_state:
+                            mid_state[k] = [None] * args.target_tensor_model_parallel_size
+                        mid_state[k][tp_rank] = v
+                    elif "final_layernorm" in k:
+                        mid_state[k] = [v]
+                    else:
+                        raise ValueError(f"{k} is missing! ")
+
+    for k, v in mid_state.items():
+        try:
             if 'extra_state' in k:
                 continue
-            if not isinstance(v[0], torch.Tensor) or 'router' in k or 'gate' in k:
+            if not isinstance(v[0], torch.Tensor):
                 target_v = v[0]
-            elif 'input_layernorm' in k:
+            elif contains(k, ['router', 'gate', 'input_layernorm', 'pre_mlp_layernorm', 'enorm', 'hnorm', 'layer_norm_weight', 'final_layernorm']):
                 target_v = v[0]
-            elif 'pre_mlp_layernorm' in k:
-                target_v = v[0]
-            elif 'word_embeddings' in k or 'output_layer' in k or 'final_layernorm' in k:
+            elif contains(k, ['word_embeddings', 'output_layer', 'linear_q_down_proj', 'linear_q_up_proj', 'linear_kv_down_proj', 'linear_kv_up_proj.layer_norm_weight', 'eh_proj', 'linear_q_proj']):
                 target_v = torch.cat(v, dim=0)
-            elif 'linear_q_down_proj' in k:
-                target_v = torch.cat(v, dim=0)
-            elif 'linear_q_up_proj' in k and 'layer_norm_weight' not in k:
-                target_v = torch.cat(v, dim=0)
-            elif 'linear_q_up_proj.layer_norm_weight' in k:
-                target_v = torch.cat(v, dim=0)
-            elif 'linear_kv_down_proj' in k:
-                target_v = torch.cat(v, dim=0)
-            elif 'linear_kv_up_proj' in k and 'layer_norm_weight' not in k:
+            elif 'linear_kv_up_proj' in k:
                 viewed = [x.view(group_per_split, -1, q_head_dim - args.qk_pos_emb_head_dim + args.v_head_dim, args.kv_lora_rank) for x in v]
                 target_v = torch.cat(viewed, dim=0).view(-1, args.kv_lora_rank)
-            elif 'linear_kv_up_proj.layer_norm_weight' in k:
-                target_v = torch.cat(v, dim=0)
             elif 'linear_proj' in k:
                 target_v = torch.cat(v, dim=1)
             elif 'linear_fc1' in k:
@@ -266,169 +284,208 @@ def load_megatron_model(args):
                 target_v = torch.cat(v, dim=1)
             else:
                 raise ValueError(f"{k} is missing!")
-            state_dict[k] = target_v
+        except Exception as e:
+            print(f"Failed on {k} with shape {[item.shape for item in v]}")
+            raise e
+        state_dict[k] = target_v
 
-    else:
-        raise ValueError('not support yet')
-
-    model.load_state_dict(state_dict, strict=False)
+    missing, unexpected =  model.load_state_dict(state_dict, strict=False)
     return model
 
 
 def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
-
     if args.fp16:
         mgmodel = mgmodel.half()
     elif args.bf16:
         mgmodel = mgmodel.bfloat16()
 
-    with torch.no_grad():
-        hfmodel.model.embed_tokens.weight.copy_(mgmodel.embedding.word_embeddings.weight)
-        for layer_idx, (mglayer, hflayer) in enumerate(zip(mgmodel.decoder.layers, hfmodel.model.layers)):
-            print(layer_idx)
-            hflayer.input_layernorm.weight.copy_(mglayer.input_layernorm.weight)
-            hflayer.post_attention_layernorm.weight.copy_(mglayer.pre_mlp_layernorm.weight)
+    mtp_dict = {}
+    if args.mtp_num_layers and args.mtp_num_layers > 0:
+        mtp_layer_idx = args.num_layers
+        # word_embedding
+        mtp_dict[f"model.layers.{mtp_layer_idx}.embed_tokens.weight"] = mgmodel.embedding.word_embeddings.weight
+        # e/h norm and eh_proj
+        mtp_dict[f'model.layers.{mtp_layer_idx}.enorm.weight'] = mgmodel.mtp.layers[0].enorm.weight
+        mtp_dict[f'model.layers.{mtp_layer_idx}.hnorm.weight'] = mgmodel.mtp.layers[0].hnorm.weight
+        mtp_dict[f'model.layers.{mtp_layer_idx}.eh_proj.weight'] = mgmodel.mtp.layers[0].eh_proj.weight
 
+        # attention and mlp
+        mtplayer = mgmodel.mtp.layers[0].transformer_layer
+        mtp_dict[f"model.layers.{mtp_layer_idx}.input_layernorm.weight"] = mtplayer.input_layernorm.weight
+        mtp_dict[f"model.layers.{mtp_layer_idx}.post_attention_layernorm.weight"] = mtplayer.pre_mlp_layernorm.weight
+        mtp_dict[f"model.layers.{mtp_layer_idx}.self_attn.q_a_proj.weight"] = mtplayer.self_attention.linear_q_down_proj.weight
+        mtp_dict[f"model.layers.{mtp_layer_idx}.self_attn.q_b_proj.weight"] = mtplayer.self_attention.linear_q_up_proj.weight
+        mtp_dict[f"model.layers.{mtp_layer_idx}.self_attn.q_a_layernorm.weight"] = mtplayer.self_attention.linear_q_up_proj.layer_norm_weight
+        mtp_dict[f"model.layers.{mtp_layer_idx}.self_attn.kv_a_proj_with_mqa.weight"] = mtplayer.self_attention.linear_kv_down_proj.weight
+        mtp_dict[f"model.layers.{mtp_layer_idx}.self_attn.kv_b_proj.weight"] = mtplayer.self_attention.linear_kv_up_proj.weight
+        mtp_dict[f"model.layers.{mtp_layer_idx}.self_attn.kv_a_layernorm.weight"] = mtplayer.self_attention.linear_kv_up_proj.layer_norm_weight
+        mtp_dict[f"model.layers.{mtp_layer_idx}.self_attn.o_proj.weight"] = mtplayer.self_attention.linear_proj.weight
+        mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.gate.weight"] = mtplayer.mlp.router.weight
+        # NOTE: the e_score_correction_bias in mcore model will be initialized with bfloat16 and \
+        # recover to fp32 in the first forward. Convert to fp32 to suit huggingface impl.
+        mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.gate.e_score_correction_bias"] = mtplayer.mlp.router.expert_bias.float()
+
+        for i in range(args.num_experts):
+            (
+                mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.experts."+str(i)+".gate_proj.weight"],
+                mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.experts."+str(i)+".up_proj.weight"]
+            ) = torch.chunk(getattr(mtplayer.mlp.experts.linear_fc1, 'weight' + str(i)), 2)
+            mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.experts."+str(i)+".down_proj.weight"] = getattr(mtplayer.mlp.experts.linear_fc2, 'weight' + str(i))
+            
+        (
+            mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.shared_experts.gate_proj.weight"], 
+            mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.shared_experts.up_proj.weight"]
+        ) = torch.chunk(mtplayer.mlp.shared_experts.linear_fc1.weight, 2)
+        mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.shared_experts.down_proj.weight"] = mtplayer.mlp.shared_experts.linear_fc2.weight
+        # output norm
+        mtp_dict[f"model.layers.{mtp_layer_idx}.shared_head.norm.weight"] = mgmodel.mtp.layers[0].final_layernorm.weight
+        # shared output head
+        mtp_dict[f"model.layers.{mtp_layer_idx}.shared_head.head.weight"] = mgmodel.output_layer.weight
+
+    hfmodel.model.embed_tokens.weight.copy_(mgmodel.embedding.word_embeddings.weight)
+    for layer_idx, (mglayer, hflayer) in enumerate(zip(mgmodel.decoder.layers, hfmodel.model.layers)):
+        print(layer_idx)
+        hflayer.input_layernorm.weight.copy_(mglayer.input_layernorm.weight)
+
+        if args.q_lora_rank is None:
+            hflayer.self_attn.q_proj.weight.copy_(mglayer.self_attention.linear_q_proj.weight)
+        else:
             hflayer.self_attn.q_a_proj.weight.copy_(mglayer.self_attention.linear_q_down_proj.weight)
             hflayer.self_attn.q_b_proj.weight.copy_(mglayer.self_attention.linear_q_up_proj.weight)
             hflayer.self_attn.q_a_layernorm.weight.copy_(mglayer.self_attention.linear_q_up_proj.layer_norm_weight)
 
+        hflayer.self_attn.kv_a_proj_with_mqa.weight.copy_(mglayer.self_attention.linear_kv_down_proj.weight)
+        hflayer.self_attn.kv_b_proj.weight.copy_(mglayer.self_attention.linear_kv_up_proj.weight)
+        hflayer.self_attn.kv_a_layernorm.weight.copy_(mglayer.self_attention.linear_kv_up_proj.layer_norm_weight)
+        hflayer.self_attn.o_proj.weight.copy_(mglayer.self_attention.linear_proj.weight)
 
-            hflayer.self_attn.kv_a_proj_with_mqa.weight.copy_(mglayer.self_attention.linear_kv_down_proj.weight)
-            hflayer.self_attn.kv_b_proj.weight.copy_(mglayer.self_attention.linear_kv_up_proj.weight)
-            hflayer.self_attn.kv_a_layernorm.weight.copy_(mglayer.self_attention.linear_kv_up_proj.layer_norm_weight)
-            hflayer.self_attn.o_proj.weight.copy_(mglayer.self_attention.linear_proj.weight)
+        if not hasattr(mglayer.mlp, 'router'):
+            hflayer.post_attention_layernorm.weight.copy_(mglayer.mlp.linear_fc1.layer_norm_weight)
+            gate_weight, up_weight = torch.split(mglayer.mlp.linear_fc1.weight, split_size_or_sections=args.ffn_hidden_size)
+            hflayer.mlp.gate_proj.weight.copy_(gate_weight)
+            hflayer.mlp.up_proj.weight.copy_(up_weight)
+            hflayer.mlp.down_proj.weight.copy_(mglayer.mlp.linear_fc2.weight)
+        else:
+            hflayer.mlp.gate.weight.copy_(mglayer.mlp.router.weight)
+            safe_copy(mglayer.mlp.router.expert_bias, hflayer.mlp.gate.e_score_correction_bias, skip_dtype_assert=False)
+            for i, hfexpert in enumerate(hflayer.mlp.experts):
+                linear_fc1_weighti = getattr(mglayer.mlp.experts.linear_fc1, 'weight' + str(i))
+                gate_weight, up_weight = torch.split(linear_fc1_weighti,
+                                                        split_size_or_sections=args.moe_ffn_hidden_size)
+                hfexpert.gate_proj.weight.copy_(gate_weight)
+                hfexpert.up_proj.weight.copy_(up_weight)
+                linear_fc2_weighti = getattr(mglayer.mlp.experts.linear_fc2, 'weight' + str(i))
+                hfexpert.down_proj.weight.copy_(linear_fc2_weighti)
 
-            if layer_idx < 3:
-                gate_weight, up_weight = torch.split(mglayer.mlp.linear_fc1.weight, split_size_or_sections=args.ffn_hidden_size)
-                hflayer.mlp.gate_proj.weight.copy_(gate_weight)
-                hflayer.mlp.up_proj.weight.copy_(up_weight)
-                hflayer.mlp.down_proj.weight.copy_(mglayer.mlp.linear_fc2.weight)
+            hflayer.post_attention_layernorm.weight.copy_(mglayer.pre_mlp_layernorm.weight)
+            shared_expert_gate_weight, shared_expert_up_weight = \
+                torch.split(mglayer.mlp.shared_experts.linear_fc1.weight,
+                            split_size_or_sections=args.moe_shared_expert_intermediate_size)
+            hflayer.mlp.shared_experts.gate_proj.weight.copy_(shared_expert_gate_weight)
+            hflayer.mlp.shared_experts.up_proj.weight.copy_(shared_expert_up_weight)
+            hflayer.mlp.shared_experts.down_proj.weight.copy_(mglayer.mlp.shared_experts.linear_fc2.weight)
 
-            else:
-                hflayer.mlp.gate.weight.copy_(mglayer.mlp.router.weight)
+    hfmodel.model.norm.weight.copy_(mgmodel.decoder.final_layernorm.weight)
+    hfmodel.lm_head.weight.copy_(mgmodel.output_layer.weight)
 
-                for i, hfexpert in enumerate(hflayer.mlp.experts):
-                    linear_fc1_weighti = getattr(mglayer.mlp.experts.linear_fc1, 'weight' + str(i))
-                    gate_weight, up_weight = torch.split(linear_fc1_weighti,
-                                                         split_size_or_sections=args.moe_ffn_hidden_size)
-                    hfexpert.gate_proj.weight.copy_(gate_weight)
-                    hfexpert.up_proj.weight.copy_(up_weight)
-                    linear_fc2_weighti = getattr(mglayer.mlp.experts.linear_fc2, 'weight' + str(i))
-                    hfexpert.down_proj.weight.copy_(linear_fc2_weighti)
-
-                shared_expert_gate_weight, shared_expert_up_weight = \
-                    torch.split(mglayer.mlp.shared_experts.linear_fc1.weight,
-                                split_size_or_sections=args.moe_shared_expert_intermediate_size)
-                hflayer.mlp.shared_experts.gate_proj.weight.copy_(shared_expert_gate_weight)
-                hflayer.mlp.shared_experts.up_proj.weight.copy_(shared_expert_up_weight)
-                hflayer.mlp.shared_experts.down_proj.weight.copy_(mglayer.mlp.shared_experts.linear_fc2.weight)
-
-        hfmodel.model.norm.weight.copy_(mgmodel.decoder.final_layernorm.weight)
-        hfmodel.lm_head.weight.copy_(mgmodel.output_layer.weight)
+    state_dict = hfmodel.state_dict()
+    state_dict.update(mtp_dict)
+    return state_dict
 
 def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
-
     if args.fp16:
         mgmodel = mgmodel.half()
     elif args.bf16:
         mgmodel = mgmodel.bfloat16()
-    if args.use_multi_token_prediction:
-        file_path_160 = args.load+"/model-00160-of-000163.safetensors"
-        file_path_161 = args.load + "/model-00161-of-000163.safetensors"
-        file_path_162 = args.load + "/model-00162-of-000163.safetensors"
-        file_path_163 = args.load + "/model-00163-of-000163.safetensors"
-        with open(file_path_160, "rb") as f160, open(file_path_161, "rb") as f161,\
-                open(file_path_162, "rb") as f162, open(file_path_163, "rb") as f163:
-            b160 = f160.read()
-            state_dict_160 = safetensors.torch.load(b160)
-            b161 = f161.read()
-            state_dict_161 = safetensors.torch.load(b161)
-            b162 = f162.read()
-            state_dict_162 = safetensors.torch.load(b162)
-            b163 = f163.read()
-            state_dict_163 = safetensors.torch.load(b163)
 
-        def mergedict(*args):
-            output = {}
-            for arg in args:
-                output.update(arg)
-            return output
+    if args.mtp_num_layers and args.mtp_num_layers > 0:
+        mtp_layer_idx = args.num_layers
+        # collect weights of model.layers.{mtp_layer_idx} from index.json
+        mtp_dict = {}
+        index_file = os.path.join(args.load, 'model.safetensors.index.json')
+        if not os.path.exists(index_file):
+            raise FileNotFoundError("'model.safetensors.index.json' not exists, cannot convert MTP module..")
+        with open(index_file, 'r') as f:
+            index_data = json.load(f)["weight_map"]
+        mtp_map = {k:v for k, v in index_data.items() if f'model.layers.{mtp_layer_idx}' in k}
+        files = set(mtp_map.values())
+        for file in files:
+            with safe_open(os.path.join(args.load, file), framework="pt") as f:
+                mtp_dict.update({k: f.get_tensor(k) for k in f.keys() if k in mtp_map})
+        
+        # NOTE: no-need to copy shared embedding
+        # mgmodel.embedding.word_embeddings.weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.embed_tokens.weight"])
+        # e/h norm and eh_proj
+        mgmodel.mtp.layers[0].enorm.weight.copy_(mtp_dict[f'model.layers.{mtp_layer_idx}.enorm.weight'])
+        mgmodel.mtp.layers[0].hnorm.weight.copy_(mtp_dict[f'model.layers.{mtp_layer_idx}.hnorm.weight'])
+        mgmodel.mtp.layers[0].eh_proj.weight.copy_(mtp_dict[f'model.layers.{mtp_layer_idx}.eh_proj.weight'])
+        # attention and mlp
+        mtplayer = mgmodel.mtp.layers[0].transformer_layer
+        mtplayer.input_layernorm.weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.input_layernorm.weight"])
+        mtplayer.pre_mlp_layernorm.weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.post_attention_layernorm.weight"])
+        mtplayer.self_attention.linear_q_down_proj.weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.self_attn.q_a_proj.weight"])
+        mtplayer.self_attention.linear_q_up_proj.weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.self_attn.q_b_proj.weight"])
+        mtplayer.self_attention.linear_q_up_proj.layer_norm_weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.self_attn.q_a_layernorm.weight"])
+        mtplayer.self_attention.linear_kv_down_proj.weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.self_attn.kv_a_proj_with_mqa.weight"])
+        mtplayer.self_attention.linear_kv_up_proj.weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.self_attn.kv_b_proj.weight"])
+        mtplayer.self_attention.linear_kv_up_proj.layer_norm_weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.self_attn.kv_a_layernorm.weight"])
+        mtplayer.self_attention.linear_proj.weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.self_attn.o_proj.weight"])
+        mtplayer.mlp.router.weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.gate.weight"])
+        mtplayer.mlp.router.expert_bias.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.gate.e_score_correction_bias"])
+        for i in range(args.num_experts):
+            fc1_weight = torch.cat([mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.experts."+str(i)+".gate_proj.weight"],
+                                    mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.experts."+str(i)+".up_proj.weight"]])
+            linear_fc1_weighti = getattr(mtplayer.mlp.experts.linear_fc1, 'weight' + str(i))
+            linear_fc1_weighti.copy_(fc1_weight)
+            linear_fc2_weighti = getattr(mtplayer.mlp.experts.linear_fc2, 'weight' + str(i))
+            linear_fc2_weighti.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.experts."+str(i)+".down_proj.weight"])
+        shared_fc1_weight = torch.cat(
+            [mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.shared_experts.gate_proj.weight"],
+                mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.shared_experts.up_proj.weight"]])
+        mtplayer.mlp.shared_experts.linear_fc1.weight.copy_(shared_fc1_weight)
+        mtplayer.mlp.shared_experts.linear_fc2.weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.shared_experts.down_proj.weight"])
+        # output norm
+        mgmodel.mtp.layers[0].final_layernorm.weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.shared_head.norm.weight"])
+        # NOTE: no need to copy model.layers.{mtp_layer_idx}.shared_head.head.weight
 
-        mtp_dict = mergedict(state_dict_160, state_dict_161, state_dict_162, state_dict_163)
-        with torch.no_grad():
-            mgmodel.mtp_embedding.word_embeddings.weight.copy_(mtp_dict["model.layers.61.embed_tokens.weight"])
-            mgmodel.mtp_predictor.mtp_modules[0].norm1.weight.copy_(mtp_dict['model.layers.61.enorm.weight'])
-            mgmodel.mtp_predictor.mtp_modules[0].norm2.weight.copy_(mtp_dict['model.layers.61.hnorm.weight'])
-            mgmodel.mtp_predictor.mtp_modules[0].linear_proj.weight.copy_(mtp_dict['model.layers.61.eh_proj.weight'])
-            mtplayer = mgmodel.mtp_predictor.mtp_modules[0].decoder.layers[0]
-            mtplayer.input_layernorm.weight.copy_(mtp_dict["model.layers.61.input_layernorm.weight"])
-            mtplayer.pre_mlp_layernorm.weight.copy_(mtp_dict["model.layers.61.post_attention_layernorm.weight"])
+    mgmodel.embedding.word_embeddings.weight.copy_(hfmodel.model.embed_tokens.weight)
+    for layer_idx, (mglayer, hflayer) in enumerate(zip(mgmodel.decoder.layers, hfmodel.model.layers)):
+        print(layer_idx)
+        mglayer.input_layernorm.weight.copy_(hflayer.input_layernorm.weight)
 
-            mtplayer.self_attention.linear_q_down_proj.weight.copy_(mtp_dict["model.layers.61.self_attn.q_a_proj.weight"])
-            mtplayer.self_attention.linear_q_up_proj.weight.copy_(mtp_dict["model.layers.61.self_attn.q_b_proj.weight"])
-            mtplayer.self_attention.linear_q_up_proj.layer_norm_weight.copy_(mtp_dict["model.layers.61.self_attn.q_a_layernorm.weight"])
+        if args.q_lora_rank is None:
+            mglayer.self_attention.linear_q_proj.weight.copy_(hflayer.self_attn.q_proj.weight)
+        else:
+            mglayer.self_attention.linear_q_down_proj.weight.copy_(hflayer.self_attn.q_a_proj.weight)
+            mglayer.self_attention.linear_q_up_proj.weight.copy_(hflayer.self_attn.q_b_proj.weight)
+            mglayer.self_attention.linear_q_up_proj.layer_norm_weight.copy_(hflayer.self_attn.q_a_layernorm.weight)
 
-            mtplayer.self_attention.linear_kv_down_proj.weight.copy_(mtp_dict["model.layers.61.self_attn.kv_a_proj_with_mqa.weight"])
-            mtplayer.self_attention.linear_kv_up_proj.weight.copy_(mtp_dict["model.layers.61.self_attn.kv_b_proj.weight"])
-            mtplayer.self_attention.linear_kv_up_proj.layer_norm_weight.copy_(mtp_dict["model.layers.61.self_attn.kv_a_layernorm.weight"])
-            mtplayer.self_attention.linear_proj.weight.copy_(mtp_dict["model.layers.61.self_attn.o_proj.weight"])
-            mtplayer.mlp.router.weight.copy_(mtp_dict["model.layers.61.mlp.gate.weight"])
-            mtplayer.mlp.router.expert_bias.copy_(mtp_dict["model.layers.61.mlp.gate.e_score_correction_bias"])
-            for i in range(args.num_experts):
-                fc1_weight = torch.cat([mtp_dict["model.layers.61.mlp.experts."+str(i)+".gate_proj.weight"],
-                                        mtp_dict["model.layers.61.mlp.experts."+str(i)+".up_proj.weight"]])
-                linear_fc1_weighti = getattr(mtplayer.mlp.experts.linear_fc1, 'weight' + str(i))
+        mglayer.self_attention.linear_kv_down_proj.weight.copy_(hflayer.self_attn.kv_a_proj_with_mqa.weight)
+        mglayer.self_attention.linear_kv_up_proj.weight.copy_(hflayer.self_attn.kv_b_proj.weight)
+        mglayer.self_attention.linear_kv_up_proj.layer_norm_weight.copy_(hflayer.self_attn.kv_a_layernorm.weight)
+        mglayer.self_attention.linear_proj.weight.copy_(hflayer.self_attn.o_proj.weight)
+        if not hasattr(mglayer.mlp, 'router'):
+            mglayer.mlp.linear_fc1.layer_norm_weight.copy_(hflayer.post_attention_layernorm.weight)
+            mglayer.mlp.linear_fc1.weight.copy_(
+                torch.cat([hflayer.mlp.gate_proj.weight, hflayer.mlp.up_proj.weight]))
+            mglayer.mlp.linear_fc2.weight.copy_(hflayer.mlp.down_proj.weight)
+        else:
+            mglayer.mlp.router.weight.copy_(hflayer.mlp.gate.weight)
+            # NOTE: the e_score_correction_bias in mcore model will be initialized with bfloat16 and \
+            # recover to fp32 in the first forward. There is always a diff in the bias between two models (~0.3%)
+            safe_copy(hflayer.mlp.gate.e_score_correction_bias, mglayer.mlp.router.expert_bias, skip_dtype_assert=True)
+            for i, hf_expert in enumerate(hflayer.mlp.experts):
+                fc1_weight = torch.cat([hf_expert.gate_proj.weight, hf_expert.up_proj.weight])
+                linear_fc1_weighti = getattr(mglayer.mlp.experts.linear_fc1, 'weight' + str(i))
                 linear_fc1_weighti.copy_(fc1_weight)
-                linear_fc2_weighti = getattr(mtplayer.mlp.experts.linear_fc2, 'weight' + str(i))
-                linear_fc2_weighti.copy_(mtp_dict["model.layers.61.mlp.experts."+str(i)+".down_proj.weight"])
+                linear_fc2_weighti = getattr(mglayer.mlp.experts.linear_fc2, 'weight' + str(i))
+                linear_fc2_weighti.copy_(hf_expert.down_proj.weight)
 
+            mglayer.pre_mlp_layernorm.weight.copy_(hflayer.post_attention_layernorm.weight)
             shared_fc1_weight = torch.cat(
-                [mtp_dict["model.layers.61.mlp.shared_experts.gate_proj.weight"],
-                 mtp_dict["model.layers.61.mlp.shared_experts.up_proj.weight"]])
-            mtplayer.mlp.shared_experts.linear_fc1.weight.copy_(shared_fc1_weight)
-            mtplayer.mlp.shared_experts.linear_fc2.weight.copy_(mtp_dict["model.layers.61.mlp.shared_experts.down_proj.weight"])
-            mgmodel.mtp_predictor.mtp_modules[0].decoder.final_layernorm.weight.copy_(mtp_dict["model.layers.61.shared_head.norm.weight"])
-            mgmodel.output_layer.weight.copy_(hfmodel.lm_head.weight)
-
-    with torch.no_grad():
-        mgmodel.embedding.word_embeddings.weight.copy_(hfmodel.model.embed_tokens.weight)
-
-        for layer_idx, (mglayer, hflayer) in enumerate(zip(mgmodel.decoder.layers, hfmodel.model.layers)):
-            print(layer_idx)
-            mglayer.input_layernorm.weight.copy_(hflayer.input_layernorm.weight)
-
-            if args.q_lora_rank is None:
-                mglayer.self_attention.linear_q_proj.weight.copy_(hflayer.self_attn.q_proj.weight)
-            else:
-                mglayer.self_attention.linear_q_down_proj.weight.copy_(hflayer.self_attn.q_a_proj.weight)
-                mglayer.self_attention.linear_q_up_proj.weight.copy_(hflayer.self_attn.q_b_proj.weight)
-                mglayer.self_attention.linear_q_up_proj.layer_norm_weight.copy_(hflayer.self_attn.q_a_layernorm.weight)
-
-            mglayer.self_attention.linear_kv_down_proj.weight.copy_(hflayer.self_attn.kv_a_proj_with_mqa.weight)
-            mglayer.self_attention.linear_kv_up_proj.weight.copy_(hflayer.self_attn.kv_b_proj.weight)
-            mglayer.self_attention.linear_kv_up_proj.layer_norm_weight.copy_(hflayer.self_attn.kv_a_layernorm.weight)
-            mglayer.self_attention.linear_proj.weight.copy_(hflayer.self_attn.o_proj.weight)
-            if not hasattr(mglayer.mlp, 'router'):
-                mglayer.mlp.linear_fc1.layer_norm_weight.copy_(hflayer.post_attention_layernorm.weight)
-                mglayer.mlp.linear_fc1.weight.copy_(
-                    torch.cat([hflayer.mlp.gate_proj.weight, hflayer.mlp.up_proj.weight]))
-                mglayer.mlp.linear_fc2.weight.copy_(hflayer.mlp.down_proj.weight)
-            else:
-                mglayer.mlp.router.weight.copy_(hflayer.mlp.gate.weight)
-                mglayer.mlp.router.expert_bias.copy_(hflayer.mlp.gate.e_score_correction_bias)
-                for i, hf_expert in enumerate(hflayer.mlp.experts):
-                    fc1_weight = torch.cat([hf_expert.gate_proj.weight, hf_expert.up_proj.weight])
-                    linear_fc1_weighti = getattr(mglayer.mlp.experts.linear_fc1, 'weight' + str(i))
-                    linear_fc1_weighti.copy_(fc1_weight)
-                    linear_fc2_weighti = getattr(mglayer.mlp.experts.linear_fc2, 'weight' + str(i))
-                    linear_fc2_weighti.copy_(hf_expert.down_proj.weight)
-
-                mglayer.pre_mlp_layernorm.weight.copy_(hflayer.post_attention_layernorm.weight)
-                shared_fc1_weight = torch.cat(
-                    [hflayer.mlp.shared_experts.gate_proj.weight, hflayer.mlp.shared_experts.up_proj.weight])
-                mglayer.mlp.shared_experts.linear_fc1.weight.copy_(shared_fc1_weight)
-                mglayer.mlp.shared_experts.linear_fc2.weight.copy_(hflayer.mlp.shared_experts.down_proj.weight)
+                [hflayer.mlp.shared_experts.gate_proj.weight, hflayer.mlp.shared_experts.up_proj.weight])
+            mglayer.mlp.shared_experts.linear_fc1.weight.copy_(shared_fc1_weight)
+            mglayer.mlp.shared_experts.linear_fc2.weight.copy_(hflayer.mlp.shared_experts.down_proj.weight)
 
         mgmodel.decoder.final_layernorm.weight.copy_(hfmodel.model.norm.weight)
         if args.untie_embeddings_and_output_weights:
@@ -518,26 +575,28 @@ def save_mgmodel(mgmodel, args):
             ep_rank
         )
         print(f'save model to {checkpoint_name}')
+        has_mtp = pp_rank == args.pipeline_model_parallel_size - 1
         for k, v in full_model.items():
             # NOTE: If k not in current pp_rank, skipping
             if check_layer(layers_to_copy, k):
                 layer_pattern = re.compile(r'\d+')
                 res = layer_pattern.findall(k)
                 k = re.sub(r"decoder.layers.\d+", "decoder.layers." + str(layers_to_copy["decoder.layers." + res[0]]), k)
-            elif not contains(k, ["word_embeddings", "output_layer", "final_layernorm", "mtp_modules"]):
+            elif 'mtp' in k:
+                if not has_mtp:
+                    continue
+            elif not contains(k, ["word_embeddings", "output_layer", "final_layernorm"]):
                 continue
 
             if not isinstance(v, torch.Tensor):
                 target_v = v
             elif contains(k, ['linear_q_down_proj', 'linear_kv_down_proj', 'linear_q_proj', 'linear_q_up_proj', 'linear_kv_up_proj', 'linear_q_proj']) and 'norm' not in k:
                 target_v = split_column_parallel(v, tp_rank, tp_size)
-            elif 'linear_proj' in k and 'mtp_predictor' not in k:
+            elif 'linear_proj' in k:
                 target_v = split_row_parallel(v, tp_rank, tp_size)
-            elif 'mtp_predictor.mtp_modules.0.decoder.layers.0.self_attention.linear_proj' in k:
+            elif 'mlp.linear_fc2' in k: # down proj in Dense Layer
                 target_v = split_row_parallel(v, tp_rank, tp_size)
-            elif contains(k, ['decoder.layers.0.mlp.linear_fc2', 'decoder.layers.1.mlp.linear_fc2', 'decoder.layers.2.mlp.linear_fc2']):
-                target_v = split_row_parallel(v, tp_rank, tp_size)
-            elif contains(k, ['decoder.layers.0.mlp.linear_fc1', 'decoder.layers.1.mlp.linear_fc1','decoder.layers.2.mlp.linear_fc1']) and 'norm' not in k:
+            elif 'mlp.linear_fc1' in k and 'norm' not in k: # gate_up proj in Dense Layer
                 # Split Gated Column Linear
                 seg = args.ffn_hidden_size // args.tensor_model_parallel_size
                 viewed = v.view(-1, args.ffn_hidden_size, args.hidden_size)
@@ -569,16 +628,15 @@ def save_mgmodel(mgmodel, args):
                     raise NotImplementedError()
             elif "word_embeddings" in k or "output_layer" in k:
                 target_v = split_column_parallel(v, tp_rank, tp_size)
+            elif 'eh_proj' in k:
+                target_v = split_column_parallel(v, tp_rank, tp_size)
             else:
                 target_v = v
 
-            if "embedding.word_embeddings" in k and "mtp_embedding" not in k:
-                if pp_rank == 0:
+            if "embedding.word_embeddings" in k:
+                if pp_rank == 0 or (args.mtp_num_layers > 0 and has_mtp):
                     model_split[k] = target_v
-            elif "mtp_embedding.word_embeddings" in k:
-                if pp_rank == args.pipeline_model_parallel_size - 1:
-                    model_split[k] = target_v
-            elif "output_layer" in k or "final_layernorm" in k or "mtp_modules" in k:
+            elif "output_layer" in k or "final_layernorm" in k:
                 if pp_rank == args.pipeline_model_parallel_size - 1:
                     model_split[k] = target_v
             else:
@@ -591,24 +649,32 @@ def add_extra_args(parser):
     parser = add_model_args(parser)
     return parser
 
+@torch.inference_mode()
 def main():
     initialize_megatron(extra_args_provider=add_extra_args)
     args = get_args()
 
+    assert args.mtp_num_layers in [None, 1], "Currently only support conversion with no more than 1 MTP head."
     if args.convert_checkpoint_from_megatron_to_transformers:
         config = AutoConfig.from_pretrained(args.hf_ckpt_path, trust_remote_code=True)
         hf_model = AutoModelForCausalLM.from_pretrained(args.hf_ckpt_path, trust_remote_code=True, torch_dtype=config.torch_dtype)
+        for p in hf_model.parameters():
+            p.fill_(torch.nan)
         mg_model = load_megatron_model(args)
-        convert_checkpoint_from_megatron_to_transformers(mg_model, hf_model, args)
+        # NOTE: return a state_dict for saving (to support MTP)
+        hf_model = convert_checkpoint_from_megatron_to_transformers(mg_model, hf_model, args)
         save_hfmodel(args, hf_model)
     else:
         config = AutoConfig.from_pretrained(args.load, trust_remote_code=True)
-        hf_model = AutoModelForCausalLM.from_pretrained(args.load, trust_remote_code=True, torch_dtype=config.torch_dtype)
+        hf_model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=args.load, trust_remote_code=True, torch_dtype=config.torch_dtype)
         mg_model = model_provider()
+        for p in mg_model.parameters():
+            p.fill_(torch.nan)
         convert_checkpoint_from_transformers_to_megatron(hf_model, mg_model, args)
         del hf_model
         gc.collect()
         save_mgmodel(mg_model, args)
 
 if __name__ == "__main__":
+
     main()

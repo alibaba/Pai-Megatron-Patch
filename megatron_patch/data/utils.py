@@ -115,65 +115,6 @@ def get_ltor_position_ids_packed_seq(data):
 
     return position_ids
 
-# NOTE: workaround function for current MTP impl, removed if mcore's impl is release.
-def _get_batch_on_this_tp_rank(data_iterator):
-
-    args = get_args()
-
-    def _broadcast(item):
-       if item is not None:
-           torch.distributed.broadcast(item, mpu.get_tensor_model_parallel_src_rank(), group=mpu.get_tensor_model_parallel_group())
-
-    if mpu.get_tensor_model_parallel_rank() == 0:
-
-       if data_iterator is not None:
-           data = next(data_iterator)
-       else:
-           data = None
-
-       batch = {
-           'tokens': data["tokens"].cuda(non_blocking = True),
-           'labels': data["labels"].cuda(non_blocking = True),
-           'loss_mask': data["loss_mask"].cuda(non_blocking = True),
-           'attention_mask': None if "attention_mask" not in data else data["attention_mask"].cuda(non_blocking = True),
-           'position_ids': data["position_ids"].cuda(non_blocking = True)
-       }
-
-       _broadcast(batch['tokens'])
-       _broadcast(batch['labels'])
-       _broadcast(batch['loss_mask'])
-       _broadcast(batch['attention_mask'])
-       _broadcast(batch['position_ids'])
-
-    else:
-
-       tokens=torch.empty((args.micro_batch_size,args.seq_length), dtype = torch.int64 , device = torch.cuda.current_device())
-       labels=torch.empty((args.micro_batch_size,args.seq_length), dtype = torch.int64 , device = torch.cuda.current_device())
-       loss_mask=torch.empty((args.micro_batch_size,args.seq_length), dtype = torch.float32 , device = torch.cuda.current_device())
-       if args.create_attention_mask_in_dataloader:
-           attention_mask=torch.empty(
-                (args.micro_batch_size,1,args.seq_length,args.seq_length), dtype = torch.bool , device = torch.cuda.current_device()
-            )
-       else:
-           attention_mask=None
-       position_ids=torch.empty((args.micro_batch_size,args.seq_length), dtype = torch.int64 , device = torch.cuda.current_device())
-
-       _broadcast(tokens)
-       _broadcast(labels)
-       _broadcast(loss_mask)
-       _broadcast(attention_mask)
-       _broadcast(position_ids)
-
-       batch = {
-           'tokens': tokens,
-           'labels': labels,
-           'loss_mask': loss_mask,
-           'attention_mask': attention_mask,
-           'position_ids': position_ids
-       }
-
-    return batch
-
 def get_batch_on_this_tp_rank_original(data_iterator, per_seq_average=False):
     args = get_args()
     tokenizer = get_tokenizer()
@@ -212,8 +153,8 @@ def get_batch_on_this_tp_rank_original(data_iterator, per_seq_average=False):
         num_seqs = None
         if per_seq_average:
             # NOTE: raw dataset does not support sequence packing
-            num_seqs = loss_mask.sum(dim=-1).long() # [mbs]
-            loss_mask = loss_mask / num_seqs.view(-1, 1)
+            num_seqs = torch.ones(position_ids.shape[0], device=torch.cuda.current_device(), dtype=torch.int64)
+            loss_mask = loss_mask / loss_mask.sum(dim=-1, keepdims=True) # [mbs]       
 
         batch = {
             'tokens': tokens.cuda(non_blocking=True),
@@ -238,8 +179,12 @@ def get_batch_on_this_tp_rank_original(data_iterator, per_seq_average=False):
             _broadcast(batch['position_ids'])
 
         elif mpu.is_pipeline_last_stage():
-            if args.use_multi_token_prediction:
+            # Multi-Token Prediction (MTP) layers need tokens and position_ids to calculate embedding.
+            # Currently the Multi-Token Prediction (MTP) layers is fixed on the last stage, so we need
+            # to broadcast tokens and position_ids to all of the tensor parallel ranks on the last stage.
+            if getattr(args, 'mtp_num_layers', None) is not None:
                 _broadcast(batch['tokens'])
+                _broadcast(batch['position_ids'])
             _broadcast(batch['labels'])
             _broadcast(batch['loss_mask'])
             _broadcast(batch['attention_mask'])
@@ -282,12 +227,16 @@ def get_batch_on_this_tp_rank_original(data_iterator, per_seq_average=False):
             _broadcast(position_ids)
 
         elif mpu.is_pipeline_last_stage():
-            if args.use_multi_token_prediction:
+            # Multi-Token Prediction (MTP) layers need tokens and position_ids to calculate embedding.
+            # Currently the Multi-Token Prediction (MTP) layers is fixed on the last stage, so we need
+            # to broadcast tokens and position_ids to all of the tensor parallel ranks on the last stage.
+            if getattr(args, 'mtp_num_layers', None) is not None:
                 _broadcast(tokens)
+                _broadcast(position_ids)
             else:
                 tokens = None
-            position_ids = None
-
+                position_ids = None
+            
             _broadcast(labels)
             _broadcast(loss_mask)
             _broadcast(attention_mask)
@@ -412,7 +361,10 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator, per_seq_average=False):
             _broadcast(batch['attention_mask'])
 
         elif mpu.is_pipeline_last_stage():
-            if args.use_multi_token_prediction:
+            # Multi-Token Prediction (MTP) layers need tokens and position_ids to calculate embedding.
+            # Currently the Multi-Token Prediction (MTP) layers is fixed on the last stage, so we need
+            # to broadcast tokens and position_ids to all of the tensor parallel ranks on the last stage.
+            if getattr(args, 'mtp_num_layers', None) is not None:
                 _broadcast(batch['tokens'])
             _broadcast(batch['labels'])
             _broadcast(batch['loss_mask'])
@@ -459,7 +411,10 @@ def get_batch_on_this_tp_rank_idxmap_sft(data_iterator, per_seq_average=False):
             _broadcast(attention_mask)
 
         elif mpu.is_pipeline_last_stage():
-            if args.use_multi_token_prediction:
+            # Multi-Token Prediction (MTP) layers need tokens and position_ids to calculate embedding.
+            # Currently the Multi-Token Prediction (MTP) layers is fixed on the last stage, so we need
+            # to broadcast tokens and position_ids to all of the tensor parallel ranks on the last stage.
+            if getattr(args, 'mtp_num_layers', None) is not None:
                 _broadcast(tokens)
             else:
                 tokens = None
