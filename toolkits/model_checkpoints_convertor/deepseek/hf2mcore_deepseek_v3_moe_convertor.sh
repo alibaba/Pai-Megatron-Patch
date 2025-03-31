@@ -15,11 +15,11 @@ ETP=$6
 EP=$7
 PR=$8
 MG2HF=$9
-HF_CKPT_PATH=$10
+HF_CKPT_PATH=${10}
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
-export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250314
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250328
 
 if [ $MODEL_SIZE = A37B ]; then
 
@@ -67,66 +67,14 @@ moe_options=" \
     --qk-nope-head-dim ${QK_NOPE_HEAD_DIM} \
     --qk-rope-head-dim ${QK_ROPE_HEAD_DIM} \
     --v-head-dim ${V_HEAD_DIM} \
+    --mtp-num-layers 1
     "
 
 cpu_options=" \
             --use-cpu-initialization"
 
-mtp_options=" \
-    --use-multi-token-prediction \
-    --num-mtp-predictor 1"
-
-elif [ $MODEL_SIZE = A3B ]; then
-# moonshotai/Moonlight-16B-A3B-Instruct
-HIDDEN_SIZE=2048
-NUM_ATTENTION_HEADS=16
-NUM_LAYERS=27
-INTERMEDIATE_SIZE=11264
-MOE_INTERMEDIATE_SIZE=1408
-MAX_POSITION_EMBEDDINGS=8192
-EXTRA_VOCAB_SIZE=0
-Q_LORA_RANK=0
-KV_LORA_RANK=512
-QK_NOPE_HEAD_DIM=128
-QK_ROPE_HEAD_DIM=64
-V_HEAD_DIM=128
-ROPE_THETA=50000
-SCALE_FACTOR=1
-NUM_EXPERTS=64
-ROUTER_TOPK=8
-NUM_SHARED_EXPERTS=2
-RMS_NORM_EPS=1e-5
-
-moe_options=" \
-    --moe-grouped-gemm \
-    --moe-token-dispatcher-type alltoall \
-    --moe-router-topk ${ROUTER_TOPK} \
-    --moe-router-group-topk 1 \
-    --moe-router-num-groups 1 \
-    --num-experts ${NUM_EXPERTS} \
-    --target-expert-model-parallel-size ${EP} \
-    --target-expert-tensor-parallel-size ${ETP} \
-    --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
-    --moe-router-load-balancing-type seq_aux_loss \
-    --moe-router-topk-scaling-factor 2.446 \
-    --moe-shared-expert-overlap \
-    --moe-router-enable-expert-bias \
-    --mscale 1.0 \
-    --mscale-all-dim 1.0 \
-    --moe-router-score-function sigmoid \
-    --moe-router-bias-update-rate 0.001 \
-    --moe-aux-loss-coeff 0.001 \
-    --moe-layer-freq '([0]*1+[1]*26)' \
-    --moe-shared-expert-intermediate-size $((${MOE_INTERMEDIATE_SIZE} * ${NUM_SHARED_EXPERTS} )) \
-    --kv-lora-rank ${KV_LORA_RANK} \
-    --qk-nope-head-dim ${QK_NOPE_HEAD_DIM} \
-    --qk-rope-head-dim ${QK_ROPE_HEAD_DIM} \
-    --v-head-dim ${V_HEAD_DIM} \
-    "
-
-cpu_options=""
-
 mtp_options=""
+
 fi
 
 

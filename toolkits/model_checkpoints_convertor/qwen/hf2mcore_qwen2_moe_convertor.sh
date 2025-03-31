@@ -12,15 +12,15 @@ SOURCE_CKPT_PATH=$2
 TARGET_CKPT_PATH=$3
 TP=$4
 PP=$5
-EP=$6
-ETP=$7
+ETP=$6
+EP=$7
 PR=$8
 MG2HF=$9
 HF_CKPT_PATH=${10}
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
-export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250314
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250328
 
 if [ $MODEL_SIZE = A14B ]; then
 

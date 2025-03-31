@@ -3,7 +3,7 @@ set -e
 ENV=$1
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250314:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250328:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true # for PyTorch >= 2.6
 
@@ -37,34 +37,32 @@ PR=$9
 TP=${10}
 PP=${11}
 CP=${12}
-EP=${13}
-SP=${14}
-DO=${15}
-FL=${16}
-SFT=${17}
+ETP=${13}
+EP=${14}
+SP=${15}
+DO=${16}
+FL=${17}
+SFT=${18}
 ### PARALLEL / BOOL OPTION ###
 
 ### OTHERS ###
-AC=${18}
-OPTIMIZER_OFFLOAD=${19}
-SAVE_INTERVAL=${20}
-DATASET_PATH=${21}
-VALID_DATASET_PATH=${22}
-PRETRAIN_CHECKPOINT_PATH=${23}
+AC=${19}
+OPTIMIZER_OFFLOAD=${20}
+SAVE_INTERVAL=${21}
+DATASET_PATH=${22}
+VALID_DATASET_PATH=${23}
+PRETRAIN_CHECKPOINT_PATH=${24}
 
 # the following two values will not be used when SFT is true
-TRAIN_TOKENS=${24}
-WARMUP_TOKENS=${25}
+TRAIN_TOKENS=${25}
+WARMUP_TOKENS=${26}
 ###############################
 
-OUTPUT_BASEPATH=${26}
+OUTPUT_BASEPATH=${27}
 ### OTHERS ###
 
-OPTIMIZER=${27}
 
 if [ $FL = true ]; then
-#    echo "MLA is not supported in flash-attn, set FL=false and rerun."
-#    exit -1
     export NVTE_FLASH_ATTN=1 NVTE_FUSED_ATTN=0
     attn_backend_option=" \
         --attention-backend flash
@@ -98,7 +96,7 @@ moe_options=" \
     --moe-token-dispatcher-type alltoall \
     --moe-router-topk ${ROUTER_TOPK} \
     --num-experts ${NUM_EXPERTS} \
-    --expert-tensor-parallel-size 1 \
+    --expert-tensor-parallel-size ${ETP} \
     --expert-model-parallel-size ${EP} \
     --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
     --moe-router-load-balancing-type seq_aux_loss \
@@ -108,10 +106,6 @@ moe_options=" \
     --moe-layer-recompute \
     --moe-shared-expert-overlap \
     "
-
-#    --moe-permute-fusion \
-#    --moe-router-score-function sigmoid \
-#    --moe-shared-expert-overlap \
 
 fi
 
@@ -248,8 +242,8 @@ if [ $OPTIMIZER_OFFLOAD != false ]; then
 fi
 
 if [ $SFT = true ]; then
-    TRAIN_ITERS=${24}
-    LR_WARMUP_ITERS=${25}
+    TRAIN_ITERS=${25}
+    LR_WARMUP_ITERS=${26}
     LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
     PREFIX="finetune-mcore-qwen2-megatron-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
     sft_options=" \
@@ -356,7 +350,6 @@ megatron_options="  \
         --group-query-attention \
         --num-query-groups ${NUM_KEY_VALUE_HEADS} \
         --add-qkv-bias \
-        --optimizer ${OPTIMIZER} \
         --cross-entropy-loss-fusion \
         "
 
