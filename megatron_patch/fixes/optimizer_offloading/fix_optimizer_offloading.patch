@@ -1,0 +1,26 @@
+diff --git a/megatron/core/optimizer/cpu_offloading/hybrid_optimizer.py b/megatron/core/optimizer/cpu_offloading/hybrid_optimizer.py
+index 969a8f80..a15d3421 100644
+--- a/megatron/core/optimizer/cpu_offloading/hybrid_optimizer.py
++++ b/megatron/core/optimizer/cpu_offloading/hybrid_optimizer.py
+@@ -463,3 +463,7 @@ class HybridDeviceOptimizer(torch.optim.Optimizer):
+         if self.gpu_optimizer is not None:
+             return self.cpu_optimizers + [self.gpu_optimizer]
+         return self.cpu_optimizers
++
++    def _update_fp32_param_by_new_param(self):
++        for param, fp32_param in self.param_to_fp32_param.items():
++            fp32_param.data.copy_(param)
+\ No newline at end of file
+diff --git a/megatron/core/optimizer/distrib_optimizer.py b/megatron/core/optimizer/distrib_optimizer.py
+index 30954645..bfbe248b 100644
+--- a/megatron/core/optimizer/distrib_optimizer.py
++++ b/megatron/core/optimizer/distrib_optimizer.py
+@@ -2025,7 +2025,7 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
+         an intermediary.
+         """
+         if isinstance(self.optimizer, HybridDeviceOptimizer):
+-            return
++            return self.optimizer._update_fp32_param_by_new_param()
+ 
+         if self.ddp_config.use_custom_fsdp:
+             for model_chunk in self.model_chunks:
