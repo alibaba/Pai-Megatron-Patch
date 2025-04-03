@@ -77,7 +77,6 @@ A14B \
 4 \
 4 \
 bf16 \
-true \
 false 
 ```
 

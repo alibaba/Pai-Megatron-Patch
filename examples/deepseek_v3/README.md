@@ -63,10 +63,11 @@ SOURCE_CKPT_PATH=$2            # 源路径
 TARGET_CKPT_PATH=$3            # 目标路径
 TP=$4                          # 模型并行度
 PP=$5                          # 流水并行度
-EP=$6                          # 专家并行度
-PR=$7                          # 转换精度
-mg2hf=$8                       # 是否执行mcore2hf转换
-HG_CKPT_PATH=$9                # HF的CKPT的路径
+ETP=$6                         # 专家张量并行度
+EP=$7                          # 专家并行度
+PR=$8                          # 转换精度
+mg2hf=$9                       # 是否执行mcore2hf转换
+HG_CKPT_PATH=${10}                # HF的CKPT的路径
 ```
 例如，使用下述脚本将checkpoint转换到MCore-MoE并检查输出。
 注意对于A37B模型由于它有61层，所以需要执行非均匀切分策略设置`MP_PP0_LAYERS=5`。另外切分成tp=8,pp=8,ep=16可以跑起来。
@@ -90,6 +91,7 @@ false
 
 ### Megatron-Core预训练及指令微调
 在DeepSeek-V3中，我们已将预训练和微调整合到`run_mcore_deepseek.sh`脚本，对于不同的使用场景，二者各参数的意义有所不同。
+注意如果使用Cpu Offloading请务必执行如下链接的修复，否则会出现不收敛：https://github.com/alibaba/Pai-Megatron-Patch/tree/main/megatron_patch/fixes/optimizer_offloading
 
 #### 预训练&微调命令统一描述
 需要传入的参数列表如下：
@@ -223,8 +225,8 @@ true \
 sel   \
 1.0 \
 100000  \
-/mnt/deepseek-datasets/alpaca_zh-train.json    \
-/mnt/deepseek-datasets/alpaca_zh-train.json   \
+/mnt/deepseek-datasets/alpaca_zh-train-general.json    \
+/mnt/deepseek-datasets/alpaca_zh-train-general.json   \
 /mnt/deepseek-ckpts/DeepSeek-V3-to-mcore-tp8-pp8-etp1-ep16  \
 10000  \
 100   \

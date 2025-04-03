@@ -171,7 +171,6 @@ def save_state_dict(args, model_chunks, checkpoint_name, has_vpp: bool=False, sa
         for vpp_id in range(len(model_chunks)):
             state_dict[f"model{vpp_id}"] = model_chunks[vpp_id]
     os.makedirs(os.path.dirname(checkpoint_name), exist_ok=True)
-    print(f'save model part {checkpoint_name}')
     torch.save(clone_state_dict(state_dict), checkpoint_name)
     del state_dict
     gc.collect()

@@ -8,13 +8,19 @@ if len(sys.argv) < 2:
 
 samples = []
 file_path = sys.argv[1]
-with open(file_path) as f:
-    for line in f:
-        jdict = json.loads(line)
-        instruct = jdict["instruction"]
-        input = jdict["input"]
-        output = jdict["output"]
-        samples.append(instruct+input+output)
+try:
+    with open(file_path, 'r', encoding='utf-8') as f:
+        fin = json.load(f)
+except Exception:
+    fin = []
+    with open(file_path, 'r', encoding='utf-8') as f:
+        fin = [json.loads(d) for d in f.readlines()]
+assert isinstance(fin, list)
+for jdict in fin:
+    instruct = jdict["instruction"]
+    input = jdict["input"]
+    output = jdict["output"]
+    samples.append(instruct+input+output)
 
 pd = pandas.Series(samples).map(len)
 print(pd.describe())

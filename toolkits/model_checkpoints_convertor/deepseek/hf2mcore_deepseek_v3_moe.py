@@ -176,7 +176,10 @@ def load_megatron_model(args):
     q_head_dim = args.qk_head_dim + args.qk_pos_emb_head_dim
     group_per_split = args.num_attention_heads // args.tensor_model_parallel_size
     if args.num_experts is not None:
-        ep_pattern = r'weight(\d+)'
+        if args.moe_grouped_gemm == True:
+            ep_pattern = r'weight(\d+)'
+        else:
+            ep_pattern = r'local_experts\.(\d+)\.'
         num_local_experts = args.num_experts // args.expert_model_parallel_size
     state_dict = {}
     mid_state = defaultdict(list)
@@ -432,13 +435,23 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
         mtplayer.self_attention.linear_proj.weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.self_attn.o_proj.weight"])
         mtplayer.mlp.router.weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.gate.weight"])
         mtplayer.mlp.router.expert_bias.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.gate.e_score_correction_bias"])
-        for i in range(args.num_experts):
-            fc1_weight = torch.cat([mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.experts."+str(i)+".gate_proj.weight"],
-                                    mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.experts."+str(i)+".up_proj.weight"]])
-            linear_fc1_weighti = getattr(mtplayer.mlp.experts.linear_fc1, 'weight' + str(i))
-            linear_fc1_weighti.copy_(fc1_weight)
-            linear_fc2_weighti = getattr(mtplayer.mlp.experts.linear_fc2, 'weight' + str(i))
-            linear_fc2_weighti.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.experts."+str(i)+".down_proj.weight"])
+        if args.moe_grouped_gemm == True:
+            for i in range(args.num_experts):
+                fc1_weight = torch.cat([mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.experts."+str(i)+".gate_proj.weight"],
+                                        mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.experts."+str(i)+".up_proj.weight"]])
+                linear_fc1_weighti = getattr(mtplayer.mlp.experts.linear_fc1, 'weight' + str(i))
+                linear_fc1_weighti.copy_(fc1_weight)
+                linear_fc2_weighti = getattr(mtplayer.mlp.experts.linear_fc2, 'weight' + str(i))
+                linear_fc2_weighti.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.experts."+str(i)+".down_proj.weight"])
+        else:
+            for i in range(args.num_experts):
+                expert = mtplayer.mlp.experts.local_experts[i]
+                fc1_weight = torch.cat(
+                    [mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.experts." + str(i) + ".gate_proj.weight"],
+                     mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.experts." + str(i) + ".up_proj.weight"]])
+
+                expert.linear_fc1.weight.copy_(fc1_weight)
+                expert.linear_fc2.weight.copy_(mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.experts." + str(i) + ".down_proj.weight"])
         shared_fc1_weight = torch.cat(
             [mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.shared_experts.gate_proj.weight"],
                 mtp_dict[f"model.layers.{mtp_layer_idx}.mlp.shared_experts.up_proj.weight"]])
@@ -474,13 +487,19 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel, mgmodel, args):
             # NOTE: the e_score_correction_bias in mcore model will be initialized with bfloat16 and \
             # recover to fp32 in the first forward. There is always a diff in the bias between two models (~0.3%)
             safe_copy(hflayer.mlp.gate.e_score_correction_bias, mglayer.mlp.router.expert_bias, skip_dtype_assert=True)
-            for i, hf_expert in enumerate(hflayer.mlp.experts):
-                fc1_weight = torch.cat([hf_expert.gate_proj.weight, hf_expert.up_proj.weight])
-                linear_fc1_weighti = getattr(mglayer.mlp.experts.linear_fc1, 'weight' + str(i))
-                linear_fc1_weighti.copy_(fc1_weight)
-                linear_fc2_weighti = getattr(mglayer.mlp.experts.linear_fc2, 'weight' + str(i))
-                linear_fc2_weighti.copy_(hf_expert.down_proj.weight)
-
+            if args.moe_grouped_gemm == True:
+                for i, hf_expert in enumerate(hflayer.mlp.experts):
+                    fc1_weight = torch.cat([hf_expert.gate_proj.weight, hf_expert.up_proj.weight])
+                    linear_fc1_weighti = getattr(mglayer.mlp.experts.linear_fc1, 'weight' + str(i))
+                    linear_fc1_weighti.copy_(fc1_weight)
+                    linear_fc2_weighti = getattr(mglayer.mlp.experts.linear_fc2, 'weight' + str(i))
+                    linear_fc2_weighti.copy_(hf_expert.down_proj.weight)
+            else:
+                for i, hf_expert in enumerate(hflayer.mlp.experts):
+                    expert = mglayer.mlp.experts.local_experts[i]
+                    fc1_weight = torch.cat([hf_expert.gate_proj.weight, hf_expert.up_proj.weight])
+                    expert.linear_fc1.weight.copy_(fc1_weight)
+                    expert.linear_fc2.weight.copy_(hf_expert.down_proj.weight)
             mglayer.pre_mlp_layernorm.weight.copy_(hflayer.post_attention_layernorm.weight)
             shared_fc1_weight = torch.cat(
                 [hflayer.mlp.shared_experts.gate_proj.weight, hflayer.mlp.shared_experts.up_proj.weight])
@@ -539,7 +558,10 @@ def save_mgmodel(mgmodel, args):
             full_model.pop(k)
 
     if args.num_experts is not None:
-        pattern = r'weight(\d+)'
+        if args.moe_grouped_gemm == True:
+            pattern = r'weight(\d+)'
+        else:
+            pattern = r'local_experts\.(\d+)\.'
         assert args.num_experts % args.expert_model_parallel_size == 0
         num_local_experts = args.num_experts // args.expert_model_parallel_size if args.num_experts else 0
 
@@ -607,7 +629,10 @@ def save_mgmodel(mgmodel, args):
                 if expert_rank // num_local_experts != ep_rank:
                     continue
                 expert_local_rank = expert_rank % num_local_experts
-                k = k.replace(f'weight{expert_rank}', f'weight{expert_local_rank}')
+                if args.moe_grouped_gemm == True:
+                    k = k.replace(f'weight{expert_rank}', f'weight{expert_local_rank}')
+                else:
+                    k = k.replace(f'local_experts.{expert_rank}', f'local_experts.{expert_local_rank}')
                 if 'linear_fc1' in k:
                     viewed = v.view(-1, args.moe_ffn_hidden_size, args.hidden_size)
                     seg = args.moe_ffn_hidden_size // etp_size
@@ -653,7 +678,10 @@ def add_extra_args(parser):
 def main():
     initialize_megatron(extra_args_provider=add_extra_args)
     args = get_args()
-
+    generate_rank_group(args.target_tensor_model_parallel_size,
+                        args.target_expert_tensor_parallel_size,
+                        args.target_expert_model_parallel_size,
+                        args.target_pipeline_model_parallel_size)
     assert args.mtp_num_layers in [None, 1], "Currently only support conversion with no more than 1 MTP head."
     if args.convert_checkpoint_from_megatron_to_transformers:
         config = AutoConfig.from_pretrained(args.hf_ckpt_path, trust_remote_code=True)
