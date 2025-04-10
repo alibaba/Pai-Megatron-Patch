@@ -261,8 +261,8 @@ class Qwen2_5VisionModel(VisionModule):
             attention_mask = None,
             inference_params = inference_params,
             rotary_pos_emb=rotary_pos_emb,
-            packed_seq_params=self.build_packed_seq_params(grid_thw),
-            packed_seq_params_full=self.build_packed_seq_params(None, cu_window_seqlens),
+            packed_seq_params=self.build_packed_seq_params(None, cu_window_seqlens),
+            packed_seq_params_full=self.build_packed_seq_params(grid_thw),
             fullatt_block_indexes=self.fullatt_block_indexes,
             **(extra_block_kwargs or {}),
         )
