@@ -14,10 +14,10 @@
 """Pretrain GPT."""
 
 import os
-from functools import partial
-
 import torch
-import torch._dynamo
+import inspect
+
+from functools import partial
 from megatron.core import mpu
 
 from megatron.training import get_args, get_timers
@@ -27,6 +27,7 @@ from megatron.training.utils import (
     get_batch_on_this_tp_rank,
 )
 
+from megatron.core.models.gpt import GPTModel
 from megatron.core.packed_seq_params import PackedSeqParams
 from megatron_patch.data.utils import (
     get_batch_on_this_tp_rank_original, 
@@ -170,6 +171,10 @@ def forward_step(data_iterator, model):
     timers("batch-generator", log_level=2).start()
     tokens, labels, loss_mask, attention_mask, position_ids, num_seqs, packed_seq_params = get_batch(data_iterator)
     timers("batch-generator").stop()
-    output_tensor = model(tokens, position_ids, attention_mask, labels=labels, packed_seq_params=packed_seq_params)
+    if 'loss_mask' in inspect.signature(GPTModel.forward).parameters:
+        # NOTE: MTP-head (since 0328) requires loss_mask to compute correct loss scale.
+        output_tensor = model(tokens, position_ids, attention_mask, labels=labels, packed_seq_params=packed_seq_params, loss_mask=loss_mask)
+    else:
+        output_tensor = model(tokens, position_ids, attention_mask, labels=labels, packed_seq_params=packed_seq_params)
 
     return output_tensor, partial(loss_func, loss_mask, num_seqs)

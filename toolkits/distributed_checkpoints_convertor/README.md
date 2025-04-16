@@ -32,6 +32,7 @@ HF_DIR=$7                   # HF权重路径(mcore2hf时必须提供)
 
 参考运行命令
 
+> 在当前目录 `toolkits/distributed_checkpoints_convertor` 下运行
 ```
 bash scripts/deepseek_v3/run_32xH20.sh \
 A37B \
