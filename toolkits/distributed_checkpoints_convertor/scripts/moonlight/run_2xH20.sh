@@ -103,7 +103,7 @@ GPT_MODEL_ARGS=(
     --moe-grouped-gemm
     --moe-router-score-function sigmoid
     --moe-token-dispatcher-type alltoall
-    --moe-router-topk 8
+    --moe-router-topk 6
     --moe-router-group-topk 1
     --moe-router-num-groups 1
     --moe-router-enable-expert-bias
