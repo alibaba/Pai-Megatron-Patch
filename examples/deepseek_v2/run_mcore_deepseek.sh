@@ -95,7 +95,7 @@ NUM_LAYERS=27
 INTERMEDIATE_SIZE=10944
 MOE_INTERMEDIATE_SIZE=1408
 MAX_POSITION_EMBEDDINGS=${SEQ_LEN}
-EXTRA_VOCAB_SIZE=2400
+EXTRA_VOCAB_SIZE=2384
 KV_LORA_RANK=512
 QK_NOPE_HEAD_DIM=128
 QK_ROPE_HEAD_DIM=64
@@ -110,6 +110,9 @@ RMS_NORM_EPS=1e-6
 
 moe_options=" \
     --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
+    --enable-shared-expert \
+    --moe-aux-loss-coeff 1e-3 \
+    --num-shared-experts ${NUM_SHARED_EXPERTS} \
     --moe-router-topk ${ROUTER_TOPK} \
     --num-experts ${NUM_EXPERTS} \
     --moe-layer-freq ${MOE_LAYER_FREQ} \

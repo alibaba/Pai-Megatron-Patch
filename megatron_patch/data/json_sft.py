@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import random
 import numpy as np
 import io
 import copy
@@ -68,6 +69,36 @@ class JSONSFTDataset(torch.utils.data.Dataset):
             self.samples.append([inputs, labels])
 
         print('  >> total number of samples: {}'.format(len(self.samples)))
+
+        # Randomly print a few examples from self.samples
+        num_examples_to_print = 5  # You can change this number as needed
+
+        def print_rank_0(message):
+            if torch.distributed.is_initialized():
+                if torch.distributed.get_rank() == 0:
+                    print(message, flush=True)
+            else:
+                print(message, flush=True)
+                
+        print_rank_0(">> Printing a few random examples from the dataset:")
+        random_examples = random.sample(self.samples, num_examples_to_print)
+        
+        # print the random examples that have been decoded
+        for idx, example in enumerate(random_examples):
+            inputs, labels = example
+            decoded_inputs = self.tokenizer.decode(inputs, skip_special_tokens=False)
+            decoded_labels = self.tokenizer.decode(labels, skip_special_tokens=False)
+            print_rank_0("========================================")
+            print_rank_0(f"Example {idx+1}:")
+            print_rank_0("--------------------")
+            print_rank_0(f"Inputs-decoded:\n{decoded_inputs}")
+            print_rank_0("--------------------")
+            print_rank_0(f"Labels-decoded:\n{decoded_labels}")
+            print_rank_0("--------------------")
+            print_rank_0(f"Inputs_raw:\n{inputs}")
+            print_rank_0("--------------------")
+            print_rank_0(f"Labels_raw:\n{labels}")
+
 
     def _make_r_io_base(self, f, mode: str):
         if not isinstance(f, io.IOBase):

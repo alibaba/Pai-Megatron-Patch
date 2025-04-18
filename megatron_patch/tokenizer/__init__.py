@@ -364,6 +364,9 @@ def build_tokenizer(args):
             def apply_chat_template(self, conversations, tokenize:bool=True, **kwargs):
                 return self.tokenizer.apply_chat_template(conversations, tokenize=tokenize, **kwargs)
 
+            def decode(self, token_ids, skip_special_tokens=False):
+                return self.tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+            
             @property
             def vocab_size(self):
                 return len(self.tokenizer) + self.extra_vocab_size - 2

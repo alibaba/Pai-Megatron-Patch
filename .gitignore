@@ -4,3 +4,5 @@ LM-Evaluation-Harness*
 Bigcode-Evaluation-Harness*
 **/__pycache__
 .vscode
+examples/deepseek_v2/ckpt-*
+examples/deepseek_v2/llm-dc/log/*
