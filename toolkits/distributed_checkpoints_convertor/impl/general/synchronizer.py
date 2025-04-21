@@ -47,7 +47,7 @@ class BaseSynchronizer(ABC):
         self.tp_rank, self.tp_size = mpu.get_tensor_model_parallel_rank(), self.args.tensor_model_parallel_size
         self.pp_rank, self.pp_size = mpu.get_pipeline_model_parallel_rank(), self.args.pipeline_model_parallel_size
         self.ep_rank, self.ep_size = mpu.get_expert_model_parallel_rank(), self.args.expert_model_parallel_size
-        self.etp_rank, self.etp_size = mpu.get_expert_tensor_parallel_rank(), self.args.tensor_model_parallel_size
+        self.etp_rank, self.etp_size = mpu.get_expert_tensor_parallel_rank(), self.args.expert_tensor_parallel_size
         self.dp_rank, self.edp_rank = mpu.get_data_parallel_rank(), mpu.get_expert_data_parallel_rank()
         self.world_size = dist.get_world_size()
         self.rank = dist.get_rank()
