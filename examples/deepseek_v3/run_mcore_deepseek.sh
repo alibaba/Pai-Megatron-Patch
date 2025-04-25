@@ -354,7 +354,7 @@ megatron_options="  \
         --norm-epsilon ${RMS_NORM_EPS} \
         --use-rotary-position-embeddings \
         --no-rope-fusion \
-        --position-embedding-type rope \
+        --rope-type yarn \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear \
         --rotary-base ${ROPE_THETA} \
