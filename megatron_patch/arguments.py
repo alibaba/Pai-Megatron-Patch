@@ -17,7 +17,7 @@ import argparse
 
 def patch_if_not_exist(
         group_or_parser: Union[argparse._ArgumentGroup, argparse.ArgumentParser],
-        keyname, type=None, default=None, help=None
+        keyname, type=None, default=None, choices=None, help=None
 ):
     has_keyname = False
     for action in vars(group_or_parser)["_actions"]:
@@ -30,6 +30,7 @@ def patch_if_not_exist(
             keyname,
             type=type,
             default=default,
+            choices=choices,
             help=help,
         )
     return None
@@ -57,12 +58,6 @@ def get_patch_args(parser):
         if isinstance(action, argparse._StoreAction):
             if "--position-embedding-type" in action.option_strings:
                 action.choices.append("none")
-
-    has_rotary_base = False
-    for action in vars(group)["_actions"]:
-        if isinstance(action, argparse._StoreAction):
-            if "--rotary-base" in action.option_strings:
-                has_rotary_base = True
 
     patch_if_not_exist(
         group,
@@ -99,6 +94,15 @@ def get_patch_args(parser):
         "--patch-size",
         type=int,
         default=14,
+    )
+
+    patch_if_not_exist(
+        group,
+        "--rope-type",
+        type=str,
+        default='yarn',
+        choices=['yarn', 'rope'],
+        help="rope-type for MLA attn"
     )
 
     group.add_argument("--n-head-kv", type=int, default=None, help="n-head-kv")
