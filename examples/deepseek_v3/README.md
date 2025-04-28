@@ -91,8 +91,9 @@ false
 
 ### Megatron-Core预训练及指令微调
 在DeepSeek-V3中，我们已将预训练和微调整合到`run_mcore_deepseek.sh`脚本，对于不同的使用场景，二者各参数的意义有所不同。
-注意如果使用Cpu Offloading请务必执行如下链接的修复，否则会出现不收敛：https://github.com/alibaba/Pai-Megatron-Patch/tree/main/megatron_patch/fixes/optimizer_offloading
+注意如果使用Cpu Offloading请务必执行如下链接的修复，否则会出现不收敛：[链接](https://github.com/alibaba/Pai-Megatron-Patch/tree/main/megatron_patch/fixes/optimizer_offloading)
 
+此外，在当前使用的Megatron-Core，Yarn参数设置与Huggingface模型不一致，可参考[链接](https://github.com/alibaba/Pai-Megatron-Patch/tree/main/megatron_patch/fixes/yarn_args)修复。
 #### 预训练&微调命令统一描述
 需要传入的参数列表如下：
 ```bash

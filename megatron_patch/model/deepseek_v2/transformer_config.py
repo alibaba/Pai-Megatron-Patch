@@ -49,3 +49,6 @@ class DeepSeekV2TransformerConfig(MLATransformerConfig):
     moe_ffn_hidden_size: int = None
 
     moe_layer_freq: int = None
+
+    original_max_position_embeddings: int = 4096
+    """Maximum position embeddings for the original model, used by yarn."""

@@ -1,0 +1,40 @@
+diff --git a/megatron/core/transformer/multi_latent_attention.py b/megatron/core/transformer/multi_latent_attention.py
+index 724ddfc0..2faffdac 100644
+--- a/megatron/core/transformer/multi_latent_attention.py
++++ b/megatron/core/transformer/multi_latent_attention.py
+@@ -89,7 +89,7 @@ class MultiLatentAttention(Attention):
+                 self.config.qk_pos_emb_head_dim,
+                 rotary_base=self.config.rotary_base,
+                 scaling_factor=self.config.rotary_scaling_factor,
+-                original_max_position_embeddings=self.config.max_position_embeddings,
++                original_max_position_embeddings=self.config.original_max_position_embeddings,
+                 beta_fast=self.config.beta_fast,
+                 beta_slow=self.config.beta_slow,
+                 mscale=self.config.mscale,
+diff --git a/megatron/core/transformer/transformer_config.py b/megatron/core/transformer/transformer_config.py
+index b15b1abb..31fcadb9 100644
+--- a/megatron/core/transformer/transformer_config.py
++++ b/megatron/core/transformer/transformer_config.py
+@@ -1014,6 +1014,9 @@ class MLATransformerConfig(TransformerConfig):
+     """Rotary scaling factor for the rotary embeddings, used by yarn."""
+ 
+     max_position_embeddings: int = 4096
++    """NOT USED."""
++
++    original_max_position_embeddings: int = 4096
+     """Maximum position embeddings for the original model, used by yarn."""
+ 
+     beta_fast: float = 32
+diff --git a/tools/checkpoint/loader_mixtral_hf.py b/tools/checkpoint/loader_mixtral_hf.py
+index 131d6dc6..567aeb28 100644
+--- a/tools/checkpoint/loader_mixtral_hf.py
++++ b/tools/checkpoint/loader_mixtral_hf.py
+@@ -42,7 +42,7 @@ def load_args_from_checkpoint(args):
+     args.tokenizer_type = "Llama2Tokenizer"
+     args.disable_bias_linear = True
+ 
+-    args.max_position_embeddings = mixtral_config.max_position_embeddings
++    args.max_position_embeddings = mixtral_config.original_max_position_embeddings
+     args.hidden_size = mixtral_config.hidden_size
+     args.num_attention_heads = mixtral_config.num_attention_heads
+     args.num_layers = mixtral_config.num_hidden_layers

@@ -116,6 +116,27 @@ gqa_options=" \
 tie_option=" \
         --untie-embeddings-and-output-weights \
         "
+
+elif [ $MODEL_SIZE = 32B ]; then
+
+NUM_LAYERS=64
+HIDDEN_SIZE=5120
+NUM_ATTN_HEADS=40
+INTERMEDIATE_SIZE=27648
+NUM_KEY_VALUE_HEADS=8
+MAX_POSITION_EMBEDDINGS=128000
+EXTRA_VOCAB_SIZE=421  # 151643 + 421 = 152064
+RMS_NORM_EPS=1e-6
+
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+
+
+tie_option=" \
+        --untie-embeddings-and-output-weights \
+        "
+
 elif [ $MODEL_SIZE = 72B ]; then
 
 NUM_LAYERS=80
