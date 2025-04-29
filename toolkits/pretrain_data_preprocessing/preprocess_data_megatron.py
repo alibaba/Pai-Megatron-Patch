@@ -84,7 +84,7 @@ class Encoder(object):
             doc_ids = []
             sentence_lens = []
             for sentence in sentences:
-                if self.args.patch_tokenizer_type in ["DeepSeekV2Tokenizer", "Qwen2Tokenizer", "LLama3Tokenizer", "LLama2Tokenizer"]:
+                if self.args.patch_tokenizer_type in ["DeepSeekV2Tokenizer", "Qwen3Tokenizer", "Qwen2Tokenizer", "LLama3Tokenizer", "LLama2Tokenizer"]:
                     sentence_ids = Encoder.tokenizer.tokenizer(sentence, add_special_tokens=False)['input_ids']
                 elif self.args.patch_tokenizer_type == "GPT2BPETokenizer":
                     sentence_ids = Encoder.tokenizer.tokenize(sentence)
@@ -246,7 +246,7 @@ def get_args():
         '--patch-tokenizer-type',
         type=str,
         required=True,
-        choices=['Qwen2Tokenizer', 'LLamaTokenizer', 'DeepSeekV2Tokenizer', 'LLama3Tokenizer', 'LLama2Tokenizer', 'GPT2BPETokenizer'],
+        choices=['Qwen3Tokenizer', 'Qwen2Tokenizer', 'LLamaTokenizer', 'DeepSeekV2Tokenizer', 'LLama3Tokenizer', 'LLama2Tokenizer', 'GPT2BPETokenizer'],
         help='What type of tokenizer to use.',
     )
     group.add_argument('--load',

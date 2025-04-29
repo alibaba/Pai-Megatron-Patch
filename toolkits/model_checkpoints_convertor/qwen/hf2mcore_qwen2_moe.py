@@ -158,11 +158,12 @@ def load_megatron_model(args):
     os.makedirs(args.save, exist_ok=True)
     os.system("cp -rf " + args.hf_ckpt_path + "/*config.json " + args.save)
     os.system("cp -rf " + args.hf_ckpt_path + "/tokenizer* " + args.save)
-    os.system("cp -rf " + args.hf_ckpt_path + "/*.py " + args.save)
+    # os.system("cp -rf " + args.hf_ckpt_path + "/*.py " + args.save)
+    os.system("cp -rf " + args.hf_ckpt_path + "/merges.txt " + args.save)
 
     os.system("cp -rf " + args.hf_ckpt_path + "/*config.json " + args.load)
     os.system("cp -rf " + args.hf_ckpt_path + "/tokenizer* " + args.load)
-    os.system("cp -rf " + args.hf_ckpt_path + "/*.py " + args.load)
+    # os.system("cp -rf " + args.hf_ckpt_path + "/*.py " + args.load)
     os.system("cp -rf " + args.hf_ckpt_path + "/vocab.json " + args.load)
     os.system("cp -rf " + args.hf_ckpt_path + "/merges.txt " + args.load)
     model = model_provider()
@@ -181,7 +182,7 @@ def load_megatron_model(args):
     model_path = args.load
     tracker_filename = get_checkpoint_tracker_filename(model_path)
     iteration, release = read_metadata(tracker_filename)
-    head_dim = args.hidden_size // args.num_attention_heads
+    head_dim = args.hidden_size // args.num_attention_heads if args.kv_channels is None else args.kv_channels
 
     group_per_split = args.num_query_groups // args.tensor_model_parallel_size
 
@@ -274,7 +275,7 @@ def load_megatron_model(args):
                 target_v = torch.cat(viewed, dim=1).view(-1, args.hidden_size)
             elif "shared_experts.linear_fc2" in k:
                 target_v = torch.cat(v, dim=1)
-            elif "shared_experts.gate_weight" in k or 'layer_norm_weight' in k or 'pre_mlp_layernorm' in k or 'final_layernorm' in k:
+            elif "shared_experts.gate_weight" in k or 'layer_norm_weight' in k or 'pre_mlp_layernorm' in k or 'final_layernorm' in k or 'q_layernorm' in k or 'k_layernorm' in k:
                 target_v = v[0]
             else:
                 raise ValueError(f"{k} is missing!")
@@ -360,7 +361,7 @@ def load_megatron_model(args):
                 target_v = torch.cat(viewed, dim=1).view(-1, args.hidden_size)
             elif "linear_fc2" in k:
                 target_v = torch.cat(v, dim=1)
-            elif "shared_experts.gate_weight" in k or 'layer_norm_weight' in k or 'pre_mlp_layernorm' in k or 'final_layernorm' in k:
+            elif "shared_experts.gate_weight" in k or 'layer_norm_weight' in k or 'pre_mlp_layernorm' in k or 'final_layernorm' in k or 'q_layernorm' in k or 'k_layernorm' in k:
                 target_v = v[0]
             else:
                 raise ValueError(f"{k} is missing!")
@@ -385,7 +386,7 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
 
     num_query_groups = args.num_query_groups
     hidden_size = args.hidden_size
-    head_dim = hidden_size // args.num_attention_heads
+    head_dim = hidden_size // args.num_attention_heads if args.kv_channels is None else args.kv_channels
     use_te = args.transformer_impl == "transformer_engine"
     value_num_per_group = args.num_attention_heads // num_query_groups  # 28//4
     q_dim_per_group = hidden_size // num_query_groups
@@ -404,31 +405,39 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
             hflayer.self_attn.k_proj.weight.copy_(k_weight.reshape(-1, hidden_size))
             hflayer.self_attn.v_proj.weight.copy_(v_weight.reshape(-1, hidden_size))
 
-            qkv_bias = mglayer.self_attention.linear_qkv.bias.view(num_query_groups, -1)
-            q_bias, k_bias, v_bias = torch.split(qkv_bias, split_size_or_sections=[q_dim_per_group, kv_dim_per_group, kv_dim_per_group], dim=1)
-            q_bias = q_bias.contiguous().view(-1)
-            k_bias = k_bias.contiguous().view(-1)
-            v_bias = v_bias.contiguous().view(-1)
+            if args.add_qkv_bias:
+                # NOTE: compatability for Qwen3-moe
+                qkv_bias = mglayer.self_attention.linear_qkv.bias.view(num_query_groups, -1)
+                q_bias, k_bias, v_bias = torch.split(qkv_bias, split_size_or_sections=[q_dim_per_group, kv_dim_per_group, kv_dim_per_group], dim=1)
+                q_bias = q_bias.contiguous().view(-1)
+                k_bias = k_bias.contiguous().view(-1)
+                v_bias = v_bias.contiguous().view(-1)
 
-            hflayer.self_attn.q_proj.bias.copy_(q_bias)
-            hflayer.self_attn.k_proj.bias.copy_(k_bias)
-            hflayer.self_attn.v_proj.bias.copy_(v_bias)
+                hflayer.self_attn.q_proj.bias.copy_(q_bias)
+                hflayer.self_attn.k_proj.bias.copy_(k_bias)
+                hflayer.self_attn.v_proj.bias.copy_(v_bias)
+            
+            if args.qk_layernorm:
+                # NOTE: compatability for Qwen3-moe
+                hflayer.self_attn.q_norm.weight.copy_(mglayer.self_attention.q_layernorm.weight.data)
+                hflayer.self_attn.k_norm.weight.copy_(mglayer.self_attention.k_layernorm.weight.data)
 
             hflayer.self_attn.o_proj.weight.copy_(mglayer.self_attention.linear_proj.weight)
-
             if args.num_experts is None:
                 raise ValueError("num_experts is None")
-            else:
-                hflayer.mlp.gate.weight.copy_(mglayer.mlp.router.weight)
-                for i, hfexpert in enumerate(hflayer.mlp.experts):
-                    linear_fc1_weighti = getattr(mglayer.mlp.experts.linear_fc1, 'weight' + str(i))
-                    linear_fc2_weighti = getattr(mglayer.mlp.experts.linear_fc2, 'weight' + str(i))
-                    gate_weight, up_weight = torch.split(linear_fc1_weighti,
-                                                         split_size_or_sections=args.moe_ffn_hidden_size)
-                    hfexpert.gate_proj.weight.copy_(gate_weight)
-                    hfexpert.up_proj.weight.copy_(up_weight)
-                    hfexpert.down_proj.weight.copy_(linear_fc2_weighti)
 
+            hflayer.mlp.gate.weight.copy_(mglayer.mlp.router.weight)
+            for i, hfexpert in enumerate(hflayer.mlp.experts):
+                linear_fc1_weighti = getattr(mglayer.mlp.experts.linear_fc1, 'weight' + str(i))
+                linear_fc2_weighti = getattr(mglayer.mlp.experts.linear_fc2, 'weight' + str(i))
+                gate_weight, up_weight = torch.split(linear_fc1_weighti,
+                                                        split_size_or_sections=args.moe_ffn_hidden_size)
+                hfexpert.gate_proj.weight.copy_(gate_weight)
+                hfexpert.up_proj.weight.copy_(up_weight)
+                hfexpert.down_proj.weight.copy_(linear_fc2_weighti)
+
+            if args.moe_shared_expert_intermediate_size is not None:
+                # NOTE: compatability for Qwen3-moe
                 hflayer.mlp.shared_expert_gate.weight.copy_(mglayer.mlp.shared_experts.gate_weight)
                 shared_expert_gate_weight, shared_expert_up_weight = \
                     torch.split(mglayer.mlp.shared_experts.linear_fc1.weight,
@@ -437,12 +446,11 @@ def convert_checkpoint_from_megatron_to_transformers(mgmodel, hfmodel, args):
                 hflayer.mlp.shared_expert.up_proj.weight.copy_(shared_expert_up_weight)
                 hflayer.mlp.shared_expert.down_proj.weight.copy_(mglayer.mlp.shared_experts.linear_fc2.weight)
 
-                hflayer.post_attention_layernorm.weight.copy_(mglayer.pre_mlp_layernorm.weight)
+            hflayer.post_attention_layernorm.weight.copy_(mglayer.pre_mlp_layernorm.weight)
 
         hfmodel.model.norm.weight.copy_(mgmodel.decoder.final_layernorm.weight)
         if args.untie_embeddings_and_output_weights:
             hfmodel.lm_head.weight.copy_(mgmodel.output_layer.weight)
-
 
 
 def convert_checkpoint_from_transformers_to_megatron(hfmodel: Qwen2MoeForCausalLM, mgmodel: GPTModel, args):
@@ -452,7 +460,7 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel: Qwen2MoeForCausalL
     elif args.bf16:
         mgmodel = mgmodel.bfloat16()
 
-    head_dim = args.hidden_size // args.num_attention_heads
+    head_dim = hidden_size // args.num_attention_heads if args.kv_channels is None else args.kv_channels
     group_per_split = args.num_query_groups // args.target_tensor_model_parallel_size
 
     with torch.no_grad():
@@ -470,11 +478,18 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel: Qwen2MoeForCausalL
             qkv_proj = torch.cat([q_proj_weight, k_proj_weight, v_proj_weight], dim=1).view(-1, args.hidden_size).contiguous()
             mglayer.self_attention.linear_qkv.weight.copy_(qkv_proj)
 
-            q_proj_bias = hflayer.self_attn.q_proj.bias.view(num_query_groups, -1)
-            k_proj_bias = hflayer.self_attn.k_proj.bias.view(num_query_groups, -1)
-            v_proj_bias = hflayer.self_attn.v_proj.bias.view(num_query_groups, -1)
-            qkv_bias = torch.cat([q_proj_bias, k_proj_bias, v_proj_bias], dim=1).view(-1).contiguous()
-            mglayer.self_attention.linear_qkv.bias.copy_(qkv_bias)
+            if args.add_qkv_bias:
+                # NOTE: compatability for Qwen3-moe
+                q_proj_bias = hflayer.self_attn.q_proj.bias.view(num_query_groups, -1)
+                k_proj_bias = hflayer.self_attn.k_proj.bias.view(num_query_groups, -1)
+                v_proj_bias = hflayer.self_attn.v_proj.bias.view(num_query_groups, -1)
+                qkv_bias = torch.cat([q_proj_bias, k_proj_bias, v_proj_bias], dim=1).view(-1).contiguous()
+                mglayer.self_attention.linear_qkv.bias.copy_(qkv_bias)
+
+            if args.qk_layernorm:
+                # NOTE: compatability for Qwen3-moe
+                mglayer.self_attention.q_layernorm.weight.copy_(hflayer.self_attn.q_norm.weight.data)
+                mglayer.self_attention.k_layernorm.weight.copy_(hflayer.self_attn.k_norm.weight.data)
 
             mglayer.self_attention.linear_proj.weight.copy_(hflayer.self_attn.o_proj.weight)
 
@@ -486,11 +501,13 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel: Qwen2MoeForCausalL
                 linear_fc2_weighti = getattr(mglayer.mlp.experts.linear_fc2, 'weight' + str(i))
                 linear_fc2_weighti.copy_(hf_expert.down_proj.weight)
 
-            shared_fc1_weight = torch.cat(
-                [hflayer.mlp.shared_expert.gate_proj.weight, hflayer.mlp.shared_expert.up_proj.weight])
-            mglayer.mlp.shared_experts.linear_fc1.weight.copy_(shared_fc1_weight)
-            mglayer.mlp.shared_experts.linear_fc2.weight.copy_(hflayer.mlp.shared_expert.down_proj.weight)
-            mglayer.mlp.shared_experts.gate_weight.data.copy_(hflayer.mlp.shared_expert_gate.weight)
+            if args.moe_shared_expert_intermediate_size is not None:
+                # NOTE: compatability for Qwen3-moe
+                shared_fc1_weight = torch.cat(
+                    [hflayer.mlp.shared_expert.gate_proj.weight, hflayer.mlp.shared_expert.up_proj.weight])
+                mglayer.mlp.shared_experts.linear_fc1.weight.copy_(shared_fc1_weight)
+                mglayer.mlp.shared_experts.linear_fc2.weight.copy_(hflayer.mlp.shared_expert.down_proj.weight)
+                mglayer.mlp.shared_experts.gate_weight.data.copy_(hflayer.mlp.shared_expert_gate.weight)
 
             mglayer.pre_mlp_layernorm.weight.copy_(hflayer.post_attention_layernorm.weight)
 
@@ -535,7 +552,7 @@ def save_mgmodel(mgmodel: GPTModel, args):
     with open(tracker_filepath, "w") as f:
         f.write("release")
 
-    head_dim = args.hidden_size // args.num_attention_heads
+    head_dim = args.hidden_size // args.num_attention_heads if args.kv_channels is None else args.kv_channels
     group_per_split = args.num_query_groups // args.target_tensor_model_parallel_size
 
     full_model = mgmodel.state_dict_for_save_checkpoint()
@@ -649,7 +666,7 @@ def add_extra_args(parser):
     parser = add_model_args(parser)
     return parser
 
-
+@torch.inference_mode()
 def main():
     initialize_megatron(extra_args_provider=add_extra_args)
     args = get_args()
