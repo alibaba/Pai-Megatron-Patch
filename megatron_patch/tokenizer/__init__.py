@@ -14,29 +14,32 @@
 
 from transformers import AutoTokenizer, AutoProcessor
 
+
 def _vocab_size_with_padding(orig_vocab_size, args):
     """Pad vocab size so it is divisible by model parallel size and
     still having GPU friendly size."""
 
     after = orig_vocab_size
     multiple = args.make_vocab_size_divisible_by * \
-        args.tensor_model_parallel_size
+               args.tensor_model_parallel_size
     while (after % multiple) != 0:
         after += 1
     if args.rank == 0:
         print(' > padded vocab (size: {}) with {} dummy tokens '
               '(new size: {})'.format(
-                  orig_vocab_size, after - orig_vocab_size, after), flush=True)
+            orig_vocab_size, after - orig_vocab_size, after), flush=True)
     return after
 
+
 _GLOBAL_TOKENIZER = None
+
 
 def get_tokenizer():
     """Return tokenizer."""
     return _GLOBAL_TOKENIZER
 
-def build_tokenizer(args):
 
+def build_tokenizer(args):
     if args.rank == 0:
         print('> building {} tokenizer ...'.format(args.patch_tokenizer_type))
     # Select and instantiate the tokenizer.
@@ -190,17 +193,18 @@ def build_tokenizer(args):
                         self.apply_chat_template(test_conversation)
                     except Exception:
                         # the default chat_template is invalid, assume user will not do SFT
-                        self.tokenizer.chat_template = None 
-                
+                        self.tokenizer.chat_template = None
+
             def __call__(self, text, return_tensors=None,
                          padding=None, max_length=None, truncation=None, add_special_tokens=None):
 
                 return self.tokenizer(text, return_tensors=return_tensors, padding=padding,
-                        max_length=max_length, truncation=truncation, add_special_tokens=add_special_tokens)
+                                      max_length=max_length, truncation=truncation,
+                                      add_special_tokens=add_special_tokens)
 
             def apply_chat_template(self, conversations):
                 return self.tokenizer.apply_chat_template(conversations)
-            
+
             @property
             def vocab_size(self):
                 return len(self.tokenizer.encoder) + self.extra_vocab_size
@@ -235,8 +239,66 @@ def build_tokenizer(args):
             def eos_token_id(self):
                 return self.tokenizer.eos_token_id
 
-
         tokenizer = _Qwen2Tokenizer(args.load, args.extra_vocab_size)
+        args.padded_vocab_size = tokenizer.vocab_size
+
+    elif args.patch_tokenizer_type == 'Qwen3Tokenizer':
+        from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
+        class _Qwen3Tokenizer(MegatronTokenizer):
+            def __init__(self, tokenizer_path, extra_vocab_size):
+                super().__init__(tokenizer_path)
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    tokenizer_path,
+                    padding_side="right",
+                    use_fast=False,
+                    trust_remote_code=True
+                )
+                self.extra_vocab_size = extra_vocab_size
+
+            def __call__(self, text, return_tensors=None,
+                         padding=None, max_length=None, truncation=None, add_special_tokens=None):
+                return self.tokenizer(text, return_tensors=return_tensors, padding=padding,
+                                      max_length=max_length, truncation=truncation,
+                                      add_special_tokens=add_special_tokens)
+
+            def apply_chat_template(self, conversations):
+                return self.tokenizer.apply_chat_template(conversations)
+
+            @property
+            def vocab_size(self):
+                return len(self.tokenizer.encoder) + self.extra_vocab_size
+
+            @property
+            def vocab(self):
+                return self.tokenizer.encoder
+
+            @property
+            def inv_vocab(self):
+                return self.tokenizer.decoder
+
+            def tokenize(self, text):
+                return self.tokenizer.encode(text)
+
+            def detokenize(self, token_ids):
+                return self.tokenizer.decode(token_ids)
+
+            @property
+            def eod(self):
+                return self.tokenizer.eos_token_id
+
+            @property
+            def eos_token(self):
+                return self.tokenizer.eos_token
+
+            @property
+            def pad_token_id(self):
+                return self.tokenizer.pad_token_id
+
+            @property
+            def eos_token_id(self):
+                return self.tokenizer.eos_token_id
+
+        tokenizer = _Qwen3Tokenizer(args.load, args.extra_vocab_size)
         args.padded_vocab_size = tokenizer.vocab_size
 
     elif args.patch_tokenizer_type == 'Qwen2VLTokenizer':
@@ -251,7 +313,8 @@ def build_tokenizer(args):
                     trust_remote_code=True
                 )
                 self.extra_vocab_size = extra_vocab_size
-                self.special_tokens_map = {k:v for k, v in zip(self.tokenizer.all_special_tokens, self.tokenizer.all_special_ids)}
+                self.special_tokens_map = {k: v for k, v in
+                                           zip(self.tokenizer.all_special_tokens, self.tokenizer.all_special_ids)}
                 self.image_token = '<|image_pad|>'
                 self.video_token = '<|video_pad|>'
                 self.vision_start_token = '<|vision_start|>'
@@ -268,13 +331,14 @@ def build_tokenizer(args):
 
             def __call__(self, text, return_tensors=None,
                          padding=None, max_length=None, truncation=None, add_special_tokens=None):
-
                 return self.tokenizer(text, return_tensors=return_tensors, padding=padding,
-                        max_length=max_length, truncation=truncation, add_special_tokens=add_special_tokens)
+                                      max_length=max_length, truncation=truncation,
+                                      add_special_tokens=add_special_tokens)
 
-            def apply_chat_template(self, conversations, tokenize:bool=True, **kwargs):
-                return self.tokenizer.apply_chat_template(conversations, tokenize=tokenize, chat_template=self.chat_template, **kwargs)
-            
+            def apply_chat_template(self, conversations, tokenize: bool = True, **kwargs):
+                return self.tokenizer.apply_chat_template(conversations, tokenize=tokenize,
+                                                          chat_template=self.chat_template, **kwargs)
+
             @property
             def vocab_size(self):
                 return len(self.tokenizer.encoder) + self.extra_vocab_size
@@ -308,23 +372,23 @@ def build_tokenizer(args):
             @property
             def eos_token_id(self):
                 return self.tokenizer.eos_token_id
-            
+
             @property
             def image_token_id(self):
                 return self.special_tokens_map[self.image_token]
-            
+
             @property
             def video_token_id(self):
                 return self.special_tokens_map[self.video_token]
-            
+
             @property
             def vision_start_token_id(self):
                 return self.special_tokens_map[self.vision_start_token]
-            
+
             @property
             def vision_end_token_id(self):
                 return self.special_tokens_map[self.vision_end_token]
-            
+
             def encode(self, x):
                 return self.tokenizer.encode(x)
 
@@ -359,9 +423,10 @@ def build_tokenizer(args):
                          padding=None, max_length=None, truncation=None, add_special_tokens=None):
 
                 return self.tokenizer(text, return_tensors=return_tensors, padding=padding,
-                        max_length=max_length, truncation=truncation, add_special_tokens=add_special_tokens)
+                                      max_length=max_length, truncation=truncation,
+                                      add_special_tokens=add_special_tokens)
 
-            def apply_chat_template(self, conversations, tokenize:bool=True, **kwargs):
+            def apply_chat_template(self, conversations, tokenize: bool = True, **kwargs):
                 return self.tokenizer.apply_chat_template(conversations, tokenize=tokenize, **kwargs)
 
             @property
@@ -440,7 +505,7 @@ def build_tokenizer(args):
     elif args.patch_tokenizer_type == 'MistralTokenizer':
         tokenizer = AutoTokenizer.from_pretrained(args.load,
                                                   padding_side='right',
-                                                  use_fast=False,)
+                                                  use_fast=False, )
         tokenizer.pad_token_id = 0
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
@@ -460,7 +525,7 @@ def build_tokenizer(args):
     elif args.patch_tokenizer_type == 'GPT2BPETokenizer':
         from megatron.training.tokenizer.tokenizer import _GPT2BPETokenizer
         tokenizer = _GPT2BPETokenizer(args.vocab_file, args.merge_file)
-        
+
     elif args.patch_tokenizer_type == 'LLama2Tokenizer' or args.patch_tokenizer_type == 'MixtralTokenizer':
         from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
         class _LLama2Tokenizer(MegatronTokenizer):
@@ -478,7 +543,6 @@ def build_tokenizer(args):
 
             def __call__(self, text, return_tensors=None,
                          padding=None, max_length=None, truncation=None, add_special_tokens=None):
-
                 return self.tokenizer(text, return_tensors=return_tensors, padding=padding,
                                       max_length=max_length, truncation=truncation,
                                       add_special_tokens=add_special_tokens)
@@ -538,7 +602,7 @@ def build_tokenizer(args):
                 # NOTE: Add pad token for LLaMA 3.1
                 if self.tokenizer.pad_token is None:
                     self.tokenizer.add_special_tokens(special_tokens_dict=dict(pad_token="<|finetune_right_pad_id|>"))
-                
+
                 if self.tokenizer.chat_template is None:
                     # Add a default template for LLaMA3.1
                     # from meta-llama-3.1-70b-instruct
@@ -550,14 +614,14 @@ def build_tokenizer(args):
                         self.apply_chat_template(test_conversation)
                     except Exception:
                         # the default chat_template is invalid, assume user will not do SFT
-                        self.tokenizer.chat_template = None 
-                
+                        self.tokenizer.chat_template = None
 
             def __call__(self, text, return_tensors=None,
                          padding=None, max_length=None, truncation=None, add_special_tokens=None):
 
                 return self.tokenizer(text, return_tensors=return_tensors, padding=padding,
-                        max_length=max_length, truncation=truncation, add_special_tokens=add_special_tokens)
+                                      max_length=max_length, truncation=truncation,
+                                      add_special_tokens=add_special_tokens)
 
             def apply_chat_template(self, conversations):
                 return self.tokenizer.apply_chat_template(conversations)
@@ -610,10 +674,8 @@ def build_tokenizer(args):
     else:
         raise NotImplementedError('{} tokenizer is not '
                                   'implemented.'.format(
-                                      args.patch_tokenizer_type))
-
+            args.patch_tokenizer_type))
 
     global _GLOBAL_TOKENIZER
     _GLOBAL_TOKENIZER = tokenizer
     return _GLOBAL_TOKENIZER
-
