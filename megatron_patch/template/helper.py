@@ -134,6 +134,8 @@ def loss_func(loss_mask: torch.Tensor, num_seqs: torch.Tensor, output_tensor: to
     losses = output_tensor.float()
     loss_mask = loss_mask.view(-1).float()
 
+    # NOTE: for each seq, sum(loss_mask) == 1 if num_seqs is not None, 
+    # otherwise sum(loss_mask) == n_tokens
     loss = torch.stack([torch.sum(losses.view(-1) * loss_mask), loss_mask.sum()])
     if args.context_parallel_size > 1:
         torch.distributed.all_reduce(loss, group=mpu.get_context_parallel_group())
@@ -154,7 +156,8 @@ def loss_func(loss_mask: torch.Tensor, num_seqs: torch.Tensor, output_tensor: to
     # The issue is solved since 0926
 
     if num_seqs is None:
-        return loss[0] * args.context_parallel_size, {"lm loss": averaged_loss}
+        # average on token-level
+        return loss[0] / loss[1] * args.context_parallel_size, {"lm loss": averaged_loss}
     return loss[0] * args.context_parallel_size, num_seqs.sum(), {"lm loss": averaged_loss}
 
 def forward_step(data_iterator, model):

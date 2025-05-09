@@ -398,7 +398,7 @@ def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
     averaged_loss = average_losses_across_data_parallel_group(loss)
     averaged_loss = averaged_loss[0] / averaged_loss[1]
 
-    return loss[0] * args.context_parallel_size, {"lm loss": averaged_loss}
+    return loss[0] / loss[1] * args.context_parallel_size, {"lm loss": averaged_loss}
 
 def forward_step(data_iterator, model: Qwen2VLModel):
     """Forward training step.
