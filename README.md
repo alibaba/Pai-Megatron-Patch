@@ -102,13 +102,17 @@ In the reinforcement learning section, the patch offers PPO training workflows, 
 ## Contact
 Use [Dingtalk](https://www.dingtalk.com/en) to scan blow QR code.
 
-Note: group 1 is full, please add group 2.  
+Note: group 1 and 2 is full, please add group 3.  
 <div align=center>
 <img src=qr.png width=600 height=450 />
 </div>
 
 <div align=center>
 <img src=qr2.png width=600 height=450 />
+</div>
+
+<div align=center>
+<img src=qr3.png width=600 height=450 />
 </div>
 
 ## License
