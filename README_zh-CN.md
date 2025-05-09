@@ -114,13 +114,17 @@ Pai-Megatron-Patch中包含模型库，分词器，模型转换，强化学习�
 
 
 ## 技术交流群
-欢迎使用[钉钉](https://www.dingtalk.com/en)扫描如下的二维码进群交流, 1群已满，请加2群。
+欢迎使用[钉钉](https://www.dingtalk.com/en)扫描如下的二维码进群交流, 1和2群已满，请加3群。
 <div align=center>
 <img src=qr.png width=600 height=450 />
 </div>
 
 <div align=center>
 <img src=qr2.png width=600 height=450 />
+</div>
+
+<div align=center>
+<img src=qr3.png width=600 height=450 />
 </div>
 
 ## 许可证
