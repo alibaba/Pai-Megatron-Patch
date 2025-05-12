@@ -584,7 +584,7 @@ class MG2HFSynchronizer(BaseSynchronizer):
                 tensors = dict()
                 for global_rank, data in tensor_dict.items():
                     rank = self._rank_mapping[global_rank][rank_group]
-                    tensors[rank] = data
+                    tensors[int(rank)] = data
                 return [item[1] for item in sorted(tensors.items())]
 
             tensors = list(tensor_dict.values())[:1]

@@ -66,13 +66,17 @@ class BaseSynchronizer(ABC):
         self.build_hf_mapping()
 
     def build_hf_mapping(self):
-        # NOTE: mapping hf params keys to a unique global id (0 ~ n-1)
+        # NOTE: two or more keys may point to the same tensor and we need to deduplicate
         state_dict = self._hfmodel.state_dict(keep_vars=True)
-        keys = sorted([k for k, _ in state_dict.items()])
-        self._hf_params_key_to_id = {k: i for i, k in enumerate(keys)}
-        self._hf_params_to_key = {v: k for k, v in state_dict.items()}
-        self._hf_params_to_id = {v: self._hf_params_key_to_id[k] for k, v in state_dict.items()}
-        self._id_to_hf_params_key = {v: k for k, v in self._hf_params_key_to_id.items()}
+        # NOTE: find unique tensor and assign id
+        self._hf_params_to_key = {v: k for k, v in state_dict.items()} 
+        keys_to_id = {k: i for i, k in enumerate(sorted(self._hf_params_to_key.values()))}
+        self._hf_params_to_id = {k: keys_to_id[v] for k, v in self._hf_params_to_key.items()}
+        self._hf_params_key_to_id = {k: self._hf_params_to_id[v] for k, v in state_dict.items()}
+        self._id_to_hf_params_key = {v: k for k, v in keys_to_id.items()}
+
+        assert all(idx in self._hf_params_to_id.values() for idx in range(self.hf_size)), \
+            f"Unexpected hf mapping, the desired range is [0, {self.hf_size}) but got [{min(self._hf_params_to_id.values())}, {max(self._hf_params_to_id.values())})"
 
     @property
     def hf_size(self):
