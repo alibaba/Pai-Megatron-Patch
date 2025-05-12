@@ -25,14 +25,16 @@ class HF2MGSynchronizer(BaseSynchronizer):
         p = os.path.join(self.load_dir, SAFE_WEIGHTS_INDEX_NAME)
         if not os.path.exists(p):
             p = os.path.join(self.load_dir, SAFETENSORS_INDEX_FILE)
-        if not os.path.exists(p):
-            if os.path.exists(os.path.join(self.load_dir, 'model.safetensors')):
-                self._single_file = True
-                self._key_to_file = dict()
+        
+        if os.path.exists(p):
+            with open(p, 'r') as f:
+                data = json.load(f)['weight_map']
+                self._key_to_file = {k: os.path.join(self.load_dir, v) for k, v in data.items()}
+        elif os.path.exists(os.path.join(self.load_dir, 'model.safetensors')):
+            self._single_file = True
+            self._key_to_file = dict()
+        else:
             raise FileNotFoundError()
-        with open(p, 'r') as f:
-            data = json.load(f)['weight_map']
-            self._key_to_file = {k: os.path.join(self.load_dir, v) for k, v in data.items()}
         if self.debug:
             if not self.dryrun:
                 for p in self._mgmodel.parameters():
