@@ -355,23 +355,25 @@ class MG2HFSynchronizer(BaseSynchronizer):
 
             # apply merge function on the results
             # data: Dict[param_id, Dict[rank_id, tensor]]
-            output_data = dict()
             for param_id, data_dict in data.items():
-                key = self._id_to_hf_params_key[param_id]
                 param_type = ParamType(int(self._merge_type[param_id]))
                 if param_type == ParamType.NULL:
                     raise ValueError(f"ParamType.NULL found on {key}.")
                 try:
-                    output_data[key] = self._merge_data(param_type, data_dict)
+                    data[param_id] = self._merge_data(param_type, data_dict)
                 except ParamMergeError as e:
                     raise ValueError(f"Merge Error on key {key}: {e}")
-                if output_data[key].shape != global_shape[param_id]:
-                    raise ValueError(f"Unexpected shape on {key}. Expected: {global_shape[param_id]}, but {output_data[key].shape}")
-            del data
+                if data[param_id].shape != global_shape[param_id]:
+                    raise ValueError(f"Unexpected shape on {key}. Expected: {global_shape[param_id]}, but {data[param_id].shape}")
+            output_data = {key: data[self._hf_params_key_to_id[key]] for key in required_keys}
 
             # save safetensor files
             if bucket_idx < len(local_buckets):
                 if not self.dryrun:
+                    for key in required_keys:
+                        # NOTE: we save extra copy for each tied parameter.
+                        if self._id_to_hf_params_key[self._hf_params_key_to_id[key]] != key:
+                            output_data[key] = output_data[key].clone()
                     safe_save_file(
                         output_data,
                         os.path.join(output_dir, local_buckets[bucket_idx]),
@@ -570,13 +572,13 @@ class MG2HFSynchronizer(BaseSynchronizer):
         def merge_along_axis(axis, tensor_dict, is_expert: bool = False):
             global_ranks = torch.tensor(list(tensor_dict.keys()), dtype=torch.long, device=self.device) # (N, )
             ranks = self._rank_mapping.index_select(0, global_ranks) # (N, 6)
+            # NOTE: for most cases, data will be from the same pp_rank, filter data from smallest pp_rank to fix tie-embedding
+            tensor_dict = {k: v for k, v in tensor_dict.items() if self._rank_mapping[k, 1] == ranks[:, 1].min()}
             if self.debug:
                 if is_expert and ranks[:, 5].any():
                     raise ParamMergeError("Unexpected expert parameter data from non-zero expert dp rank")
                 if not is_expert and ranks[:, 4].any():
                     raise ParamMergeError("Unexpected parameter data from non-zero dp rank")
-                if ranks[:, 1].max() != ranks[:, 1].min():
-                    raise ParamMergeError("Unexpected parameter data from multiple pp ranks")
                 if is_expert and ranks[:, 3].max() != ranks[:, 3].min():
                     raise ParamMergeError("Unexpected expert parameter data from multiple ep ranks")
 
@@ -587,12 +589,10 @@ class MG2HFSynchronizer(BaseSynchronizer):
                     tensors[int(rank)] = data
                 return [item[1] for item in sorted(tensors.items())]
 
-            tensors = list(tensor_dict.values())[:1]
             if is_expert:
                 tensors = deduplicate_and_sort(tensor_dict, 2)
             else:
                 tensors = deduplicate_and_sort(tensor_dict, 0)
-
             return torch.cat(tensors, dim=axis)
         
         def no_merge_func(tensor_dict):
