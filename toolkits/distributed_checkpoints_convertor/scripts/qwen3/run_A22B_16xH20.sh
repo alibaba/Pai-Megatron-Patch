@@ -31,11 +31,17 @@ if [ ${MG2HF} = true ]; then
         --hf-dir ${HF_DIR}
         --mcore2hf
     )
+    mkdir -p ${SAVE_DIR}
+    find -L ${HF_DIR} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVE_DIR}
+    find -L ${HF_DIR} -maxdepth 1 -type f -name "merges.txt" -print0 | xargs -0 cp -t ${SAVE_DIR}
 else
     OTHER_ARGS+=(
         --tokenizer-type HuggingFaceTokenizer
         --tokenizer-model ${LOAD_DIR}
     )
+    mkdir -p ${SAVE_DIR}
+    find -L ${LOAD_DIR} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVE_DIR}
+    find -L ${LOAD_DIR} -maxdepth 1 -type f -name "merges.txt" -print0 | xargs -0 cp -t ${SAVE_DIR}
 fi
 
 if [ ${USE_CUDA} = true ]; then
