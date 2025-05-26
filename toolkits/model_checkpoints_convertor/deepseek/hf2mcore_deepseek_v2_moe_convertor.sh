@@ -17,8 +17,10 @@ MG2HF=$8
 HF_CKPT_PATH=$9
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
-MEGATRON_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
-export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-241113
+MEGATRON_PATCH_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-241113
+
+
 
 if [ $MODEL_SIZE = A2.4B ]; then
 

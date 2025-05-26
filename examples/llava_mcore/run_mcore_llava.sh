@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
-MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-241113:$PYTHONPATH
+MEGATRON_PATCH_PATH=$( dirname $( dirname ${CURRENT_DIR}))
+export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-241113:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export NVTE_APPLY_QK_LAYER_SCALING=0
 export NVTE_ALLOW_NONDETERMINISTIC_ALGO=1

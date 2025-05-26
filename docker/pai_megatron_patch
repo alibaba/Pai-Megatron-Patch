@@ -1,0 +1,27 @@
+FROM nvcr.io/nvidia/pytorch:25.04-py3
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
+    openssh-server \
+    tmux \
+    htop \
+    bwm-ng \
+    sysstat \
+    sshpass \
+    ranger \
+    cron \
+    tree \
+    zsh \
+    sudo \
+    python3-venv \
+    psmisc && \
+    mkdir -p /run/sshd
+
+RUN pip install pipx && pipx ensurepath --global && pipx install --global nvitop -i https://mirrors.aliyun.com/pypi/simple/
+RUN pip install megatron-energon -i https://mirrors.aliyun.com/pypi/simple/
+RUN pip install webdataset -i https://mirrors.aliyun.com/pypi/simple/
+RUN pip install pyarrow_hotfix retry pillow accelerate==0.27.0 evaluate==0.4.1 jieba==0.42.1 sentencepiece==0.1.99 openpyxl==3.1.2 trl==0.7.11 openai==0.28 wandb --no-deps torch -i https://mirrors.aliyun.com/pypi/simple/
+RUN pip install --upgrade setuptools pip -i https://mirrors.aliyun.com/pypi/simple/
+# NOTE: workaround
+RUN sed -i '/modelopt/s/^/#/' /etc/pip/constraint.txt && pip install nvidia-modelopt==0.27.0 nvidia-modelopt-core==0.27.0 --extra-index-url https://pypi.nvidia.com
+RUN pip install -U datasets transformers -i https://mirrors.aliyun.com/pypi/simple/

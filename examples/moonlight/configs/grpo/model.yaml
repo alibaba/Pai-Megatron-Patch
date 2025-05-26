@@ -1,0 +1,47 @@
+# The configs for Megatron-Core Moonlight
+
+# General Args
+position_embedding_type: rope
+apply_rope_fusion: false
+qkv_bias: false
+add_bias_linear: false
+untie_embeddings_and_output_weights: true
+swiglu: true
+# bias: False
+num_layers: 27
+hidden_size: 2048
+num_attention_heads: 16
+ffn_hidden_size: 11264
+normalization: RMSNorm
+norm_epsilon: 1e-5
+rotary_base: 50000
+rotary_scaling_factor: 1
+qk_layernorm: true
+attention_dropout: 0.0
+hidden_dropout: 0.0
+use_legacy_models: false
+seq_length: ${seq_length:2048}
+max_position_embeddings: 8192
+
+# MoE Args
+moe_grouped_gemm: true
+moe_token_dispatcher_type: alltoall
+moe_router_topk: 6
+moe_router_group_topk: 1
+moe_router_group_topk_scaling_factor: 2.446
+moe_router_num_groups: 1
+moe_router_load_balancing_type: seq_aux_loss
+num_experts: 64
+multi_latent_attention: true
+moe_layer_freq: [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] # ([0] * 1 + [1] * 26)
+moe_router_enable_expert_bias: true
+moe_router_score_function: sigmoid
+moe_shared_expert_intermediate_size: 2816 # 1408 * 2
+moe_ffn_hidden_size: 1408
+kv_lora_rank: 512
+# q_lora_rank: 0
+v_head_dim: 128
+mscale: 1.0
+mscale_all_dim: 1.0
+
+extra_vocab_size: 0

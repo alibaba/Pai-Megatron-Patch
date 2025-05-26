@@ -1,6 +1,4 @@
 .idea
-Megatron-LM-*
-LM-Evaluation-Harness*
-Bigcode-Evaluation-Harness*
 **/__pycache__
 .vscode
+*.DS_Store

@@ -2,8 +2,9 @@
 START_TIME=$SECONDS
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
-MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250328
+
+MEGATRON_PATCH_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250328
 
 input_data_dir=$1
 tokenizer=$2
@@ -93,8 +94,8 @@ elif [ $tokenizer = "GPT2BPETokenizer" ]; then
   --workers 16 \
   --partitions 1 \
   --keep-sequential-samples \
-  --vocab-file /mnt/data/jerry.lp/Megatron-LM/gpt2-vocab.json \
-  --merge-file /mnt/data/jerry.lp/Megatron-LM/gpt2-merges.txt \
+  --vocab-file /mnt/data/Megatron-LM/gpt2-vocab.json \
+  --merge-file /mnt/data/Megatron-LM/gpt2-merges.txt \
   --append-eod
 
 fi

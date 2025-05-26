@@ -34,8 +34,8 @@ PR=$7
 HF_CKPT_PATH=$8
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
-MEGATRON_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
-export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-250217
+MEGATRON_PATCH_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250217
 
 USE_TE=true
 if [ $MODEL_SIZE = 3B ]; then

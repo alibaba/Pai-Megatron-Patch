@@ -21,8 +21,8 @@ SP=${12}
 HF_CKPT_PATH=${13}
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
-MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/PAI-Megatron-LM-240718
+MEGATRON_PATCH_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/PAI-Megatron-LM-240718
 
 if [ $VP -ge 1 ]; then
     vp_options=" \

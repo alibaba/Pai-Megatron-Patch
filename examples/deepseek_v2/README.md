@@ -88,8 +88,8 @@ false
 export MP_PP0_LAYERS=4
 bash hf2mcore_deepseek_v2_moe_convertor.sh \
 A21B \
-/mnt/data/jerry.lp/deepseek-ckpts/DeepSeek-V2 \
-/mnt/data/jerry.lp/deepseek-ckpts/DeepSeek-V2-to-mcore-tp1-pp8-ep16  \
+/mnt/data/deepseek-ckpts/DeepSeek-V2 \
+/mnt/data/deepseek-ckpts/DeepSeek-V2-to-mcore-tp1-pp8-ep16  \
 1  \
 8  \
 16 \

@@ -1,0 +1,21 @@
+# currently support fsdp
+FROM nvcr.io/nvidia/pytorch:24.10-py3
+
+ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ENV PIP_TRUSTED_HOST=mirrors.aliyun.com
+
+RUN pip install --no-cache-dir -U \
+    opencv-python-headless==4.5.4.58 \
+    vllm==0.6.6 \
+    wandb==0.19.3 \
+    ray[default]==2.40.0 \
+    transformers==4.51.3 \
+    modelscope==1.26.0 \
+    datasets==3.6.0 \
+    deepspeed==0.14.4 \
+    grpcio==1.70.0 \
+    setuptools==69.5.1
+
+RUN pip uninstall -y flash_attn && pip install -U flash_attn==2.4.2 --no-cache-dir --no-build-isolation
+RUN pip uninstall -y apex && pip install https://pai-vision-data-hz.oss-cn-zhangjiakou.aliyuncs.com/csrc/apex/torch2.5.1-cuda12x/apex-0.1-cp310-cp310-linux_x86_64.whl --no-cache-dir
+RUN pip install https://pai-vision-data-hz.oss-cn-zhangjiakou.aliyuncs.com/csrc/transformer_engine/torch2.5.1-cuda12x/transformer_engine-1.13.0%2Be5edd6c-cp310-cp310-linux_x86_64.whl --no-cache-dir

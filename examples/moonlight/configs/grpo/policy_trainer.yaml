@@ -1,0 +1,66 @@
+includes:
+        - base.yaml
+        - model.yaml
+
+load: ${load}
+save: ${save_dir}
+save_interval: ${save_interval:10000}
+train_iters: ${train_iters:12000}
+tensor_model_parallel_size: ${tensor_model_parallel_size:2}
+pipeline_model_parallel_size: ${training_pipeline_model_parallel_size:1}
+expert_model_parallel_size: ${expert_model_parallel_size:1}
+
+distributed_backend: nccl
+
+
+clip_grad: ${clip_grad:1.0}
+log_interval: 1
+
+
+bf16: True
+use_checkpoint_opt_param_scheduler: False
+adam_beta1: 0.9
+adam_beta2: 0.95
+num_workers: 8
+init_method_std: 0.006
+
+#recompute_method: uniform
+#recompute_granularity: full
+recompute_granularity: selective
+sequence_parallel: True
+
+
+no_load_optim: True
+no_load_rng: True
+no_load_args: True
+no_load_scheduler: True
+finetune: True
+dummy: 0
+
+
+lr_decay_iters: ${lr_decay_iters:12000}
+lr_warmup_iters: ${policy_lr_warmup_iters:100}
+lr: ${policy_lr:0.00000008}
+min_lr: ${policy_min_lr:0.000000008}
+lr_decay_style: ${policy_lr_decay_style:linear}
+weight_decay: 0.01
+lr_freeze_episodes: ${policy_lr_freeze_episodes:0}
+
+
+init_kl_coef: ${init_kl_coef:0.0}
+target: 6
+horizon: 10000
+gamma: 1
+lam: 0.95
+cliprange: 0.2
+diff_clip_ratio: ${diff_clip_ratio:10}
+pos_clip_ratio: ${pos_clip_ratio:0.2}
+neg_clip_ratio: ${neg_clip_ratio:0.2}
+final_clip_ratio: ${final_clip_ratio:3}
+logprob_cliprange: 10
+neg_cliprange2: 3
+cliprange_value: ${cliprange_value:0.1}
+scale_reward: ${scale_reward:null}
+clip_onlineness: ${clip_onlineness:0}
+cliprange_onlineness: ${cliprange_onlineness:0}
+train_to_compare_num_responses: ${train_to_compare_num_responses:2}
