@@ -182,6 +182,7 @@ def build_tokenizer(args):
                     trust_remote_code=True
                 )
                 self.extra_vocab_size = extra_vocab_size
+                self.tokenizer.add_special_tokens(special_tokens_dict=dict(eos_token='<|endoftext|>', pad_token='<|endoftext|>'))
 
                 if self.tokenizer.chat_template is None:
                     self.tokenizer.chat_template = "{% for message in messages %}{% if loop.first and messages[0]['role'] != 'system' %}{{ '<|im_start|>system\nYou are a helpful assistant<|im_end|>\n' }}{% endif %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}",
