@@ -51,10 +51,13 @@ def get_batch(data_iterator):
             cu_seqlens = torch.zeros(start_indices.shape[0] + 1, device=position_ids.device, dtype=torch.int)
             cu_seqlens[1:-1] = torch.cumsum(seqlens, dim=0)
             cu_seqlens[-1] = position_ids.shape[0]
+            max_seqlen = torch.max(seqlens.max(), position_ids.max() + 1)
             packed_seq_params = PackedSeqParams(
                 cu_seqlens_q=cu_seqlens,
                 cu_seqlens_kv=cu_seqlens,
-                qkv_format='thd'
+                qkv_format='thd',
+                max_seqlen_q = max_seqlen,
+                max_seqlen_kv = max_seqlen,
             )
 
         return None, None, None, None, None, None, packed_seq_params
@@ -97,10 +100,13 @@ def get_batch(data_iterator):
                 cu_seqlens = torch.zeros(start_indices.shape[0] + 1, device=position_ids.device, dtype=torch.int)
                 cu_seqlens[1:-1] = torch.cumsum(seqlens, dim=0)
                 cu_seqlens[-1] = position_ids.shape[0]
+                max_seqlen = torch.max(seqlens.max(), position_ids.max() + 1)
                 packed_seq_params = PackedSeqParams(
                     cu_seqlens_q=cu_seqlens,
                     cu_seqlens_kv=cu_seqlens,
-                    qkv_format='thd'
+                    qkv_format='thd',
+                    max_seqlen_q = max_seqlen,
+                    max_seqlen_kv = max_seqlen,
                 )
         
         if packed_seq_params is not None and args.context_parallel_size > 1:
