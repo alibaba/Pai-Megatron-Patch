@@ -1,0 +1,58 @@
+runtime_env:
+  platform: DLC
+  excludes:
+    - "*pt"
+    - "logs"
+    - "tensorboards"
+    - ".nfs*"
+
+
+models:
+  policy:
+    model_config_file: vllm_policy_inference.yaml
+    num_gpu: ${num_device:1}
+    trainable: False
+    batch_generation:
+      ranking: ${batch_generation_ranking:False}
+      min_prompt_length: ${batch_generation_min_prompt_length:0}
+    free_memory: ${free_memory_policy:True}
+    generation_batch_size: ${vllm_generation_batch_size:256}
+
+  reward:
+    model_config_file: base.yaml
+    num_cpu: 2 # must set devices
+    generation_batch_size: ${vllm_generation_batch_size:256}
+
+  ref_policy:
+    model_config_file: reference.yaml
+    num_gpu: ${num_device:1}
+    gpu_per_process: 1
+    trainable: False
+    free_memory: ${free_memory_reference:True}
+    sync_frequency: ${sync_frequency:-1}
+    generation_batch_size: ${ref_generation_batch_size:8}
+
+  policy_trainer:
+    model_config_file: policy_trainer.yaml
+    num_gpu: ${num_device:1}
+    gpu_per_process: 1
+    trainable: True
+    free_memory: ${free_memory_ppo_policy:True}
+    generation_batch_size: ${trainer_generation_batch_size:8}
+
+runtime:
+  colocation:
+    - policy,policy_trainer,ref_policy
+  data_path: ${train_data_path}
+  eval_data_path: ${eval_data_path}
+  output_dir: ${output_dir}
+  exp_name: ${exp_name}
+  num_episode: ${num_episode:200}
+  sample_per_episode: ${sample_per_episode:1024}
+  train_micro_batch_size: ${train_micro_batch_size:1}
+  train_global_batch_size: ${train_global_batch_size:256}
+  save_episode_interval: ${save_episode_interval:20}
+  max_relay_episode: 2 # for enable grpo adv compute
+  eval_episode_interval: ${eval_episode_interval:5}
+  log_config_file: log.yaml
+  data_checkpoint_path: ${data_checkpoint_path}

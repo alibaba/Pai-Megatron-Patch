@@ -20,7 +20,9 @@ elif [ $mg2hf = false ]; then
     do_options=""
 fi
 
-export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-231007
+
+MEGATRON_PATCH_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-231007
 
 python hf2megatron.py \
 --load_path ${SOURCE_CKPT_PATH} \

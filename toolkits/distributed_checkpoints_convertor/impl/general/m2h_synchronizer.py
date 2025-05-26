@@ -357,6 +357,7 @@ class MG2HFSynchronizer(BaseSynchronizer):
             # data: Dict[param_id, Dict[rank_id, tensor]]
             for param_id, data_dict in data.items():
                 param_type = ParamType(int(self._merge_type[param_id]))
+                key = self._id_to_hf_params_key[param_id] # for debugging
                 if param_type == ParamType.NULL:
                     raise ValueError(f"ParamType.NULL found on {key}.")
                 try:

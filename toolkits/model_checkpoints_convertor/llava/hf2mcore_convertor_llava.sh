@@ -9,8 +9,8 @@ if [ -z $NAIVE_CHECK ];then
     NAIVE_CHECK=false
 fi
 
-MEGATRON_PATH=$(cd "$(dirname "$0")"; cd ../../..; pwd)
-export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-241113
+MEGATRON_PATCH_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
+export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-241113
 
 START_TIME=$SECONDS
 MASTER_ADDR=localhost
