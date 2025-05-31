@@ -7,11 +7,13 @@ save: ${save_dir}
 save_interval: ${save_interval:10000}
 train_iters: ${train_iters:12000}
 tensor_model_parallel_size: ${tensor_model_parallel_size:2}
-pipeline_model_parallel_size: ${pipeline_model_parallel_size:1}
+pipeline_model_parallel_size: ${training_pipeline_model_parallel_size:1}
 distributed_backend: nccl
+
 
 clip_grad: ${clip_grad:1.0}
 log_interval: 1
+
 
 bf16: True
 use_checkpoint_opt_param_scheduler: False
@@ -24,6 +26,7 @@ init_method_std: 0.006
 #recompute_granularity: full
 recompute_granularity: selective
 sequence_parallel: True
+
 
 no_load_optim: True
 no_load_rng: True

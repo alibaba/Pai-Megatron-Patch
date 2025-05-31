@@ -24,11 +24,9 @@ from chatlearn.utils.utils import listdict_to_dictlist
 from chatlearn import Engine, Environment, Trainer
 
 
-from backends.rl.ChatLearn.examples.fsdp.models.vllm_policy_inference import VLLMPolicyInference
-from backends.rl.ChatLearn.examples.fsdp.models.rule_reward import RuleReward
 from rl_patch.chatlearn.models.gpt_grpo.policy_trainer import MegatronPolicyTrainer as PolicyTrainer
-#from rl_patch.chatlearn.models.gpt_grpo.vllm_policy_inference import VLLMPolicyInference
-#from rl_patch.chatlearn.models.gpt_grpo.rule_reward import RuleReward
+from rl_patch.chatlearn.models.gpt_grpo.vllm_policy_inference import VLLMPolicyInference
+from rl_patch.chatlearn.models.gpt_grpo.rule_reward import RuleReward
 
 def read_data_path_list(data_path_list: List[str], mode: str = "jsonl"):
     """Reads and combines data from multiple JSON or JSONL files.
@@ -62,8 +60,8 @@ def compute_grpo_adv(episode_relay_buffers):
     buffers = episode_relay_buffers[-1].buffer
     queryids2samples = defaultdict(list)
     for s in buffers:
-        queryids2samples[hash(','.join(map(str, s["prompt_token_ids"])))].append(s)
-    
+        queryids2samples[s["str_prompts"]].append(s)
+
     res_buffers = []
     for _, l in queryids2samples.items():
         rewards = [each["rule_rewards"] for each in l]

@@ -28,6 +28,7 @@ from megatron.training.checkpointing import load_checkpoint
 from megatron.training import get_model
 from megatron.training import get_args, print_rank_0
 from megatron.core import mpu
+from megatron.training.initialize import set_jit_fusion_options
 from megatron.training.utils import calc_params_l2_norm
 from megatron.core.pipeline_parallel import get_forward_backward_func
 from megatron.training.utils import unwrap_model,logical_and_across_model_parallel_group
@@ -217,8 +218,9 @@ class MegatronPolicyTrainer(MegatronModule):
             torch.cuda.empty_cache()
 
         loss_reduced = {}
-        if mpu.is_pipeline_last_stage(ignore_virtual=True) or \
-                args.model_type == ModelType.encoder_or_decoder_with_lbl:
+        # NOTE: for compatability
+        is_lbl = hasattr(ModelType, 'encoder_or_decoder_with_lbl') and args.model_type == ModelType.encoder_or_decoder_with_lbl
+        if mpu.is_pipeline_last_stage(ignore_virtual=True) or is_lbl:
             total_losses = {}
             for i in range(len(losses_reduced)):
                 for key in losses_reduced[i].keys():
@@ -251,7 +253,6 @@ class MegatronPolicyTrainer(MegatronModule):
         #return {}, skipped_iter, grad_norm, num_zeros_in_grad, {}
         self.iteration_for_log += 1
 
-
         self.args.consumed_train_samples += mpu.get_data_parallel_world_size() * \
                                                 self.args.micro_batch_size * \
                                                 get_num_microbatches()
@@ -271,37 +272,55 @@ class MegatronPolicyTrainer(MegatronModule):
 
         self.report_memory_flag = report_memory_flag
 
+    @torch.no_grad()
     def forward_step(self, data):
-        args = get_args()
+        """Do an inference forward step. Only for computation of old_logprobs and ref_logprobs.
 
+        Args:
+            data (Dict[str, Sequence[Any]]): The batched data with shape of [generation_batch_size, *].
+
+        Returns:
+            data (Dict[str, Any]): If this is the last rank of the replica, the output logprobs will be
+             updated into the dict, otherwise do NOTHING.
+        """
         for model_module in self.model:
             model_module.eval()
+        num_microbatches, data_iter = self._chunk_global_batch_into_micro_batch(data)
 
-        output_log_probs = None
-        with torch.no_grad():
-            forward_backward_func = get_forward_backward_func()
-            ref_nll = forward_backward_func(
-                forward_step_func=inference_forward_step,
-                data_iterator=data,
-                model=self.model,
-                num_microbatches=1,
-                seq_length=args.seq_length,
-                micro_batch_size=args.micro_batch_size,
-                decoder_seq_length=args.decoder_seq_length,
-                forward_only=True,
-                collect_non_loss_data=True)
-
-            if mpu.is_pipeline_last_stage():
-                output_log_probs = -ref_nll[0]
-
-        # Move model back to the train mode.
+        # NOTE: internal computation
+        args = get_args()
+        forward_backward_func = get_forward_backward_func()
+        forward_data_store: List[Any] = forward_backward_func(
+            forward_step_func=inference_forward_step,
+            data_iterator=data_iter,
+            model=self.model,
+            num_microbatches=num_microbatches,
+            seq_length=args.seq_length,
+            micro_batch_size=args.micro_batch_size,
+            decoder_seq_length=args.decoder_seq_length,
+            forward_only=True,
+            collect_non_loss_data=True # set True to hack the forward_step_func
+        ) # shape: [num_microbatches, *]
+        
         for model_module in self.model:
             model_module.train()
+        if not mpu.is_pipeline_last_stage():
+            return
+        # trainable is True --> policy trainer; False --> PolicyReference
+        tag = OLD_TAG if self.trainable else REF_TAG
+        logprobs = -torch.cat(forward_data_store, dim=0)
+        assert tag not in data, f"The {tag} is already computed in this batch, old_value: {data[tag]}, new_value: {logprobs}"
+        data.update({tag: logprobs})
+        return data
 
-        if mpu.is_pipeline_last_stage():
-            tag = OLD_TAG
-            if OLD_TAG in data.keys():
-                tag = REF_TAG
-            data.update({tag: output_log_probs})
-            return data
-
+    def _chunk_global_batch_into_micro_batch(self, data_dict):
+        # NOTE: assume that generation_batch_size is multiple of micro_batch_size in MCore
+        assert len(data_dict) > 0, "Expect non-empty data_dict"
+        args = get_args()
+        generation_batch_size = self.module_args.generation_batch_size
+        micro_batch_size = args.micro_batch_size
+        num_microbatches = generation_batch_size // micro_batch_size
+        def _data_iter(data_dict):
+            for i in range(num_microbatches):
+                yield {k: v[i * micro_batch_size: (i + 1) * micro_batch_size] for k, v in data_dict.items()}
+        return num_microbatches, _data_iter(data_dict)
