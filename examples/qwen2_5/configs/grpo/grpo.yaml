@@ -16,21 +16,21 @@ models:
       ranking: ${batch_generation_ranking:False}
       min_prompt_length: ${batch_generation_min_prompt_length:0}
     free_memory: ${free_memory_policy:True}
-    generation_batch_size: ${vllm_generation_batch_size:256}
+    generation_batch_size: ${vllm_generation_batch_size:8}
 
   reward:
     model_config_file: base.yaml
     num_cpu: 2 # must set devices
-    generation_batch_size: ${vllm_generation_batch_size:256}
+    generation_batch_size: ${vllm_generation_batch_size:8}
 
   ref_policy:
-    model_config_file: reference.yaml
+    model_config_file: policy_trainer.yaml
     num_gpu: ${num_device:1}
     gpu_per_process: 1
     trainable: False
     free_memory: ${free_memory_reference:True}
     sync_frequency: ${sync_frequency:-1}
-    generation_batch_size: ${ref_generation_batch_size:8}
+    generation_batch_size: ${trainer_generation_batch_size:8}
 
   policy_trainer:
     model_config_file: policy_trainer.yaml

@@ -23,12 +23,9 @@ from chatlearn import Evaluator
 from chatlearn.utils.utils import listdict_to_dictlist
 from chatlearn import Engine, Environment, Trainer
 
-
 from backends.rl.ChatLearn.examples.fsdp.models.vllm_policy_inference import VLLMPolicyInference
 from backends.rl.ChatLearn.examples.fsdp.models.rule_reward import RuleReward
 from rl_patch.chatlearn.models.gpt_grpo.policy_trainer import MegatronPolicyTrainer as PolicyTrainer
-#from rl_patch.chatlearn.models.gpt_grpo.vllm_policy_inference import VLLMPolicyInference
-#from rl_patch.chatlearn.models.gpt_grpo.rule_reward import RuleReward
 
 def read_data_path_list(data_path_list: List[str], mode: str = "jsonl"):
     """Reads and combines data from multiple JSON or JSONL files.

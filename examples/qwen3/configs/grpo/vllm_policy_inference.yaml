@@ -1,8 +1,6 @@
 includes:
         - base.yaml
-        - model.yaml
 
-load: null
 # model partition
 tensor_model_parallel_size: ${tensor_model_parallel_size:2}
 pipeline_model_parallel_size: 1
@@ -28,6 +26,7 @@ eval_repetition_penalty: ${policy_eval_repetition_penalty:1.0}
 # dataset
 vllm_prompt_key: ${vllm_prompt_key:prompt}
 vllm_input_ids_key: ${vllm_input_ids_key:input_ids}
+enable_thinking: ${enable_thinking:False}
 
 # scheduler config
 max_num_batched_tokens: ${max_num_batched_tokens:32768}
@@ -38,5 +37,5 @@ enable_stage_resume: ${enable_policy_stage_resume:False}
 gpu_memory_utilization: ${gpu_memory_utilization:0.85}
 enforce_eager: False
 
-tokenizer: ${tokenizer_load}
+tokenizer: ${tokenizer_path}
 
