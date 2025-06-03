@@ -1,6 +1,6 @@
 # 基于 Mcore 的端到端GRPO训练流程
 
-本文档提供使用 ChatLearn、Mcore 和 vLLM 框架来对Qwen2.5模型进行GRPO训练的快速开始指南。
+本文档提供使用 ChatLearn、Mcore 和 vLLM 框架来对Qwen3模型进行GRPO训练的快速开始指南。
 
 ## 环境配置
 1. Docker镜像准备
@@ -27,7 +27,7 @@ modelscope download --dataset AI-ModelScope/MATH-lighteval --local_dir dataset/M
 # 数据集预处理
 python examples/fsdp/data/data_preprocess/math_lighteval.py --input_dir dataset/MATH-lighteval --local_dir dataset/MATH-lighteval
 # 下载模型权重
-modelscope download --model Qwen/Qwen2.5-7B-Instruct --local_dir Qwen2.5-7B-Instruct
+modelscope download --model Qwen/Qwen3-8B --local_dir Qwen3-8B
 ```
 
 ## 模型转换
@@ -35,39 +35,25 @@ modelscope download --model Qwen/Qwen2.5-7B-Instruct --local_dir Qwen2.5-7B-Inst
 模型格式转换可以参考 [Pai-Megatron-Patch](https://github.com/alibaba/Pai-Megatron-Patch) 项目提供的转换脚本。
 高性能分布式权重转换可以参考：https://github.com/alibaba/Pai-Megatron-Patch/tree/main/toolkits/distributed_checkpoints_convertor
 
-运行`hf2mcore_qwen2.5_convertor.sh`脚本，需要传入的参数列表如下
-```
-MODEL_SIZE=$1                  # 模型参数：0.5B/1.5B/3B/7B/14B/32B/72B
-SOURCE_CKPT_PATH=$2            # 源路径
-TARGET_CKPT_PATH=$3            # 目标路径
-TP=$4                          # 模型并行度
-PP=$5                          # 流水并行度
-PR=$6                          # 转换精度
-USE_TE=$7                      # 是否使用Transformer Engine建模
-mg2hf=$8                       # 是否执行mcore2hf转换
-HG_CKPT_PATH=$9                # HF的CKPT的路径
-```
 
-例如，使用下述脚本将7B量级的Qwen2.5的Huggingface格式的模型转换到MCore格式
+例如，使用下述脚本将8B量级的Qwen3的Huggingface格式的模型转换到MCore格式
 ```bash
 git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
-cd ~/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen
-bash hf2mcore_qwen2.5_convertor.sh \
-7B \
-/mnt/qwen-ckpts/Qwen2.5-7B-Instruct  \
-/mnt/qwen-ckpts/Qwen2.5-7B-Instruct-hf-to-mcore-tp4-pp1   \
-4  \
-1  \
-bf16 \
+cd ~/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
+bash scripts/qwen3/run_8xH20.sh \
+8B \
+/mnt/qwen-ckpts/Qwen3-8B \
+/mnt/qwen-ckpts/Qwen3-8B-to-mcore  \
+false \
 true \
-false 
+bf16
 ```
 
 ## 训练
 运行以下命令开始训练：
 
 ```bash
-cd ~/Pai-Megatron-Patch/examples/qwen2_5
+cd ~/Pai-Megatron-Patch/examples/qwen3
 bash run_grpo_qwen.sh
 ```
 

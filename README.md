@@ -2,7 +2,7 @@
 
 |             |                                                      Megatron-Core                                                       |                                             ChatLearn                                             |    verl     |
 |:------------|:------------------------------------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------------:|:-----------:|
-| Qwen3       |      [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3/README.md#Megatron-Core模型训练流程)      |                                            Coming Soon                                            | Coming Soon |
+| Qwen3       |      [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3/README.md#Megatron-Core模型训练流程)      |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3/README_grpo.md)  | Coming Soon |
 | QwQ         |       [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwq/README.md#Megatron-Core模型训练流程)       |                                                N/A                                                |     N/A     |
 | Qwen2.5-VL  |   [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen2_5_vl/README.md#Megatron-Core模型训练流程)    |                                                N/A                                                |     N/A     |
 | Moonlight   |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/moonlight/README.md#Megatron-Core-MoE模型训练流程)  |                                            Coming Soon                                            | Coming Soon |
@@ -24,6 +24,7 @@ English | [简体中文](./README_zh-CN.md)
 Pai-Megatron-Patch (https://github.com/alibaba/Pai-Megatron-Patch) is a deep learning training toolkit built for developers to train and predict LLMs & VLMs by using Megatron framework easily. With the continuous development of LLMs, the model structure and scale are rapidly evolving. Although these models can be conveniently manufactured using Transformers or DeepSpeed training framework, the training efficiency is comparably low. This phenomenon becomes even severer when the model scale exceeds 10 billion. The primary objective of Pai-Megatron-Patch is to effectively utilize the computational power of GPUs for LLM. This tool allows convenient training of commonly used LLM with all the accelerating techniques provided by Megatron-LM.
 
 What's New:
+- **Support Qwen3 GRPO Reinforcement Training using Megatron-Core and ChatLearn** [🔥🔥 2025.06.03]
 - **Support Qwen2.5 GRPO Reinforcement Training using Megatron-Core and ChatLearn** [🔥🔥 2025.05.18]
 - **Support all Qwen3 Training with torch_dist checkpoint** [🔥🔥 2025.04.29]
 - **[Experimental]Support distributed checkpoint conversion for large LLM** [🔥🔥 2025.04.16]

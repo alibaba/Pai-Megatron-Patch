@@ -6,7 +6,6 @@ rm -rf /tmp/ray/*
 # enveriment
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export RAY_num_server_call_thread=1
-export ENABLE_VLLM_V2=True
 export VLLM_USE_RAY_SPMD_WORKER=1
 export VLLM_USE_RAY_COMPILED_DAG=1
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
