@@ -26,17 +26,17 @@ export num_device=$(($WORLD_SIZE * 8))
 export train_data_path="/mnt/data/datasets/MATH-lighteval/train.json"
 export eval_data_path="/mnt/data/datasets/MATH-lighteval/test.json"
 export patch_tokenizer_type=Qwen2Tokenizer
-export extra_vocab_size=421
-export tokenizer_path="/mnt/data/qwen-ckpts/Qwen2.5-7B-Instruct"
-export load="/mnt/data/qwen-ckpts/Qwen2.5-7B-Instruct-hf-to-mcore-tp4-pp2"
+export extra_vocab_size=293
+export tokenizer_path="/mnt/data/qwen-ckpts/Qwen3-8B"
+export load="/mnt/data/qwen-ckpts/Qwen3-8B-to-mcore/"
 
 # model
-export max_position_embedding=131072
-export policy_num_layers=28
-export policy_hidden_size=3584
-export policy_num_attention_heads=28
-export policy_num_query_groups=4
-export policy_ffn_hidden_size=18944
+export max_position_embedding=40960
+export policy_num_layers=36
+export policy_hidden_size=4096
+export policy_num_attention_heads=32
+export policy_num_query_groups=8
+export policy_ffn_hidden_size=12288
 export tensor_model_parallel_size=4 
 export pipeline_model_parallel_size=2 
 
@@ -61,6 +61,8 @@ export policy_lr_warmup_iters=0
 export lr_decay_iters=160000
 export max_num_batched_tokens=65536
 export gpu_memory_utilization=0.85
+# for qwen3 where enable_thinking
+export enable_thinking=False
 
 # vllm
 export seq_length=2048
@@ -78,7 +80,7 @@ export policy_eval_top_k=20
 export enable_tensorboard=True
 export enable_wandb=False
 export WANDB_API_KEY="wandb-api-key"
-export exp_name=qwen2_5_7B_lr${policy_lr}_mbs${train_micro_batch_size}_gbs${train_global_batch_size}_tp${tensor_model_parallel_size}_pp${pipeline_model_parallel_size}_${WORLD_SIZE}nodes
+export exp_name=qwen3_8B_lr${policy_lr}_mbs${train_micro_batch_size}_gbs${train_global_batch_size}_tp${tensor_model_parallel_size}_pp${pipeline_model_parallel_size}_${WORLD_SIZE}nodes
 export output_dir=${MEGATRON_PATCH_PATH}/output/${exp_name}
 mkdir -p $output_dir/
 export log_dir=${output_dir}/logs
@@ -88,4 +90,4 @@ export tensorboard_dir=${output_dir}/tensorboard
 export wandb_dir=${output_dir}
 export save_dir=${output_dir}
 
-python train_grpo_qwen.py -c ${CURRENT_DIR}/configs/grpo/grpo.yaml 2>&1 | tee ${log_file} ; exit ${PIPESTATUS[0]}
+python ../qwen2_5/train_grpo_qwen.py -c ${CURRENT_DIR}/configs/grpo/grpo.yaml 2>&1 | tee ${log_file} ; exit ${PIPESTATUS[0]}

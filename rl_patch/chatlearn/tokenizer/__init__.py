@@ -187,10 +187,10 @@ def build_tokenizer(args):
                                   'implemented.'.format(patch_tokenizer_type))
 
     if getattr(args, "padded_vocab_size", None) is None:
-        make_vocab_size_divisible_by = args.models['policy'].args_dict['make_vocab_size_divisible_by']
-        tensor_model_parallel_size = args.models['policy'].args_dict['tensor_model_parallel_size']
-        padded_vocab_size = _vocab_size_with_padding(tokenizer.vocab_size, make_vocab_size_divisible_by,
-                                                     tensor_model_parallel_size)
+        # make_vocab_size_divisible_by = args.models['policy'].args_dict['make_vocab_size_divisible_by']
+        # tensor_model_parallel_size = args.models['policy'].args_dict['tensor_model_parallel_size']
+        # padded_vocab_size = _vocab_size_with_padding(tokenizer.vocab_size, make_vocab_size_divisible_by, tensor_model_parallel_size)
+        padded_vocab_size = tokenizer.vocab_size
         args.models['policy'].args_dict['padded_vocab_size'] = padded_vocab_size
         get_args().padded_vocab_size = padded_vocab_size
 

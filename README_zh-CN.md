@@ -2,8 +2,8 @@
 
 |             |                                                      Megatron-Core                                                       |                                             ChatLearn                                             |    verl     |
 |:------------|:------------------------------------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------------:|:-----------:|
-| Qwen3       |      [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3/README.md#Megatron-Core模型训练流程)      |                                            Coming Soon                                            | Coming Soon |
-| QwQ         |       [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwq/README.md#Megatron-Core模型训练流程)       |                                            Coming Soon                                            | Coming Soon |
+| Qwen3       |      [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3/README.md#Megatron-Core模型训练流程)      |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3/README_grpo.md)  | Coming Soon |
+| QwQ         |       [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwq/README.md#Megatron-Core模型训练流程)       |                                                N/A                                                |     N/A     |
 | Qwen2.5-VL  |   [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen2_5_vl/README.md#Megatron-Core模型训练流程)    |                                                N/A                                                |     N/A     |
 | Moonlight   |  [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/moonlight/README.md#Megatron-Core-MoE模型训练流程)  |                                            Coming Soon                                            | Coming Soon |
 | DeepSeek-V3 | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/deepseek_v3/README.md#Megatron-Core-MoE模型训练流程) |                                            Coming Soon                                            | Coming Soon |
@@ -45,6 +45,7 @@ Pai-Megatron-Patch是各类开源大模型和Megatron训练加速引擎之间的
 - [阿里云PAI获得FewCLUE基于大模型的小样本学习双料冠军](https://developer.aliyun.com/article/788081?spm=a2c6h.12873639.article-detail.17.11c5383cHpFZks&tlog=yuekan_8)
 
 新功能：
+- **支持Qwen3模型使用Mcore+ChatLearn进行强化学习GRPO训练** [🔥🔥 2025.06.03]
 - **支持Qwen2.5模型使用Mcore+ChatLearn进行强化学习GRPO训练** [🔥🔥 2025.05.18]
 - **支持全系列Qwen3模型基于torch_dist权重格式的训练微调** [🔥🔥 2025.04.29]
 - **[实验性]实现用于超大参数量模型的MG/HF权重分布式转换** [🔥🔥 2025.04.16]

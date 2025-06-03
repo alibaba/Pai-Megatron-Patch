@@ -88,54 +88,57 @@ class PolicyModel(GPTModel):
                 training_inputs: dict = None,
         ):
 
-        all_token_logits = super().forward(input_ids=input_ids,
-                                           position_ids=position_ids,
-                                           attention_mask=attention_mask,
-                                           decoder_input=decoder_input,
-                                           labels=None,
-                                           loss_mask=loss_mask,
-                                           inference_context=inference_context,
-                                           packed_seq_params=packed_seq_params,
-                                           extra_block_kwargs=extra_block_kwargs,
-                                           runtime_gather_output=runtime_gather_output,
-                                           inference_params=inference_params
-                                        ).transpose(0, 1).contiguous()
+        # untransposed hidden_states or transposed logits with shape [b, s, h]
+        hidden_states_or_logits = super().forward(
+            input_ids=input_ids,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            decoder_input=decoder_input,
+            labels=None,
+            loss_mask=loss_mask,
+            inference_context=inference_context,
+            packed_seq_params=packed_seq_params,
+            extra_block_kwargs=extra_block_kwargs,
+            runtime_gather_output=runtime_gather_output,
+            inference_params=inference_params
+        ) 
 
-        inference_only = training_inputs is None
+        if not self.post_process:
+            return hidden_states_or_logits
 
-        if inference_only:
-            # [s b h] => [b s h]
-            if labels is not None:
-                loss = self.compute_language_model_loss(labels, all_token_logits)
-                return loss
-            else:
-                return all_token_logits.transpose(0, 1).contiguous()
-        else:
-            old_logprobs = training_inputs['old_logprobs']
-            ref_logprobs = training_inputs['ref_logprobs']
-            advantages = training_inputs['advantages']
+        if training_inputs is None:
+            return self.compute_language_model_loss(
+                labels, 
+                hidden_states_or_logits.transpose(0, 1).contiguous() # [b s h] => [s b h]
+            ) if labels is not None else hidden_states_or_logits
 
-            forward_logprob = self.compute_language_model_loss(labels, all_token_logits) * -1
+        # [b s h] => [s b h]
+        all_token_logits = hidden_states_or_logits.transpose(0, 1).contiguous()
+        old_logprobs = training_inputs['old_logprobs']
+        ref_logprobs = training_inputs['ref_logprobs']
+        advantages = training_inputs['advantages']
 
-            logprobs_diff = forward_logprob - old_logprobs
-            logprobs_diff = torch.clamp(logprobs_diff, max=self.args.diff_clip_ratio)
-            ratio = torch.exp(logprobs_diff)
-            pg_loss = -advantages.unsqueeze(-1) * ratio
-            pg_loss_2 = -advantages.unsqueeze(-1) * torch.clamp(ratio, 1.0 - self.args.neg_clip_ratio, 1.0 + self.args.pos_clip_ratio)
-            pg_loss_clip = torch.max(pg_loss, pg_loss_2)
-            pg_loss_upperbound = torch.ones_like(pg_loss) * self.args.final_clip_ratio
-            pg_loss = torch.min(pg_loss_clip, pg_loss_upperbound)
-            assert not torch.isnan(pg_loss).any(), "pg loss is nan"
-            pg_loss = torch.masked_select(pg_loss, training_inputs["all_token_loss_mask"].bool())
+        forward_logprob = self.compute_language_model_loss(labels, all_token_logits) * -1
 
-            kl = ref_logprobs - forward_logprob
-            ratio = torch.exp(kl)
-            assert not torch.isinf(ratio).any(), "kl loss ratio has inf values"
-            assert not torch.isnan(ratio).any(), "kl loss ratio has nan values"
-            kld = (ratio - kl - 1).contiguous()
-            kl_loss = torch.clamp(kld, min=-10, max=10)
-            kl_loss = torch.masked_select(kl_loss, training_inputs["all_token_loss_mask"].bool())
+        logprobs_diff = forward_logprob - old_logprobs
+        logprobs_diff = torch.clamp(logprobs_diff, max=self.args.diff_clip_ratio)
+        ratio = torch.exp(logprobs_diff)
+        pg_loss = -advantages.unsqueeze(-1) * ratio
+        pg_loss_2 = -advantages.unsqueeze(-1) * torch.clamp(ratio, 1.0 - self.args.neg_clip_ratio, 1.0 + self.args.pos_clip_ratio)
+        pg_loss_clip = torch.max(pg_loss, pg_loss_2)
+        pg_loss_upperbound = torch.ones_like(pg_loss) * self.args.final_clip_ratio
+        pg_loss = torch.min(pg_loss_clip, pg_loss_upperbound)
+        assert not torch.isnan(pg_loss).any(), "pg loss is nan"
+        pg_loss = torch.masked_select(pg_loss, training_inputs["all_token_loss_mask"].bool())
 
-            entropy_loss = torch.masked_select(-forward_logprob, training_inputs["all_token_loss_mask"].bool())
+        kl = ref_logprobs - forward_logprob
+        ratio = torch.exp(kl)
+        assert not torch.isinf(ratio).any(), "kl loss ratio has inf values"
+        assert not torch.isnan(ratio).any(), "kl loss ratio has nan values"
+        kld = (ratio - kl - 1).contiguous()
+        kl_loss = torch.clamp(kld, min=-10, max=10)
+        kl_loss = torch.masked_select(kl_loss, training_inputs["all_token_loss_mask"].bool())
 
-            return pg_loss.contiguous(), kl_loss.contiguous(), entropy_loss.contiguous()
+        entropy_loss = torch.masked_select(-forward_logprob, training_inputs["all_token_loss_mask"].bool())
+
+        return pg_loss.contiguous(), kl_loss.contiguous(), entropy_loss.contiguous()

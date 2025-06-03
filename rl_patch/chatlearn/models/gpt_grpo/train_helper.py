@@ -231,16 +231,12 @@ def get_batch(batch_data):
 
     for k, v in inputs.items():
         inputs[k] = to_device("cuda", v)
-
     return inputs
 
 def loss_func(inputs, losses):
-
     ppo_losses, kl_losses, entropy_losses = losses
-
     loss_mask = inputs["all_token_loss_mask"]
     ppo_loss = torch.mean(ppo_losses)
-
     with torch.no_grad():
         num_tokens = loss_mask.sum().float()
         # reduced all losses in this microbatch
@@ -266,10 +262,10 @@ def forward_step(data_iterator, model):
 
     return output_tensor, partial(loss_func, inputs)
 
-def inference_get_batch(data):
+def inference_get_batch(data_iter):
     """Generate a batch"""
     args = get_args()
-
+    data = next(data_iter)
     tokens_ = data["all_tokens"].long()
 
     # pad to max seq length or to tp*N
@@ -292,17 +288,11 @@ def inference_get_batch(data):
         "all_token_attention_mask": attention_mask,
         "all_token_position_ids": position_ids,
         "labels": labels,
-
     }
 
     for k, v in inputs.items():
         inputs[k] = to_device("cuda", v)
-
     return inputs
-
-def inference_loss_func(output_tensor, non_loss_data=True):
-
-    return output_tensor
 
 def inference_forward_step(data_iterator, model):
     """Forward step."""
@@ -314,4 +304,5 @@ def inference_forward_step(data_iterator, model):
                           attention_mask=inputs["all_token_attention_mask"],
                           labels=inputs['labels'])
 
-    return output_tensor, partial(inference_loss_func)
+    # NOTE: The latter (loss function) just returns the output tensor (the first argument).
+    return output_tensor, lambda x, **_: x
