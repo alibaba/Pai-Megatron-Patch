@@ -37,30 +37,26 @@ modelscope download --model Qwen/Qwen2.5-7B-Instruct --local_dir Qwen2.5-7B-Inst
 
 运行`hf2mcore_qwen2.5_convertor.sh`脚本，需要传入的参数列表如下
 ```
-MODEL_SIZE=$1                  # 模型参数：0.5B/1.5B/3B/7B/14B/32B/72B
-SOURCE_CKPT_PATH=$2            # 源路径
-TARGET_CKPT_PATH=$3            # 目标路径
-TP=$4                          # 模型并行度
-PP=$5                          # 流水并行度
-PR=$6                          # 转换精度
-USE_TE=$7                      # 是否使用Transformer Engine建模
-mg2hf=$8                       # 是否执行mcore2hf转换
-HG_CKPT_PATH=$9                # HF的CKPT的路径
+MODEL_SIZE=$1               # 模型大小，0.5B, 1.5B, 3B, 7B, 14B, 32B, 72B
+LOAD_DIR=$2                 # 源权重路径
+SAVE_DIR=$3                 # 目标权重路径
+MG2HF=$4                    # 转换方向 可选: true, false
+USE_CUDA=$5                 # 是否使用GPU转换 建议: true
+PR=$6                       # 转换精度 可选: fp32 bf16 fp16
+HF_DIR=$7                   # HF权重路径(mcore2hf时必须提供)
 ```
+例如，使用下述脚本将checkpoint转换到MCore格式
 
-例如，使用下述脚本将7B量级的Qwen2.5的Huggingface格式的模型转换到MCore格式
 ```bash
 git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
-cd ~/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen
-bash hf2mcore_qwen2.5_convertor.sh \
+cd ~/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
+bash scripts/qwen2_5/run_8xH20.sh \
 7B \
-/mnt/qwen-ckpts/Qwen2.5-7B-Instruct  \
-/mnt/qwen-ckpts/Qwen2.5-7B-Instruct-hf-to-mcore-tp4-pp1   \
-4  \
-1  \
-bf16 \
+/mnt/qwen-ckpts/Qwen2.5-7B-Instruct \
+/mnt/qwen-ckpts/Qwen2.5-7B-Instruct-to-mcore  \
+false \
 true \
-false 
+bf16
 ```
 
 ## 训练

@@ -51,32 +51,30 @@ wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models
 
 ## Megatron-Core模型训练流程
 ### Megatron-Core模型格式转换
-运行`hf2mcore_qwen2.5_convertor.sh`脚本，需要传入的参数列表如下
+当前qwen2.5已升级至`torch_dist`格式权重训练，为了进行权重转换，需要传入的参数列表如下
 ```
-MODEL_SIZE=$1                  # 模型参数：0.5B/1.5B/3B/7B/14B/32B/72B
-SOURCE_CKPT_PATH=$2            # 源路径
-TARGET_CKPT_PATH=$3            # 目标路径
-TP=$4                          # 模型并行度
-PP=$5                          # 流水并行度
-PR=$6                          # 转换精度
-USE_TE=$7                      # 是否使用Transformer Engine建模
-mg2hf=$8                       # 是否执行mcore2hf转换
-HG_CKPT_PATH=$9                # HF的CKPT的路径
+MODEL_SIZE=$1               # 模型大小，0.5B, 1.5B, 3B, 7B, 14B, 32B, 72B
+LOAD_DIR=$2                 # 源权重路径
+SAVE_DIR=$3                 # 目标权重路径
+MG2HF=$4                    # 转换方向 可选: true, false
+USE_CUDA=$5                 # 是否使用GPU转换 建议: true
+PR=$6                       # 转换精度 可选: fp32 bf16 fp16
+HF_DIR=$7                   # HF权重路径(mcore2hf时必须提供)
 ```
-例如，使用下述脚本将checkpoint转换到MCore-Dense并检查输出
+例如，使用下述脚本将checkpoint转换到MCore格式
 
 ```bash
-cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen
-bash hf2mcore_qwen2.5_convertor.sh \
+cd /workspace/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
+bash scripts/qwen2_5/run_8xH20.sh \
 0.5B \
-/mnt/qwen-ckpts/Qwen2.5-0.5B \
-/mnt/qwen-ckpts/Qwen2.5-0.5B-hf-to-mcore-te-tp1-pp1  \
-1  \
-1  \
-bf16 \
+/mnt/qwen-ckpts/Qwen2.5-0.5B-Instruct \
+/mnt/qwen-ckpts/Qwen2.5-0.5B-Instruct-to-mcore  \
+false \
 true \
-false 
+bf16
 ```
+
+如果需要自定义转换脚本，请参阅分布式转换工具。
 
 ### Megatron-Core预训练及指令微调
 在Qwen2.5中，我们已将预训练和微调整合到`run_mcore_qwen.sh`脚本，对于不同的使用场景，二者各参数的意义有所不同。
@@ -139,7 +137,7 @@ false \
 100000  \
 /mnt/qwen-datasets/wudao_qwenbpe_text_document   \
 /mnt/qwen-datasets/wudao_qwenbpe_text_document   \
-/mnt/qwen-ckpts/Qwen2.5-0.5B-hf-to-mcore-te-tp1-pp1  \
+/mnt/qwen-ckpts/Qwen2.5-0.5B-Instruct-to-mcore  \
 10000  \
 100   \
 /workspace/output_mcore_qwen2.5_pretrain
@@ -204,7 +202,7 @@ false \
 100000  \
 /mnt/qwen-datasets/alpaca_zh-qwen-train.json    \
 /mnt/qwen-datasets/alpaca_zh-qwen-valid.json   \
-/mnt/qwen-ckpts/Qwen2.5-0.5B-hf-to-mcore-te-tp1-pp1  \
+/mnt/qwen-ckpts/Qwen2.5-0.5B-Instruct-to-mcore  \
 10000  \
 100   \
 /workspace/output_mcore_qwen2.5_finetune
@@ -216,17 +214,17 @@ false \
 您需要将训练/微调后保存的Megatron-Core转换为HuggingFace格式来进行推理评估。
 
 ```bash
-cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen
+cd /workspace/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
 bash hf2mcore_qwen2.5_convertor.sh \
 0.5B \
-/mnt/qwen-ckpts/Qwen2.5-0.5B-hf-to-mcore-te-tp1-pp1  \
-/mnt/qwen-ckpts/Qwen2.5-0.5B-mcore-te-to-hf    \
+/mnt/qwen-ckpts/Qwen2.5-0.5B-Instruct-to-mcore  \
+/mnt/qwen-ckpts/Qwen2.5-0.5B-Instruct-back    \
 1  \
 1  \
 bf16 \
 true \
 true \
-/mnt/qwen-ckpts/Qwen2.5-0.5B
+/mnt/qwen-ckpts/Qwen2.5-0.5B-Instruct
 ```
 
 ### 运行评估工具
@@ -248,7 +246,7 @@ tar -xvzf evaluate.tgz
 cd /workspace/Pai-Megatron-Patch/LM-Evaluation-Harness-240310
 accelerate launch --main_process_port 29051 -m lm_eval \
 --model hf \
---model_args pretrained=/mnt/qwen-ckpts/Qwen2.5-0.5B-mcore-te-to-hf,trust_remote_code=True \
+--model_args pretrained=/mnt/qwen-ckpts/Qwen2.5-0.5B-Instruct-back,trust_remote_code=True \
 --tasks cmmlu,ceval-valid  \
 --batch_size 16
 ```
