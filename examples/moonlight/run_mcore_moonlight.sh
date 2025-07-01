@@ -3,17 +3,16 @@ set -e
 ENV=$1
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATCH_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250328:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250624:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true # for PyTorch >= 2.6
 
 if [ $ENV = dsw ]; then
-    export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
     MASTER_ADDR=localhost
     MASTER_PORT=$(shuf -n 1 -i 10000-65535)
     NNODES=1
     NODE_RANK=0
-    GPUS_PER_NODE=8
+    GPUS_PER_NODE=`python -c "import torch; print(torch.cuda.device_count())"`
 elif [ $ENV = dlc ]; then
     NNODES=${WORLD_SIZE}
     NODE_RANK=${RANK}
@@ -39,37 +38,28 @@ TP=${10}
 PP=${11}
 CP=${12}
 ETP=${13}
-EP=${14}
+EMP=${14}
 SP=${15}
 DO=${16}
-FL=${17}
-SFT=${18}
+SFT=${17}
 ### PARALLEL / BOOL OPTION ###
 
 ### OTHERS ###
-AC=${19}
-OPTIMIZER_OFFLOAD=${20}
-SAVE_INTERVAL=${21}
-DATASET_PATH=${22}
-VALID_DATASET_PATH=${23}
-PRETRAIN_CHECKPOINT_PATH=${24}
+AC=${18}
+OPTIMIZER_OFFLOAD=${19}
+SAVE_INTERVAL=${20}
+DATASET_PATH=${21}
+VALID_DATASET_PATH=${22}
+PRETRAIN_CHECKPOINT_PATH=${23}
 
 # the following two values will not be used when SFT is true
-TRAIN_TOKENS=${25}
-WARMUP_TOKENS=${26}
+TRAIN_TOKENS=${24}
+WARMUP_TOKENS=${25}
 ###############################
 
-OUTPUT_BASEPATH=${27}
+OUTPUT_BASEPATH=${26}
 ### OTHERS ###
 
-if [ $FL = true ]; then
-    echo "MLA is not supported in flash-attn, set FL=false and rerun."
-    exit -1
-elif [ $FL = false ]; then
-    attn_backend_option=" \
-        --attention-backend auto
-    "
-fi
 
 if [ $MODEL_SIZE = A3B ]; then
     # moonshotai/Moonlight-16B-A3B-Instruct
@@ -99,7 +89,7 @@ if [ $MODEL_SIZE = A3B ]; then
         --moe-router-group-topk 1 \
         --moe-router-num-groups 1 \
         --num-experts ${NUM_EXPERTS} \
-        --expert-model-parallel-size ${EP} \
+        --expert-model-parallel-size ${EMP} \
         --expert-tensor-parallel-size ${ETP} \
         --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
         --moe-router-load-balancing-type seq_aux_loss \
@@ -110,7 +100,6 @@ if [ $MODEL_SIZE = A3B ]; then
         --mscale-all-dim 1.0 \
         --moe-router-score-function sigmoid \
         --moe-router-bias-update-rate 0.001 \
-        --moe-aux-loss-coeff 0.001 \
         --moe-layer-freq '([0]*1+[1]*26)' \
         --moe-shared-expert-intermediate-size $((${MOE_INTERMEDIATE_SIZE} * ${NUM_SHARED_EXPERTS} )) \
         --kv-lora-rank ${KV_LORA_RANK} \
@@ -197,8 +186,7 @@ elif [ $PR = fp8 ]; then
     pr_options=" \
         --bf16 \
         --fp8-format hybrid \
-        --fp8-amax-compute-algo max \
-        --fp8-amax-history-len 1024"
+        --fp8-recipe blockwise"
 fi
 
 if [ $OPTIMIZER_OFFLOAD != false ] && [ $DO = false ]; then
@@ -255,8 +243,8 @@ if [ $OPTIMIZER_OFFLOAD != false ]; then
 fi
 
 if [ $SFT = true ]; then
-    TRAIN_ITERS=${25}
-    LR_WARMUP_ITERS=${26}
+    TRAIN_ITERS=${24}
+    LR_WARMUP_ITERS=${25}
     LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
     PREFIX="finetune-moonlight-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
     sft_options=" \
@@ -362,15 +350,16 @@ megatron_options="  \
         --kv-channels ${V_HEAD_DIM} \
         --qk-layernorm \
         --multi-latent-attention \
-        --ckpt-format torch \
+        --ckpt-format torch_dist \
         --transformer-impl transformer_engine \
         --no-masked-softmax-fusion \
         --use-rope-scaling \
+        --attention-backend auto
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS ../deepseek_v3/pretrain_deepseek.py
  ${megatron_options} ${dataset_options} ${pr_options} ${load_option} ${activation_checkpoint_options} \
- ${do_option} ${sp_option} ${moe_options} ${offload_option} ${sft_options} ${vp_option} ${packing_options} ${uneven_split_option} ${attn_backend_option} ${mtp_options}"
+ ${do_option} ${sp_option} ${moe_options} ${offload_option} ${sft_options} ${vp_option} ${packing_options} ${uneven_split_option} ${mtp_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

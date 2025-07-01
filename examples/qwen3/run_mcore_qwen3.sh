@@ -3,17 +3,16 @@ set -e
 ENV=$1
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATCH_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250328:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250624:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true # for PyTorch >= 2.6
 
 if [ $ENV = dsw ]; then
-    export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
     MASTER_ADDR=localhost
     MASTER_PORT=$(shuf -n 1 -i 10000-65535)
     NNODES=1
     NODE_RANK=0
-    GPUS_PER_NODE=8
+    GPUS_PER_NODE=`python -c "import torch; print(torch.cuda.device_count())"`
 elif [ $ENV = dlc ]; then
     NNODES=${WORLD_SIZE}
     NODE_RANK=${RANK}
@@ -204,7 +203,6 @@ elif [ $MODEL_SIZE = A3B ]; then
         --moe-router-load-balancing-type aux_loss \
         --moe-aux-loss-coeff 0.001 \
         --moe-layer-freq '([1]*48)' \
-        --moe-router-pre-softmax
         "
 
     tie_option=" \
@@ -328,8 +326,7 @@ elif [ $PR = fp8 ]; then
     pr_options=" \
         --bf16 \
         --fp8-format hybrid \
-        --fp8-amax-compute-algo max \
-        --fp8-amax-history-len 1024"
+        --fp8-recipe blockwise"
 fi
 
 if [ $OPTIMIZER_OFFLOAD != false ] && [ $DO = false ]; then
@@ -492,12 +489,20 @@ megatron_options="  \
         --transformer-impl transformer_engine \
         --cross-entropy-loss-fusion \
         --qk-layernorm \
-        --kv-channels 128
+        --kv-channels 128 \
+        --te-rng-tracker \
+        --external-cuda-graph \
+        --cuda-graph-scope attn \
+        --recompute-granularity selective \
+        --recompute-modules moe
+
         "
 
 #        --add-qkv-bias \ # no qkv bias
 #        --no-rope-fusion \
 #        --no-bias-swiglu-fusion \
+#       --decoder-first-pipeline-num-layers 10
+#         --te-rng-tracker \         --external-cuda-graph \        --cuda-graph-scope attn
 
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py

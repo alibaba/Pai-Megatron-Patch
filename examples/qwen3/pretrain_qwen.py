@@ -21,7 +21,15 @@ import inspect
 from megatron.core.enums import ModelType
 from megatron.core.models.gpt import GPTModel
 from megatron_patch.tokenizer import build_tokenizer
+"""
 from megatron_patch.model.qwen3_moe.gpt_layer_specs import (
+    get_gpt_decoder_block_spec,
+    get_gpt_layer_local_spec,
+    get_gpt_layer_with_transformer_engine_spec,
+    get_gpt_mtp_block_spec,
+)
+"""
+from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_decoder_block_spec,
     get_gpt_layer_local_spec,
     get_gpt_layer_with_transformer_engine_spec,

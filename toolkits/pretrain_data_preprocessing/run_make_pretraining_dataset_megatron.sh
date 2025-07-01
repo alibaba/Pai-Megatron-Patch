@@ -3,7 +3,8 @@ START_TIME=$SECONDS
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 
-MEGATRON_PATCH_PATH=$( dirname $(dirname $( dirname ${CURRENT_DIR})))
+MEGATRON_PATCH_PATH=$( dirname $( dirname ${CURRENT_DIR}))
+echo ${MEGATRON_PATCH_PATH}
 export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250328
 
 input_data_dir=$1
@@ -34,7 +35,7 @@ elif [ $tokenizer = "Qwen3Tokenizer" ]; then
   --patch-tokenizer-type Qwen3Tokenizer \
   --json-keys ${json_keys} \
   --load ${load_dir} \
-  --workers 2 \
+  --workers 16 \
   --partitions 1 \
   --keep-sequential-samples \
   --append-eod

@@ -1,0 +1,113 @@
+runtime_args:
+  # setup config
+  train_backend: megatron
+  exp_name: grpo_megatron
+  colocation: [policy,policy_trainer,ref_policy]
+  # path config
+  output_dir: your_output_dir
+  data_path: your_data_path
+  eval_data_path: your_eval_data_path
+  data_checkpoint_path: ${runtime_args.output_dir}/data_checkpoint_path/
+  # config for training
+  num_episode: 200
+  sample_per_episode: 512
+  train_micro_batch_size: 8
+  train_global_batch_size: 512
+  save_episode_interval: 200
+  # config for data
+  data_shuffle: True
+  data_rerank: True
+  max_replay_episode: 2
+  # config for eval
+  eval_episode_interval: 5
+  enable_eval_before_training: False
+  log_args_dict:
+    log_dir: ${runtime_args.output_dir}
+    enable_wandb: False
+    enable_tensorboard: False
+    tensorboard_dir: ${runtime_args.output_dir}
+    wandb_project: your_wandb_project
+    wandb_dir: ${runtime_args.output_dir}
+    wandb_name: ${runtime_args.exp_name}
+    wandb_id: ${runtime_args.exp_name}
+    wandb_resume: allow
+models:
+  policy_trainer: 
+    free_gpu_memory:
+      offload_weights: True
+      offload_optimizer_states: True
+      free_grad_buffers: True
+    optimizer:
+      lr: 2e-6
+      min_lr: 2e-6
+      clip_grad: 1
+    bf16: True
+    seq_length: 2048
+    tokenizer_type: 'HuggingFaceTokenizer'
+    tokenizer_model: ${models.policy.load}
+    trainable: True
+    generation_batch_size: 8
+    gpu_per_process: 1
+    num_gpu: 1
+    tensor_model_parallel_size: 1
+    pipeline_model_parallel_size: 1
+    expert_tensor_parallel_size: 1
+    expert_model_parallel_size: 1
+    # train config
+    load: your_megatron_model_path
+    save: ${runtime_args.output_dir}
+    save_interval: 10000
+    log_interval: 1
+    sequence_parallel: True
+    use_distributed_optimizer: True
+    recompute_granularity: 'selective'
+    train_iters: 10000
+    # other 
+    pos_clip_ratio: 0.2
+    neg_clip_ratio: 0.2
+    diff_clip_ratio: 10
+    final_clip_ratio: 3
+  ref_policy:
+    free_gpu_memory:
+      offload_weights: True
+    generation_batch_size: 8
+    seq_length: ${models.policy_trainer.seq_length}
+    tokenizer_type: 'HuggingFaceTokenizer'
+    tokenizer_model: ${models.policy.load}
+    bf16: True
+    sequence_parallel: True
+    tensor_model_parallel_size: ${models.policy_trainer.tensor_model_parallel_size}
+    pipeline_model_parallel_size: ${models.policy_trainer.pipeline_model_parallel_size}
+    expert_tensor_parallel_size: ${models.policy_trainer.expert_tensor_parallel_size}
+    expert_model_parallel_size: ${models.policy_trainer.expert_model_parallel_size}
+    gpu_per_process: 1
+    num_gpu: ${models.policy_trainer.num_gpu}
+    trainable: False
+    load: ${models.policy_trainer.load}
+  policy:
+    free_gpu_memory:
+      offload_weights: True
+    tensor_model_parallel_size: 2
+    generation_batch_size: 256
+    gpu_per_process: 1
+    num_gpu: ${models.policy_trainer.num_gpu}
+    trainable: False
+    # args_dict:
+    load: your_hf_model_path
+    num_inference_per_prompt: 32
+    seq_length: 2048
+    max_seq_len_to_capture: 2348
+    temperature: 1.0
+    top_p: 1.0
+    eval_temperature: 0.6
+    eval_top_p: 0.95
+    eval_top_k: 20
+    vllm_prompt_key: prompt
+    vllm_input_ids_key: input_ids
+    enable_thinking: False
+    enable_stage_resume: False
+    gpu_memory_utilization: 0.8
+  reward:
+    num_cpu: 2
+    cpu_per_process: 1
+    generation_batch_size: 256

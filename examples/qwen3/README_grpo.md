@@ -22,12 +22,12 @@ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 以[MATH-lighteval](https://www.modelscope.cn/datasets/AI-ModelScope/MATH-lighteval)数据集作为示例.
 ```bash
 # 下载数据集
-mkdir -p dataset
-modelscope download --dataset AI-ModelScope/MATH-lighteval --local_dir dataset/MATH-lighteval
+mkdir -p /mnt/data/datasets
+modelscope download --dataset AI-ModelScope/MATH-lighteval --local_dir /mnt/data/datasets/MATH-lighteval
 # 数据集预处理
-python examples/fsdp/data/data_preprocess/math_lighteval.py --input_dir dataset/MATH-lighteval --local_dir dataset/MATH-lighteval
+python examples/fsdp/data/data_preprocess/math_lighteval.py --input_dir /mnt/data/datasets/MATH-lighteval --local_dir /mnt/data/datasets/MATH-lighteval
 # 下载模型权重
-modelscope download --model Qwen/Qwen3-8B --local_dir Qwen3-8B
+modelscope download --model Qwen/Qwen3-8B --local_dir /mnt/data/ckpts/huggingface/Qwen3-8B
 ```
 
 ## 模型转换
@@ -42,8 +42,8 @@ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 cd ~/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
 bash scripts/qwen3/run_8xH20.sh \
 8B \
-/mnt/qwen-ckpts/Qwen3-8B \
-/mnt/qwen-ckpts/Qwen3-8B-to-mcore  \
+/mnt/data/ckpts/huggingface/Qwen3-8B \
+/mnt/data/ckpts/mcore/Qwen3-8B-to-mcore  \
 false \
 true \
 bf16
@@ -54,7 +54,7 @@ bf16
 
 ```bash
 cd ~/Pai-Megatron-Patch/examples/qwen3
-bash run_grpo_qwen.sh
+bash run_mcore_qwen3_8b_grpo.sh
 ```
 
 ## 使用 Wandb 监控

@@ -540,6 +540,7 @@ def save_mgmodel(mgmodel, args):
 
     os.makedirs(args.save, exist_ok=True)
     os.system("cp -rf " + args.load + "/*config.json " + args.save)
+    os.system("cp -rf " + args.load + "/config* " + args.save)
     os.system("cp -rf " + args.load + "/tokenizer* " + args.save)
     os.system("cp -rf " + args.load + "/*tok* " + args.save)
 
