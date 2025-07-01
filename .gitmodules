@@ -22,6 +22,9 @@
 [submodule "backends/Bigcode-Evaluation-Harness-240327"]
 	path = backends/Bigcode-Evaluation-Harness-240327
 	url = https://github.com/jerryli1981/bigcode-evaluation-harness
+[submodule "backends/megatron/Megatron-LM-250624"]
+	path = backends/megatron/Megatron-LM-250624
+	url = https://github.com/NVIDIA/Megatron-LM.git
 [submodule "backends/rl/ChatLearn"]
 	path = backends/rl/ChatLearn
 	url = https://github.com/alibaba/ChatLearn.git

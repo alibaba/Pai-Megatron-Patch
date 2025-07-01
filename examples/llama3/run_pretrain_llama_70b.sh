@@ -10,12 +10,11 @@ export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true # for PyTorch >= 2.6
 
 ENV=$1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=7
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=1
+GPUS_PER_NODE=`python -c "import torch; print(torch.cuda.device_count())"`
 
 elif [ $ENV = dlc ]; then
 

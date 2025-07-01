@@ -140,6 +140,7 @@ cmd="torchrun ${DISTRIBUTED_ARGS} ../deepseek/hf2mcore_deepseek_v3_moe.py \
     --untie-embeddings-and-output-weights \
     --no-bias-swiglu-fusion \
     --no-rope-fusion \
+    --rope-type rope \
     --position-embedding-type rope \
     --use-rotary-position-embeddings \
     --disable-bias-linear \

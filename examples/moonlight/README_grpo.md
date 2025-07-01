@@ -1,6 +1,6 @@
 # 基于 Mcore 的端到端GRPO训练流程
 
-本文档提供使用 ChatLearn、Mcore 和 vLLM 框架来对Qwen2.5模型进行GRPO训练的快速开始指南。
+本文档提供使用 ChatLearn、Mcore 和 vLLM 框架来对Qwen3模型进行GRPO训练的快速开始指南。
 
 ## 环境配置
 1. Docker镜像准备
@@ -22,12 +22,29 @@ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 以[MATH-lighteval](https://www.modelscope.cn/datasets/AI-ModelScope/MATH-lighteval)数据集作为示例.
 ```bash
 # 下载数据集
-mkdir -p dataset
-modelscope download --dataset AI-ModelScope/MATH-lighteval --local_dir dataset/MATH-lighteval
+mkdir -p /mnt/data/datasets
+modelscope download --dataset AI-ModelScope/MATH-lighteval --local_dir /mnt/data/datasets/MATH-lighteval
 # 数据集预处理
-python examples/fsdp/data/data_preprocess/math_lighteval.py --input_dir dataset/MATH-lighteval --local_dir dataset/MATH-lighteval
+python examples/fsdp/data/data_preprocess/math_lighteval.py --input_dir /mnt/data/datasets/MATH-lighteval --local_dir /mnt/data/datasets/MATH-lighteval
 # 下载模型权重
-modelscope download --model Qwen/Qwen2.5-7B-Instruct --local_dir Qwen2.5-7B-Instruct
+modelscope download --model moonshotai/Moonlight-16B-A3B-Instruct --local_dir /mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct
+```
+
+## 代码&CKPT修改
+```bash
+vim ~/Pai-Megatron-Patch/backends/megatron/Megatron-LM-250624/megatron/training/tokenizer/tokenizer.py
+143行修改为：
+self._tokenizer = transformers.AutoTokenizer.from_pretrained(
+    pretrained_model_name_or_path=pretrained_model_name_or_path, trust_remote_code=True, **kwargs
+)
+vim /mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct/config.json
+将"AutoModel"和"AutoModelForCausalLM"修改为：
+"auto_map": {
+"AutoConfig": "configuration_deepseek.DeepseekV3Config",
+"AutoModel": "modeling_deepseek_pai.DeepseekV3Model",
+"AutoModelForCausalLM": "modeling_deepseek_pai.DeepseekV3ForCausalLM"
+}
+cp ~/Pai-Megatron-Patch/examples/moonlight/modeling_deepseek_pai.py /mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct
 ```
 
 ## 模型转换
@@ -35,25 +52,15 @@ modelscope download --model Qwen/Qwen2.5-7B-Instruct --local_dir Qwen2.5-7B-Inst
 模型格式转换可以参考 [Pai-Megatron-Patch](https://github.com/alibaba/Pai-Megatron-Patch) 项目提供的转换脚本。
 高性能分布式权重转换可以参考：https://github.com/alibaba/Pai-Megatron-Patch/tree/main/toolkits/distributed_checkpoints_convertor
 
-运行`hf2mcore_qwen2.5_convertor.sh`脚本，需要传入的参数列表如下
-```
-MODEL_SIZE=$1               # 模型大小，0.5B, 1.5B, 3B, 7B, 14B, 32B, 72B
-LOAD_DIR=$2                 # 源权重路径
-SAVE_DIR=$3                 # 目标权重路径
-MG2HF=$4                    # 转换方向 可选: true, false
-USE_CUDA=$5                 # 是否使用GPU转换 建议: true
-PR=$6                       # 转换精度 可选: fp32 bf16 fp16
-HF_DIR=$7                   # HF权重路径(mcore2hf时必须提供)
-```
-例如，使用下述脚本将checkpoint转换到MCore格式
 
+例如，使用下述脚本将8B量级的Qwen3的Huggingface格式的模型转换到MCore格式
 ```bash
 git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 cd ~/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
-bash scripts/qwen2_5/run_8xH20.sh \
-7B \
-/mnt/qwen-ckpts/Qwen2.5-7B-Instruct \
-/mnt/qwen-ckpts/Qwen2.5-7B-Instruct-to-mcore  \
+bash scripts/moonlight/run_2xH20.sh \
+16B \
+/mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct \
+/mnt/data/ckpts/mcore/Moonlight-16B-A3B-Instruct-to-mcore \
 false \
 true \
 bf16
@@ -63,8 +70,8 @@ bf16
 运行以下命令开始训练：
 
 ```bash
-cd ~/Pai-Megatron-Patch/examples/qwen2_5
-bash run_grpo_qwen.sh
+cd ~/Pai-Megatron-Patch/examples/moonlight
+bash run_mcore_moonlight_grpo.sh
 ```
 
 ## 使用 Wandb 监控
