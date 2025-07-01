@@ -22,14 +22,6 @@ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 cd Pai-Megatron-Patch
 ```
 
-目前QwQ已支持使用FlashAttention-3加速计算，但只能在Hopper架构的GPU卡上进行运算。若需要在H卡上使用FA3，请在DSW的容器中按如下指令安装并保存镜像
-```bash
-pip install "git+https://github.com/Dao-AILab/flash-attention.git#egg=flashattn-hopper&subdirectory=hopper"
-python_path=`python -c "import site; print(site.getsitepackages()[0])"`
-mkdir -p $python_path/flashattn_hopper
-wget -P $python_path/flashattn_hopper https://raw.githubusercontent.com/Dao-AILab/flash-attention/main/hopper/flash_attn_interface.py
-```
-
 ## 预训练数据集和模型下载
 
 ```bash
