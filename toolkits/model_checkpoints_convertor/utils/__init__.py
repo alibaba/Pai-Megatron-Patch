@@ -113,7 +113,7 @@ def build_layer_id_mapping(args):
         remained_stages = args.pipeline_model_parallel_size - 1
         assert remained_layers % remained_stages == 0
         pp_layers_per_stage = [args.target_decoder_first_pipeline_num_layers] +([remained_layers // remained_stages] * remained_stages)
-
+        offset = 0
         for pp_id, num_layers in enumerate(pp_layers_per_stage):
             for global_layer_id in range(offset, offset + num_layers):
                 # NOTE: map a global transformer layer to a local pp rank
