@@ -22,9 +22,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
 import time
 import gzip
 import multiprocessing
-
-from megatron.core.datasets import indexed_dataset
 from megatron_patch.tokenizer import build_tokenizer
+from megatron.core.datasets import indexed_dataset
+
 
 class Encoder(object):
     def __init__(self, args):
@@ -39,6 +39,7 @@ class Encoder(object):
         return list(self.encode(datas))
 
     def encode(self, datas):
+        stats = {'omitted': 0, 'truncated': 0}
         if isinstance(datas, dict):
             datas = [datas]
         
@@ -63,10 +64,13 @@ class Encoder(object):
             input_ids = self.tokenizer.apply_chat_template(text[:-1])
             if len(input_ids) >= self.seq_length:
                 print('Extreme long user input, omitted...')
-                continue
+                stats['omitted'] += 1
+                continue 
+
             all_ids = self.tokenizer.apply_chat_template(text)
             if len(all_ids) >= self.seq_length:
                 print('Extreme long sequence, truncted...')
+                stats['truncated'] += 1 
                 all_ids = all_ids[:self.seq_length]
 
             for t1, t2 in zip(input_ids, all_ids):
@@ -81,26 +85,24 @@ class Encoder(object):
                     label_ids = label_ids + [-100] * (self.seq_length - sum(sentence_lens))     
                 ids['text'] = doc_ids + label_ids
                 lens['text'] = [len(doc_ids) * 2]
-                yield ids, lens, len(json.dumps(ids))               
-                ids = {}
-                lens = {}
-                doc_ids = []
-                sentence_lens = []
-                label_ids = []
-            
+
+                yield (ids, lens, len(json.dumps(ids))), stats
+
+                ids, lens, doc_ids, sentence_lens, label_ids = {}, {}, [], [], []
+                stats = {'omitted': 0, 'truncated': 0} 
+
             doc_ids.extend(all_ids)
             label_ids.extend(y_ids)
             sentence_lens.append(len(all_ids))
 
         if sum(sentence_lens) > 0:
-            # Need Padding
             if self.seq_length > sum(sentence_lens):
                 doc_ids = doc_ids + [pad_token_id] * (self.seq_length - sum(sentence_lens))
                 label_ids = label_ids + [-100] * (self.seq_length - sum(sentence_lens))
             ids['text'] = doc_ids + label_ids
             lens['text'] = [len(doc_ids) * 2]
-        yield ids, lens, len(json.dumps(ids))
-    
+
+            yield (ids, lens, len(json.dumps(ids))), stats
     
 class Partition(object):
     def __init__(self, args, workers):
@@ -121,7 +123,6 @@ class Partition(object):
         input_file_name, output_prefix = file_name
         print("Opening", input_file_name)
 
-        # json or jsonl
         try:
             with open(input_file_name, 'r', encoding='utf-8') as f:
                 fin = json.load(f)
@@ -129,9 +130,9 @@ class Partition(object):
             fin = []
             with open(input_file_name, 'r', encoding='utf-8') as f:
                 fin = [json.loads(d) for d in f.readlines()]
-        
         assert isinstance(fin, list)
-        # NOTE: each item in fin is a group (dict / list[dict]) of samples may be packed together
+
+        total_raw_samples = len(fin)
     
         startup_start = time.time()
         encoder = Encoder(self.args)
@@ -158,14 +159,10 @@ class Partition(object):
 
         tokenizer = build_tokenizer(self.args)
         level = "document"
-        output_bin_files = {}
-        output_idx_files = {}
-        builders = {}
+        output_bin_files, output_idx_files, builders = {}, {}, {}
         for key in self.args.json_keys:
-            output_bin_files[key] = "{}_{}_{}.bin".format(output_prefix,
-                                                          key, level)
-            output_idx_files[key] = "{}_{}_{}.idx".format(output_prefix,
-                                                          key, level)
+            output_bin_files[key] = f"{output_prefix}_{key}_{level}.bin"
+            output_idx_files[key] = f"{output_prefix}_{key}_{level}.idx"
             builders[key] = indexed_dataset.IndexedDatasetBuilder(
                 output_bin_files[key],
                 dtype=indexed_dataset.DType.optimal_dtype(tokenizer.vocab_size),
@@ -175,17 +172,43 @@ class Partition(object):
         proc_start = time.time()
         total_bytes_processed = 0
         print("Time to startup:", startup_end - startup_start)
-        cnt = 1
-        for datas in encoded_docs:
-            for (doc, sentence_lens, bytes_processed) in datas:
-                total_bytes_processed += bytes_processed
-                for key in doc.keys():
-                    builders[key].add_document(doc[key], sentence_lens[key])
-                self.print_processing_stats(cnt, proc_start, total_bytes_processed)
-                cnt += 1
-        print(f"After pre-tokenizing, the idxmap dataset has {cnt - 1} samples")
 
-        builders[key].finalize(output_idx_files[key])
+        processed_count = 0     
+        saved_count = 0        
+        omitted_count_total = 0 
+        truncated_count_total = 0 
+
+        for datas in encoded_docs:
+            processed_count += 1
+
+            if datas:
+                for item in datas:
+                    (doc, sentence_lens, bytes_processed), stats = item
+                    
+                    total_bytes_processed += bytes_processed
+                    for key in doc.keys():
+                        builders[key].add_document(doc[key], sentence_lens[key])
+                    
+                    saved_count += 1
+                    omitted_count_total += stats.get('omitted', 0)
+                    truncated_count_total += stats.get('truncated', 0)
+
+            self.print_processing_stats(processed_count, proc_start, total_bytes_processed)
+
+        final_omitted_count = total_raw_samples - saved_count
+        
+        print(f"\n--- Final Processing Summary ---")
+        print(f"Total raw samples in input file: {total_raw_samples}")
+        print(f"Samples processed: {processed_count}")
+        print(f"------------------------------------")
+        print(f"Samples saved to dataset: {saved_count}")
+        print(f"  - Samples truncated: {truncated_count_total}")
+        print(f"  - Samples omitted (input too long): {final_omitted_count}")
+        print(f"====================================\n")
+
+        if self.args.json_keys:
+            key = self.args.json_keys[0]
+            builders[key].finalize(output_idx_files[key])
 
 def get_args():
     parser = argparse.ArgumentParser()
