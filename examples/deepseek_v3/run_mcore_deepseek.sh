@@ -3,7 +3,7 @@ set -e
 ENV=$1
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATCH_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250328:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250624:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true # for PyTorch >= 2.6
 
@@ -77,7 +77,7 @@ NUM_ATTENTION_HEADS=128
 NUM_LAYERS=61
 INTERMEDIATE_SIZE=18432
 MOE_INTERMEDIATE_SIZE=2048
-MAX_POSITION_EMBEDDINGS=163840
+MAX_POSITION_EMBEDDINGS=4096
 EXTRA_VOCAB_SIZE=467
 Q_LORA_RANK=1536
 KV_LORA_RANK=512
@@ -97,6 +97,8 @@ moe_options=" \
     --moe-router-topk ${ROUTER_TOPK} \
     --moe-router-group-topk 4 \
     --moe-router-num-groups 8 \
+    --moe-router-dtype fp32 \
+    --moe-permute-fusion \
     --num-experts ${NUM_EXPERTS} \
     --expert-model-parallel-size ${EP} \
     --expert-tensor-parallel-size ${ETP} \
@@ -104,6 +106,7 @@ moe_options=" \
     --moe-router-load-balancing-type seq_aux_loss \
     --moe-router-topk-scaling-factor 2.5 \
     --moe-shared-expert-overlap \
+    --moe-router-pre-softmax \
     --moe-router-enable-expert-bias \
     --mscale 1.0 \
     --mscale-all-dim 1.0 \
@@ -362,10 +365,13 @@ megatron_options="  \
         --kv-channels ${V_HEAD_DIM} \
         --qk-layernorm \
         --multi-latent-attention \
-        --ckpt-format torch \
         --transformer-impl transformer_engine \
         --no-masked-softmax-fusion \
         --use-rope-scaling \
+        --manual-gc \
+        --manual-gc-interval 10 \
+        --recompute-granularity selective \
+        --recompute-modules mla_up_proj mlp moe \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_deepseek.py
