@@ -21,6 +21,7 @@ runtime_args:
   # config for eval
   eval_episode_interval: 5
   enable_eval_before_training: False
+  use_parameter_sync_v2: True
   log_args_dict:
     log_dir: ${runtime_args.output_dir}
     enable_wandb: False
@@ -53,6 +54,9 @@ models:
     pipeline_model_parallel_size: 1
     expert_tensor_parallel_size: 1
     expert_model_parallel_size: 1
+    decoder_first_pipeline_num_layers: null
+    decoder_last_pipeline_num_layers: null
+    moe_router_force_load_balancing: False
     # train config
     load: your_megatron_model_path
     save: ${runtime_args.output_dir}
@@ -70,7 +74,7 @@ models:
   ref_policy:
     free_gpu_memory:
       offload_weights: True
-    generation_batch_size: 8
+    generation_batch_size: ${models.policy_trainer.generation_batch_size}
     seq_length: ${models.policy_trainer.seq_length}
     tokenizer_type: 'HuggingFaceTokenizer'
     tokenizer_model: ${models.policy.load}
@@ -80,6 +84,9 @@ models:
     pipeline_model_parallel_size: ${models.policy_trainer.pipeline_model_parallel_size}
     expert_tensor_parallel_size: ${models.policy_trainer.expert_tensor_parallel_size}
     expert_model_parallel_size: ${models.policy_trainer.expert_model_parallel_size}
+    decoder_first_pipeline_num_layers: ${models.policy_trainer.decoder_first_pipeline_num_layers}
+    decoder_last_pipeline_num_layers: ${models.policy_trainer.decoder_last_pipeline_num_layers}
+    moe_router_force_load_balancing: ${models.policy_trainer.moe_router_force_load_balancing}
     gpu_per_process: 1
     num_gpu: ${models.policy_trainer.num_gpu}
     trainable: False
@@ -107,6 +114,7 @@ models:
     enable_thinking: False
     enable_stage_resume: False
     gpu_memory_utilization: 0.8
+    enforce_eager: True
   reward:
     num_cpu: 2
     cpu_per_process: 1
