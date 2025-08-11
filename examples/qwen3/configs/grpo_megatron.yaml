@@ -1,6 +1,7 @@
 runtime_args:
   # setup config
   train_backend: megatron
+  rollout_backend: vllm
   exp_name: grpo_megatron
   colocation: [policy,policy_trainer,ref_policy]
   # path config
@@ -21,7 +22,6 @@ runtime_args:
   # config for eval
   eval_episode_interval: 5
   enable_eval_before_training: False
-  use_parameter_sync_v2: True
   log_args_dict:
     log_dir: ${runtime_args.output_dir}
     enable_wandb: False
@@ -54,23 +54,21 @@ models:
     pipeline_model_parallel_size: 1
     expert_tensor_parallel_size: 1
     expert_model_parallel_size: 1
+    virtual_pipeline_model_parallel_size: null
     decoder_first_pipeline_num_layers: null
     decoder_last_pipeline_num_layers: null
     moe_router_force_load_balancing: False
     # train config
     load: your_megatron_model_path
-    save: ${runtime_args.output_dir}
-    save_interval: 10000
-    log_interval: 1
     sequence_parallel: True
     use_distributed_optimizer: True
-    recompute_granularity: 'selective'
-    train_iters: 10000
+    recompute_granularity: null
     # other 
     pos_clip_ratio: 0.2
     neg_clip_ratio: 0.2
-    diff_clip_ratio: 10
-    final_clip_ratio: 3
+    use_group_sequence_policy: False
+    packing: true
+    max_token_in_packing: ${models.policy_trainer.seq_length}
   ref_policy:
     free_gpu_memory:
       offload_weights: True
@@ -91,6 +89,8 @@ models:
     num_gpu: ${models.policy_trainer.num_gpu}
     trainable: False
     load: ${models.policy_trainer.load}
+    packing: ${models.policy_trainer.packing}
+    max_token_in_packing: ${models.policy_trainer.max_token_in_packing}
   policy:
     free_gpu_memory:
       offload_weights: True
