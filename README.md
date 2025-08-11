@@ -25,6 +25,7 @@ English | [简体中文](./README_zh-CN.md)
 Pai-Megatron-Patch (https://github.com/alibaba/Pai-Megatron-Patch) is a deep learning training toolkit built for developers to train and predict LLMs & VLMs by using Megatron framework easily. With the continuous development of LLMs, the model structure and scale are rapidly evolving. Although these models can be conveniently manufactured using Transformers or DeepSpeed training framework, the training efficiency is comparably low. This phenomenon becomes even severer when the model scale exceeds 10 billion. The primary objective of Pai-Megatron-Patch is to effectively utilize the computational power of GPUs for LLM. This tool allows convenient training of commonly used LLM with all the accelerating techniques provided by Megatron-LM.
 
 What's New:
+- **Support all Mcore Models GSPO Reinforcement Training via ChatLearn** [🔥🔥 2025.08.11]
 - **Support DeepSeek-V3-671B GRPO Reinforcement Training using Megatron-Core and ChatLearn** [🔥🔥 2025.07.31]
 - **Support Qwen3-235B GRPO Reinforcement Training using Megatron-Core and ChatLearn** [🔥🔥 2025.07.20]
 - **Support Moonlight GRPO Reinforcement Training using Megatron-Core and ChatLearn** [🔥🔥 2025.06.30]
@@ -90,6 +91,7 @@ In the reinforcement learning section, the patch offers PPO training workflows, 
 
 
 ## Technical Reports
+- [基于PAI-ChatLearn的GSPO强化学习实践](https://mp.weixin.qq.com/s/ODl1_yZk-cJdBdE7TwLAZA)
 - [基于 Megatron 的多模态大模型训练加速技术解析](https://mp.weixin.qq.com/s/USMOkRuy-J5UpxyluqsBmg)
 - [Pai-Megatron-Patch：围绕Megatron-Core打造大模型训练加速生态](https://mp.weixin.qq.com/s/BGyiJ90ZB75s3EP74KogeA)
 - [Meta Llama3.1模型在PAI-Megatron-Patch的最佳实践](https://help.aliyun.com/zh/pai/use-cases/best-practice-for-llama-3-1-in-pai-megatron-patch?spm=a2c4g.11186623.0.0.4cef730eqWHNY7)

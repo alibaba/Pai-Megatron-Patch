@@ -22,7 +22,7 @@ CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATCH_PATH=$( dirname $( dirname ${CURRENT_DIR}))
 CHATLEARN_ROOT_PATH=${MEGATRON_PATCH_PATH}/backends/rl/ChatLearn
 CHATLEARN_KERNEL_PATH=${MEGATRON_PATCH_PATH}/backends/rl/ChatLearn/chatlearn
-export PYTHONPATH=${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250328:${CHATLEARN_ROOT_PATH}:${CHATLEARN_KERNEL_PATH}:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250624:${CHATLEARN_ROOT_PATH}:${CHATLEARN_KERNEL_PATH}:$PYTHONPATH
 
 export RAY_CGRAPH_get_timeout=200
 export CUDA_DEVICE_MAX_CONNECTIONS=1
@@ -57,11 +57,12 @@ python entrypoint.py grpo --config-file configs/grpo_megatron.yaml \
         runtime_args.eval_episode_interval=1 \
         runtime_args.enable_eval_before_training=true \
         models.policy_trainer.num_gpu=${num_device} \
+        models.policy_trainer.packing=true \
+        models.policy_trainer.max_token_in_packing=8192 \
         models.policy_trainer.bf16=true \
         models.policy_trainer.sequence_parallel=true \
         models.policy_trainer.use_distributed_optimizer=true \
-        models.policy_trainer.recompute_granularity='selective' \
-        models.policy_trainer.train_iters=50 \
+        models.policy_trainer.recompute_granularity=null \
         models.policy_trainer.seq_length=2048 \
         models.policy_trainer.tensor_model_parallel_size=4 \
         models.policy_trainer.pipeline_model_parallel_size=4 \
@@ -69,8 +70,6 @@ python entrypoint.py grpo --config-file configs/grpo_megatron.yaml \
         models.policy_trainer.expert_model_parallel_size=8 \
         models.policy_trainer.generation_batch_size=128 \
         models.policy_trainer.load=${mcore_ckpt_path} \
-        models.policy_trainer.save_interval=1000000 \
-        models.policy_trainer.log_interval=1 \
         models.policy_trainer.optimizer.lr=2e-6 \
         models.policy_trainer.optimizer.min_lr=2e-6 \
         models.policy_trainer.pos_clip_ratio=0.2 \

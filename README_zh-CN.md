@@ -32,6 +32,7 @@ Pai-Megatron-Patch是各类开源大模型和Megatron训练加速引擎之间的
 
 
 ## Technical Reports
+- [基于PAI-ChatLearn的GSPO强化学习实践](https://mp.weixin.qq.com/s/ODl1_yZk-cJdBdE7TwLAZA)
 - [基于 Megatron 的多模态大模型训练加速技术解析](https://mp.weixin.qq.com/s/USMOkRuy-J5UpxyluqsBmg)
 - [Pai-Megatron-Patch：围绕Megatron-Core打造大模型训练加速生态](https://mp.weixin.qq.com/s/BGyiJ90ZB75s3EP74KogeA)
 - [Meta Llama3.1模型在PAI-Megatron-Patch的最佳实践](https://help.aliyun.com/zh/pai/use-cases/best-practice-for-llama-3-1-in-pai-megatron-patch?spm=a2c4g.11186623.0.0.4cef730eqWHNY7)
@@ -45,6 +46,7 @@ Pai-Megatron-Patch是各类开源大模型和Megatron训练加速引擎之间的
 - [阿里云PAI获得FewCLUE基于大模型的小样本学习双料冠军](https://developer.aliyun.com/article/788081?spm=a2c6h.12873639.article-detail.17.11c5383cHpFZks&tlog=yuekan_8)
 
 新功能：
+- **支持所有Mcore模型使用ChatLearn进行强化学习GSPO训练** [🔥🔥 2025.08.11]
 - **支持DeepSeek-V3-671B模型使用Mcore+ChatLearn进行强化学习GRPO训练** [🔥🔥 2025.07.31]
 - **支持Qwen3-235B模型使用Mcore+ChatLearn进行强化学习GRPO训练** [🔥🔥 2025.07.20]
 - **支持Moonlight模型使用Mcore+ChatLearn进行强化学习GRPO训练** [🔥🔥 2025.06.30]
