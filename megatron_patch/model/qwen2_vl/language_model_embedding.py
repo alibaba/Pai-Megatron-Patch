@@ -141,14 +141,14 @@ class LanguageModelEmbedding(MegatronModule):
         if self.config.sequence_parallel:
             if not self.reduce_scatter_embeddings:
                 embeddings = embeddings.clone()
-                embeddings = embeddings.transpose(0, 1)
+                embeddings = embeddings.transpose(0, 1).contiguous()
                 if image_embeds is not None:
                     image_input_mask = image_input_mask.transpose(0,1).unsqueeze(-1).expand_as(embeddings)
                     embeddings = embeddings.masked_scatter(image_input_mask, image_embeds.to(embeddings.device, embeddings.dtype))
                 if video_embeds is not None:
                     video_input_mask = video_input_mask.transpose(0,1).unsqueeze(-1).expand_as(embeddings)
                     embeddings = embeddings.masked_scatter(video_input_mask, video_embeds.to(embeddings.device, embeddings.dtype))
-                embeddings = embeddings.transpose(0, 1)
+                embeddings = embeddings.transpose(0, 1).contiguous()
                 embeddings = tensor_parallel.scatter_to_sequence_parallel_region(embeddings)
             # `scatter_to_sequence_parallel_region` returns a view, which prevents
             # the original tensor from being garbage collected. Clone to facilitate GC.
@@ -160,7 +160,7 @@ class LanguageModelEmbedding(MegatronModule):
         else:
             embeddings = embeddings.clone()
             if not self.reduce_scatter_embeddings:
-                embeddings = embeddings.transpose(0, 1)
+                embeddings = embeddings.transpose(0, 1).contiguous()
             if image_embeds is not None:
                 image_input_mask = image_input_mask.transpose(0,1).unsqueeze(-1).expand_as(embeddings)
                 embeddings = embeddings.masked_scatter(image_input_mask, image_embeds.to(embeddings.device, embeddings.dtype))
@@ -168,7 +168,7 @@ class LanguageModelEmbedding(MegatronModule):
                 video_input_mask = video_input_mask.transpose(0,1).unsqueeze(-1).expand_as(embeddings)
                 embeddings = embeddings.masked_scatter(video_input_mask, video_embeds.to(embeddings.device, embeddings.dtype))
             if not self.reduce_scatter_embeddings:
-                embeddings = embeddings.transpose(0, 1)
+                embeddings = embeddings.transpose(0, 1).contiguous()
             embeddings = self.embedding_dropout(embeddings)
 
         return embeddings
