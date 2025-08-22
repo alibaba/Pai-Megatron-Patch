@@ -3,7 +3,7 @@ set -e
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 CONVERTOR_DIR=$( dirname $( dirname ${CURRENT_DIR}))
 MEGATRON_PATCH_PATH=$( dirname $( dirname ${CONVERTOR_DIR}))
-export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250328:${CONVERTOR_DIR}/impl:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250624:${CONVERTOR_DIR}/impl:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true # for PyTorch >= 2.6
 
