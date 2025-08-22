@@ -482,6 +482,10 @@ def split_vision_model(mgvision, args, prefix="vision_model") -> Dict[Tuple, Dic
                 viewed = v.view(-1, vision_ffn_hidden_size, vision_hidden_size)
                 seg = vision_ffn_hidden_size // tp
                 target_v = viewed[:, seg*etp_rank: seg*(etp_rank+1), :].reshape(-1, vision_hidden_size)
+            elif 'mlp.linear_fc1.bias' in k:
+                viewed = v.view(-1, vision_ffn_hidden_size)
+                seg = vision_ffn_hidden_size // tp
+                target_v = viewed[:, seg*etp_rank: seg*(etp_rank+1)].reshape(-1)
             elif 'linear_fc1' in k and 'norm' not in k:
                 seg = v.shape[0] // tp
                 target_v = v[seg*etp_rank: seg*(etp_rank+1)]
@@ -524,6 +528,9 @@ def load_split_state_dict_to_vision_model(state_dicts, mgvision, args):
             elif 'linear_fc1.weight' in k and 'projection' not in k:
                 seg = vision_ffn_hidden_size // tp
                 merged_dict[k].append(v.view(-1, seg, vision_hidden_size))
+            elif 'mlp.linear_fc1.bias' in k:
+                seg = vision_ffn_hidden_size // tp
+                merged_dict[k].append(v.view(-1, seg))
             elif 'linear_fc1' in k and 'norm' not in k:
                 merged_dict[k].append(v)  
             elif etp_rank == 0:
@@ -542,6 +549,8 @@ def load_split_state_dict_to_vision_model(state_dicts, mgvision, args):
             merged_dict[k] = torch.cat(v, dim=-1)
         elif 'linear_fc1.weight' in k and 'projection' not in k:
             merged_dict[k] = torch.cat(v, dim=1).view(-1, vision_hidden_size)
+        elif 'mlp.linear_fc1.bias' in k:
+            merged_dict[k] = torch.cat(v, dim=0).view(-1)
         elif 'linear_fc1' in k and 'norm' not in k:
             merged_dict[k] = torch.cat(v, dim=0)
         else:
