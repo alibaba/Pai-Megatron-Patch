@@ -237,8 +237,7 @@ elif [ $MODEL_SIZE = A22B ]; then
         --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
         --moe-router-load-balancing-type aux_loss \
         --moe-aux-loss-coeff 0.001 \
-        --moe-layer-freq '([1]*94)' \
-        --moe-router-pre-softmax
+        --moe-layer-freq '([1]*94)' 
         "
 
     tie_option=" \
@@ -489,12 +488,7 @@ megatron_options="  \
         --transformer-impl transformer_engine \
         --cross-entropy-loss-fusion \
         --qk-layernorm \
-        --kv-channels 128 \
-        --te-rng-tracker \
-        --external-cuda-graph \
-        --cuda-graph-scope attn \
-        --recompute-granularity selective \
-        --recompute-modules moe
+        --kv-channels 128 
 
         "
 
