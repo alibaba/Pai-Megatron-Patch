@@ -33,7 +33,7 @@ from megatron.training.utils import (
 from megatron.core.num_microbatches_calculator import get_num_microbatches
 from megatron_patch.arguments import get_patch_args
 
-from megatron_patch.model.qwen2_vl.layer_specs import (
+from megatron_patch.model.qwen2_5_vl.layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
     get_qwen2vl_vision_model_spec,
     get_mlp_module_spec
@@ -65,7 +65,7 @@ from megatron.energon import (
 )
 
 def model_provider(
-    pre_process=True, post_process=True, add_encoder=True, add_decoder=True
+    pre_process=True, post_process=True, add_encoder=True, add_decoder=True, vp_stage: Optional[int] = None
 ) -> Union[Qwen2_5VLModel]:
     args = get_args()
     build_tokenizer(args)
@@ -119,6 +119,7 @@ def model_provider(
         fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
         parallel_output=True,
         language_share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
+        vp_stage=vp_stage
     )
 
     model.freeze(

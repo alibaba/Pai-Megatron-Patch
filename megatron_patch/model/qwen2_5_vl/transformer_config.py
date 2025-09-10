@@ -26,7 +26,6 @@ class Qwen2VLTransformerConfig(TransformerConfig):
     rotary_scaling_factor: int = None
     max_position_embeddings: int = None
     moe_aux_loss_coeff: float = 0.0
-    mrope_section: List[int] = field(default_factory=lambda:[16, 24, 24])
 
     # The following options are set with --disable-bias-linear --add-qkv-bias
     # in the script
