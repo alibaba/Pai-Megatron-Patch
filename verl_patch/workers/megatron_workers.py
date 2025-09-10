@@ -201,10 +201,6 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
 
                 def megatron_actor_model_provider(pre_process, post_process):
                     from verl_patch.models.mcore import init_mcore_model
-                    from torch import distributed as dist
-                    if dist.get_rank() == 0:
-                        breakpoint()
-                    dist.barrier()
                     parallel_model = init_mcore_model(
                         self.tf_config,
                         self.hf_config,

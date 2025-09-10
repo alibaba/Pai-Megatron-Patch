@@ -190,6 +190,38 @@ class DeepseekV3Model(BaseModelInitializer):
                     layer.mlp.router.weight.requires_grad = False
         return model
 
+class MoonlightModel(BaseModelInitializer):
+    """Initializer for DeepseekV3 models."""
+
+    def get_transformer_layer_spec(self):
+        transformer_layer_spec = get_gpt_decoder_block_spec(self.tfconfig, use_transformer_engine=True)
+        return transformer_layer_spec
+
+    def get_rope_scaling_args(self) -> dict:
+        """Get rope scaling args."""
+        rope_scaling_args = {}
+        return rope_scaling_args
+
+    def initialize(
+        self,
+        **kwargs,
+    ):
+        freeze_moe_router = kwargs.get("freeze_moe_router", True)
+        if freeze_moe_router:
+            self.tfconfig.moe_router_load_balancing_type = "none"
+        # MTP
+        if self.tfconfig.mtp_num_layers is not None:
+            transformer_layer_spec = self.get_transformer_layer_spec()
+            mtp_block_spec = get_gpt_mtp_block_spec(self.tfconfig, transformer_layer_spec, use_transformer_engine=True)
+            kwargs["mtp_block_spec"] = mtp_block_spec
+
+        model = super().initialize(**kwargs)
+        if freeze_moe_router:
+            for layer in model.decoder.layers:
+                if hasattr(layer.mlp, "router"):
+                    layer.mlp.router.weight.requires_grad = False
+        return model
+
 
 class Qwen25VLModel(BaseModelInitializer):
     """Initializer for Qwen2.5 VL models."""

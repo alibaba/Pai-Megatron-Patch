@@ -1,8 +1,5 @@
 #!/bin/bash
-#export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-#export WANDB_API_KEY="480874e5e6c5a63997db11af40cf72bf6c3c57ce"
-#export WANDB_BASE_URL=http://120.26.137.9:8080
-#export WANDB_API_KEY=local-330098da54db392d6d188861d47e0028ec65b355
+
 ray stop
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 VERL_PATCH_PATH=$( dirname $( dirname ${CURRENT_DIR}))
@@ -14,8 +11,8 @@ gsm8k_test_path=/mnt/data/datasets/gsm8k/test.parquet
 train_files="['$gsm8k_train_path']"
 test_files="['$gsm8k_test_path']"
 
-HF_MODEL_PATH=/mnt/data/ckpts/huggingface/Qwen3-8B
-DIST_CKPT_PATH=/mnt/data/ckpts/mcore/Qwen3-8B-to-mcore-verl
+HF_MODEL_PATH=/mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct
+DIST_CKPT_PATH=/mnt/data/ckpts/mcore/Moonlight-16B-A3B-Instruct-to-mcore
 
 #python scripts/converter_hf_to_mcore.py --hf_model_path $HF_MODEL_PATH --output_path $DIST_CKPT_PATH
 
