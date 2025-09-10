@@ -1,0 +1,548 @@
+2025-09-10 08:49:16,591	INFO worker.py:1694 -- Connecting to existing Ray cluster at address: 172.23.224.85:6379...
+2025-09-10 08:49:16,600	INFO worker.py:1879 -- Connected to Ray cluster. View the dashboard at [1m[32m127.0.0.1:8265 [39m[22m
+[36m(TaskRunner pid=11874)[0m TaskRunner hostname: dsw-259904-6dfc8bf8bc-llzs7, PID: 11874
+[36m(TaskRunner pid=11874)[0m {'actor_rollout_ref': {'actor': {'checkpoint': {'async_save': False,
+[36m(TaskRunner pid=11874)[0m                                                 'load_contents': ['model',
+[36m(TaskRunner pid=11874)[0m                                                                   'optimizer',
+[36m(TaskRunner pid=11874)[0m                                                                   'extra'],
+[36m(TaskRunner pid=11874)[0m                                                 'save_contents': ['model',
+[36m(TaskRunner pid=11874)[0m                                                                   'optimizer',
+[36m(TaskRunner pid=11874)[0m                                                                   'extra']},
+[36m(TaskRunner pid=11874)[0m                                  'clip_ratio': 0.2,
+[36m(TaskRunner pid=11874)[0m                                  'clip_ratio_c': 3.0,
+[36m(TaskRunner pid=11874)[0m                                  'clip_ratio_high': 0.2,
+[36m(TaskRunner pid=11874)[0m                                  'clip_ratio_low': 0.2,
+[36m(TaskRunner pid=11874)[0m                                  'data_loader_seed': None,
+[36m(TaskRunner pid=11874)[0m                                  'entropy_coeff': 0,
+[36m(TaskRunner pid=11874)[0m                                  'kl_loss_coef': 0.0,
+[36m(TaskRunner pid=11874)[0m                                  'kl_loss_type': 'low_var_kl',
+[36m(TaskRunner pid=11874)[0m                                  'load_weight': True,
+[36m(TaskRunner pid=11874)[0m                                  'loss_agg_mode': 'token-mean',
+[36m(TaskRunner pid=11874)[0m                                  'megatron': {'context_parallel_size': 1,
+[36m(TaskRunner pid=11874)[0m                                               'dist_checkpointing_path': '/mnt/data/ckpts/mcore/Qwen3-8B-to-mcore-verl',
+[36m(TaskRunner pid=11874)[0m                                               'expert_model_parallel_size': 1,
+[36m(TaskRunner pid=11874)[0m                                               'expert_tensor_parallel_size': None,
+[36m(TaskRunner pid=11874)[0m                                               'grad_offload': False,
+[36m(TaskRunner pid=11874)[0m                                               'optimizer_offload': False,
+[36m(TaskRunner pid=11874)[0m                                               'override_transformer_config': {},
+[36m(TaskRunner pid=11874)[0m                                               'param_offload': False,
+[36m(TaskRunner pid=11874)[0m                                               'pipeline_model_parallel_size': 1,
+[36m(TaskRunner pid=11874)[0m                                               'seed': 42,
+[36m(TaskRunner pid=11874)[0m                                               'sequence_parallel': True,
+[36m(TaskRunner pid=11874)[0m                                               'tensor_model_parallel_size': 2,
+[36m(TaskRunner pid=11874)[0m                                               'use_dist_checkpointing': True,
+[36m(TaskRunner pid=11874)[0m                                               'use_distributed_optimizer': True,
+[36m(TaskRunner pid=11874)[0m                                               'use_mbridge': False,
+[36m(TaskRunner pid=11874)[0m                                               'virtual_pipeline_model_parallel_size': None},
+[36m(TaskRunner pid=11874)[0m                                  'optim': {'clip_grad': 1.0,
+[36m(TaskRunner pid=11874)[0m                                            'lr': 2e-06,
+[36m(TaskRunner pid=11874)[0m                                            'lr_decay_steps': None,
+[36m(TaskRunner pid=11874)[0m                                            'lr_decay_style': 'constant',
+[36m(TaskRunner pid=11874)[0m                                            'lr_warmup_init': 0.0,
+[36m(TaskRunner pid=11874)[0m                                            'lr_warmup_steps': None,
+[36m(TaskRunner pid=11874)[0m                                            'lr_warmup_steps_ratio': 0.0,
+[36m(TaskRunner pid=11874)[0m                                            'lr_wsd_decay_steps': None,
+[36m(TaskRunner pid=11874)[0m                                            'lr_wsd_decay_style': 'exponential',
+[36m(TaskRunner pid=11874)[0m                                            'min_lr': 0.0,
+[36m(TaskRunner pid=11874)[0m                                            'optimizer': 'adam',
+[36m(TaskRunner pid=11874)[0m                                            'total_training_steps': -1,
+[36m(TaskRunner pid=11874)[0m                                            'use_checkpoint_opt_param_scheduler': False,
+[36m(TaskRunner pid=11874)[0m                                            'weight_decay': 0.01,
+[36m(TaskRunner pid=11874)[0m                                            'weight_decay_incr_style': 'constant'},
+[36m(TaskRunner pid=11874)[0m                                  'policy_loss': {'clip_cov_lb': 1.0,
+[36m(TaskRunner pid=11874)[0m                                                  'clip_cov_ratio': 0.0002,
+[36m(TaskRunner pid=11874)[0m                                                  'clip_cov_ub': 5.0,
+[36m(TaskRunner pid=11874)[0m                                                  'kl_cov_ratio': 0.0002,
+[36m(TaskRunner pid=11874)[0m                                                  'loss_mode': 'vanilla',
+[36m(TaskRunner pid=11874)[0m                                                  'ppo_kl_coef': 0.1},
+[36m(TaskRunner pid=11874)[0m                                  'ppo_epochs': 1,
+[36m(TaskRunner pid=11874)[0m                                  'ppo_max_token_len_per_gpu': 16384,
+[36m(TaskRunner pid=11874)[0m                                  'ppo_micro_batch_size': None,
+[36m(TaskRunner pid=11874)[0m                                  'ppo_micro_batch_size_per_gpu': 8,
+[36m(TaskRunner pid=11874)[0m                                  'ppo_mini_batch_size': 8,
+[36m(TaskRunner pid=11874)[0m                                  'profile': {'profile_ranks': None,
+[36m(TaskRunner pid=11874)[0m                                              'save_path': None,
+[36m(TaskRunner pid=11874)[0m                                              'step_end': -1,
+[36m(TaskRunner pid=11874)[0m                                              'step_start': -1,
+[36m(TaskRunner pid=11874)[0m                                              'use_profile': False},
+[36m(TaskRunner pid=11874)[0m                                  'profiler': {'_target_': 'verl.utils.profiler.ProfilerConfig',
+[36m(TaskRunner pid=11874)[0m                                               'all_ranks': False,
+[36m(TaskRunner pid=11874)[0m                                               'discrete': False,
+[36m(TaskRunner pid=11874)[0m                                               'ranks': []},
+[36m(TaskRunner pid=11874)[0m                                  'shuffle': False,
+[36m(TaskRunner pid=11874)[0m                                  'strategy': 'megatron',
+[36m(TaskRunner pid=11874)[0m                                  'use_dynamic_bsz': False,
+[36m(TaskRunner pid=11874)[0m                                  'use_kl_loss': True,
+[36m(TaskRunner pid=11874)[0m                                  'use_torch_compile': True},
+[36m(TaskRunner pid=11874)[0m                        'hybrid_engine': True,
+[36m(TaskRunner pid=11874)[0m                        'model': {'custom_chat_template': None,
+[36m(TaskRunner pid=11874)[0m                                  'enable_gradient_checkpointing': True,
+[36m(TaskRunner pid=11874)[0m                                  'external_lib': None,
+[36m(TaskRunner pid=11874)[0m                                  'gradient_checkpointing_kwargs': {'activations_checkpoint_granularity': None,
+[36m(TaskRunner pid=11874)[0m                                                                    'activations_checkpoint_method': None,
+[36m(TaskRunner pid=11874)[0m                                                                    'activations_checkpoint_num_layers': None},
+[36m(TaskRunner pid=11874)[0m                                  'override_config': {'model_config': {},
+[36m(TaskRunner pid=11874)[0m                                                      'moe_config': {'freeze_moe_router': False}},
+[36m(TaskRunner pid=11874)[0m                                  'path': '/mnt/data/ckpts/huggingface/Qwen3-8B',
+[36m(TaskRunner pid=11874)[0m                                  'trust_remote_code': False,
+[36m(TaskRunner pid=11874)[0m                                  'use_remove_padding': False},
+[36m(TaskRunner pid=11874)[0m                        'nccl_timeout': 600,
+[36m(TaskRunner pid=11874)[0m                        'ref': {'load_weight': True,
+[36m(TaskRunner pid=11874)[0m                                'log_prob_max_token_len_per_gpu': 16384,
+[36m(TaskRunner pid=11874)[0m                                'log_prob_micro_batch_size': None,
+[36m(TaskRunner pid=11874)[0m                                'log_prob_micro_batch_size_per_gpu': 8,
+[36m(TaskRunner pid=11874)[0m                                'log_prob_use_dynamic_bsz': False,
+[36m(TaskRunner pid=11874)[0m                                'megatron': {'context_parallel_size': 1,
+[36m(TaskRunner pid=11874)[0m                                             'dist_checkpointing_path': '/mnt/data/ckpts/mcore/Qwen3-8B-to-mcore-verl',
+[36m(TaskRunner pid=11874)[0m                                             'expert_model_parallel_size': 1,
+[36m(TaskRunner pid=11874)[0m                                             'expert_tensor_parallel_size': 'None',
+[36m(TaskRunner pid=11874)[0m                                             'override_transformer_config': {},
+[36m(TaskRunner pid=11874)[0m                                             'param_offload': False,
+[36m(TaskRunner pid=11874)[0m                                             'pipeline_model_parallel_size': 1,
+[36m(TaskRunner pid=11874)[0m                                             'seed': 42,
+[36m(TaskRunner pid=11874)[0m                                             'sequence_parallel': True,
+[36m(TaskRunner pid=11874)[0m                                             'tensor_model_parallel_size': 2,
+[36m(TaskRunner pid=11874)[0m                                             'use_dist_checkpointing': True,
+[36m(TaskRunner pid=11874)[0m                                             'use_distributed_optimizer': False,
+[36m(TaskRunner pid=11874)[0m                                             'use_mbridge': False,
+[36m(TaskRunner pid=11874)[0m                                             'virtual_pipeline_model_parallel_size': None},
+[36m(TaskRunner pid=11874)[0m                                'profile': {'profile_ranks': None,
+[36m(TaskRunner pid=11874)[0m                                            'save_path': None,
+[36m(TaskRunner pid=11874)[0m                                            'step_end': -1,
+[36m(TaskRunner pid=11874)[0m                                            'step_start': -1,
+[36m(TaskRunner pid=11874)[0m                                            'use_profile': False},
+[36m(TaskRunner pid=11874)[0m                                'profiler': {'_target_': 'verl.utils.profiler.ProfilerConfig',
+[36m(TaskRunner pid=11874)[0m                                             'all_ranks': False,
+[36m(TaskRunner pid=11874)[0m                                             'discrete': False,
+[36m(TaskRunner pid=11874)[0m                                             'ranks': []},
+[36m(TaskRunner pid=11874)[0m                                'strategy': 'megatron',
+[36m(TaskRunner pid=11874)[0m                                'use_torch_compile': True},
+[36m(TaskRunner pid=11874)[0m                        'rollout': {'agent': {'custom_async_server': {'name': None,
+[36m(TaskRunner pid=11874)[0m                                                                      'path': None},
+[36m(TaskRunner pid=11874)[0m                                              'num_workers': 8},
+[36m(TaskRunner pid=11874)[0m                                    'calculate_log_probs': False,
+[36m(TaskRunner pid=11874)[0m                                    'disable_log_stats': True,
+[36m(TaskRunner pid=11874)[0m                                    'do_sample': True,
+[36m(TaskRunner pid=11874)[0m                                    'dtype': 'bfloat16',
+[36m(TaskRunner pid=11874)[0m                                    'enable_chunked_prefill': False,
+[36m(TaskRunner pid=11874)[0m                                    'enforce_eager': True,
+[36m(TaskRunner pid=11874)[0m                                    'engine_kwargs': {'sglang': {'attention_backend': None},
+[36m(TaskRunner pid=11874)[0m                                                      'vllm': {'disable_mm_preprocessor_cache': False,
+[36m(TaskRunner pid=11874)[0m                                                               'swap_space': None}},
+[36m(TaskRunner pid=11874)[0m                                    'free_cache_engine': True,
+[36m(TaskRunner pid=11874)[0m                                    'gpu_memory_utilization': 0.6,
+[36m(TaskRunner pid=11874)[0m                                    'ignore_eos': False,
+[36m(TaskRunner pid=11874)[0m                                    'layer_name_map': {'gate_proj_layer_name': 'gate_up',
+[36m(TaskRunner pid=11874)[0m                                                       'qkv_layer_name': 'qkv'},
+[36m(TaskRunner pid=11874)[0m                                    'load_format': 'dummy_megatron',
+[36m(TaskRunner pid=11874)[0m                                    'log_prob_max_token_len_per_gpu': 16384,
+[36m(TaskRunner pid=11874)[0m                                    'log_prob_micro_batch_size': None,
+[36m(TaskRunner pid=11874)[0m                                    'log_prob_micro_batch_size_per_gpu': 8,
+[36m(TaskRunner pid=11874)[0m                                    'log_prob_use_dynamic_bsz': False,
+[36m(TaskRunner pid=11874)[0m                                    'max_model_len': None,
+[36m(TaskRunner pid=11874)[0m                                    'max_num_batched_tokens': 8192,
+[36m(TaskRunner pid=11874)[0m                                    'max_num_seqs': 1024,
+[36m(TaskRunner pid=11874)[0m                                    'mode': 'sync',
+[36m(TaskRunner pid=11874)[0m                                    'multi_stage_wake_up': False,
+[36m(TaskRunner pid=11874)[0m                                    'multi_turn': {'completion_callback': None,
+[36m(TaskRunner pid=11874)[0m                                                   'enable': False,
+[36m(TaskRunner pid=11874)[0m                                                   'format': 'hermes',
+[36m(TaskRunner pid=11874)[0m                                                   'interaction_config_path': None,
+[36m(TaskRunner pid=11874)[0m                                                   'max_assistant_turns': None,
+[36m(TaskRunner pid=11874)[0m                                                   'max_parallel_calls': 1,
+[36m(TaskRunner pid=11874)[0m                                                   'max_tool_response_length': 256,
+[36m(TaskRunner pid=11874)[0m                                                   'max_user_turns': None,
+[36m(TaskRunner pid=11874)[0m                                                   'tokenization_sanity_check_mode': 'strict',
+[36m(TaskRunner pid=11874)[0m                                                   'tool_config_path': None,
+[36m(TaskRunner pid=11874)[0m                                                   'tool_response_truncate_side': 'middle',
+[36m(TaskRunner pid=11874)[0m                                                   'use_inference_chat_template': False},
+[36m(TaskRunner pid=11874)[0m                                    'n': 32,
+[36m(TaskRunner pid=11874)[0m                                    'name': 'vllm',
+[36m(TaskRunner pid=11874)[0m                                    'profiler': {'_target_': 'verl.utils.profiler.ProfilerConfig',
+[36m(TaskRunner pid=11874)[0m                                                 'all_ranks': False,
+[36m(TaskRunner pid=11874)[0m                                                 'discrete': False,
+[36m(TaskRunner pid=11874)[0m                                                 'ranks': []},
+[36m(TaskRunner pid=11874)[0m                                    'prompt_length': 1024,
+[36m(TaskRunner pid=11874)[0m                                    'response_length': 2048,
+[36m(TaskRunner pid=11874)[0m                                    'temperature': 1.0,
+[36m(TaskRunner pid=11874)[0m                                    'tensor_model_parallel_size': 2,
+[36m(TaskRunner pid=11874)[0m                                    'top_k': -1,
+[36m(TaskRunner pid=11874)[0m                                    'top_p': 1,
+[36m(TaskRunner pid=11874)[0m                                    'val_kwargs': {'do_sample': False,
+[36m(TaskRunner pid=11874)[0m                                                   'n': 1,
+[36m(TaskRunner pid=11874)[0m                                                   'temperature': 0,
+[36m(TaskRunner pid=11874)[0m                                                   'top_k': -1,
+[36m(TaskRunner pid=11874)[0m                                                   'top_p': 1.0}}},
+[36m(TaskRunner pid=11874)[0m  'algorithm': {'_target_': 'verl.trainer.config.AlgoConfig',
+[36m(TaskRunner pid=11874)[0m                'adv_estimator': 'grpo',
+[36m(TaskRunner pid=11874)[0m                'gamma': 1.0,
+[36m(TaskRunner pid=11874)[0m                'kl_ctrl': {'_target_': 'verl.trainer.config.KLControlConfig',
+[36m(TaskRunner pid=11874)[0m                            'horizon': 10000,
+[36m(TaskRunner pid=11874)[0m                            'kl_coef': 0.001,
+[36m(TaskRunner pid=11874)[0m                            'target_kl': 0.1,
+[36m(TaskRunner pid=11874)[0m                            'type': 'fixed'},
+[36m(TaskRunner pid=11874)[0m                'kl_penalty': 'kl',
+[36m(TaskRunner pid=11874)[0m                'lam': 1.0,
+[36m(TaskRunner pid=11874)[0m                'norm_adv_by_std_in_grpo': True,
+[36m(TaskRunner pid=11874)[0m                'pf_ppo': {'_target_': 'verl.trainer.config.PFPPOConfig',
+[36m(TaskRunner pid=11874)[0m                           'reweight_method': 'pow',
+[36m(TaskRunner pid=11874)[0m                           'weight_pow': 2.0},
+[36m(TaskRunner pid=11874)[0m                'use_kl_in_reward': False,
+[36m(TaskRunner pid=11874)[0m                'use_pf_ppo': False},
+[36m(TaskRunner pid=11874)[0m  'critic': {'checkpoint': {'async_save': False,
+[36m(TaskRunner pid=11874)[0m                            'load_contents': ['model', 'optimizer', 'extra'],
+[36m(TaskRunner pid=11874)[0m                            'save_contents': ['model', 'optimizer', 'extra']},
+[36m(TaskRunner pid=11874)[0m             'cliprange_value': 0.5,
+[36m(TaskRunner pid=11874)[0m             'data_loader_seed': None,
+[36m(TaskRunner pid=11874)[0m             'forward_max_token_len_per_gpu': 32768,
+[36m(TaskRunner pid=11874)[0m             'kl_ctrl': {'kl_coef': 0.001, 'type': 'fixed'},
+[36m(TaskRunner pid=11874)[0m             'load_weight': True,
+[36m(TaskRunner pid=11874)[0m             'loss_agg_mode': 'token-mean',
+[36m(TaskRunner pid=11874)[0m             'megatron': {'context_parallel_size': 1,
+[36m(TaskRunner pid=11874)[0m                          'dist_checkpointing_path': None,
+[36m(TaskRunner pid=11874)[0m                          'expert_model_parallel_size': 1,
+[36m(TaskRunner pid=11874)[0m                          'expert_tensor_parallel_size': None,
+[36m(TaskRunner pid=11874)[0m                          'grad_offload': False,
+[36m(TaskRunner pid=11874)[0m                          'optimizer_offload': False,
+[36m(TaskRunner pid=11874)[0m                          'override_transformer_config': {},
+[36m(TaskRunner pid=11874)[0m                          'param_offload': False,
+[36m(TaskRunner pid=11874)[0m                          'pipeline_model_parallel_size': 1,
+[36m(TaskRunner pid=11874)[0m                          'seed': 42,
+[36m(TaskRunner pid=11874)[0m                          'sequence_parallel': True,
+[36m(TaskRunner pid=11874)[0m                          'tensor_model_parallel_size': 1,
+[36m(TaskRunner pid=11874)[0m                          'use_dist_checkpointing': False,
+[36m(TaskRunner pid=11874)[0m                          'use_distributed_optimizer': True,
+[36m(TaskRunner pid=11874)[0m                          'use_mbridge': False,
+[36m(TaskRunner pid=11874)[0m                          'virtual_pipeline_model_parallel_size': None},
+[36m(TaskRunner pid=11874)[0m             'model': {'enable_gradient_checkpointing': False,
+[36m(TaskRunner pid=11874)[0m                       'external_lib': None,
+[36m(TaskRunner pid=11874)[0m                       'gradient_checkpointing_kwargs': {'activations_checkpoint_granularity': None,
+[36m(TaskRunner pid=11874)[0m                                                         'activations_checkpoint_method': None,
+[36m(TaskRunner pid=11874)[0m                                                         'activations_checkpoint_num_layers': None},
+[36m(TaskRunner pid=11874)[0m                       'override_config': {'model_config': {},
+[36m(TaskRunner pid=11874)[0m                                           'moe_config': {'freeze_moe_router': False}},
+[36m(TaskRunner pid=11874)[0m                       'path': '~/models/deepseek-llm-7b-chat',
+[36m(TaskRunner pid=11874)[0m                       'tokenizer_path': '/mnt/data/ckpts/huggingface/Qwen3-8B',
+[36m(TaskRunner pid=11874)[0m                       'trust_remote_code': False},
+[36m(TaskRunner pid=11874)[0m             'nccl_timeout': 600,
+[36m(TaskRunner pid=11874)[0m             'optim': {'clip_grad': 1.0,
+[36m(TaskRunner pid=11874)[0m                       'lr': 1e-06,
+[36m(TaskRunner pid=11874)[0m                       'lr_decay_steps': None,
+[36m(TaskRunner pid=11874)[0m                       'lr_decay_style': 'linear',
+[36m(TaskRunner pid=11874)[0m                       'lr_warmup_init': 0.0,
+[36m(TaskRunner pid=11874)[0m                       'lr_warmup_steps': None,
+[36m(TaskRunner pid=11874)[0m                       'lr_warmup_steps_ratio': 0.0,
+[36m(TaskRunner pid=11874)[0m                       'lr_wsd_decay_steps': None,
+[36m(TaskRunner pid=11874)[0m                       'lr_wsd_decay_style': 'exponential',
+[36m(TaskRunner pid=11874)[0m                       'min_lr': 0.0,
+[36m(TaskRunner pid=11874)[0m                       'optimizer': 'adam',
+[36m(TaskRunner pid=11874)[0m                       'total_training_steps': -1,
+[36m(TaskRunner pid=11874)[0m                       'use_checkpoint_opt_param_scheduler': False,
+[36m(TaskRunner pid=11874)[0m                       'weight_decay': 0.01,
+[36m(TaskRunner pid=11874)[0m                       'weight_decay_incr_style': 'constant'},
+[36m(TaskRunner pid=11874)[0m             'ppo_epochs': 1,
+[36m(TaskRunner pid=11874)[0m             'ppo_max_token_len_per_gpu': 32768,
+[36m(TaskRunner pid=11874)[0m             'ppo_micro_batch_size': None,
+[36m(TaskRunner pid=11874)[0m             'ppo_micro_batch_size_per_gpu': None,
+[36m(TaskRunner pid=11874)[0m             'ppo_mini_batch_size': 8,
+[36m(TaskRunner pid=11874)[0m             'profiler': {'_target_': 'verl.utils.profiler.ProfilerConfig',
+[36m(TaskRunner pid=11874)[0m                          'all_ranks': False,
+[36m(TaskRunner pid=11874)[0m                          'discrete': False,
+[36m(TaskRunner pid=11874)[0m                          'ranks': []},
+[36m(TaskRunner pid=11874)[0m             'rollout_n': 32,
+[36m(TaskRunner pid=11874)[0m             'shuffle': False,
+[36m(TaskRunner pid=11874)[0m             'strategy': 'megatron',
+[36m(TaskRunner pid=11874)[0m             'use_dynamic_bsz': False},
+[36m(TaskRunner pid=11874)[0m DeprecationWarning: `ray.state.available_resources_per_node` is a private attribute and access will be removed in a future Ray version.
+[36m(TaskRunner pid=11874)[0m  'custom_reward_function': {'name': 'compute_score', 'path': None},
+[36m(TaskRunner pid=11874)[0m  'data': {'custom_cls': {'name': None, 'path': None},
+[36m(TaskRunner pid=11874)[0m           'dataloader_num_workers': 8,
+[36m(TaskRunner pid=11874)[0m           'filter_overlong_prompts': False,
+[36m(TaskRunner pid=11874)[0m           'filter_overlong_prompts_workers': 1,
+[36m(TaskRunner pid=11874)[0m           'image_key': 'images',
+[36m(TaskRunner pid=11874)[0m           'max_prompt_length': 1024,
+[36m(TaskRunner pid=11874)[0m           'max_response_length': 2048,
+[36m(TaskRunner pid=11874)[0m           'prompt_key': 'prompt',
+[36m(TaskRunner pid=11874)[0m           'return_full_prompt': False,
+[36m(TaskRunner pid=11874)[0m           'return_multi_modal_inputs': True,
+[36m(TaskRunner pid=11874)[0m           'return_raw_chat': False,
+[36m(TaskRunner pid=11874)[0m           'return_raw_input_ids': False,
+[36m(TaskRunner pid=11874)[0m           'reward_fn_key': 'data_source',
+[36m(TaskRunner pid=11874)[0m           'sampler': {'class_name': None, 'class_path': None},
+[36m(TaskRunner pid=11874)[0m           'shuffle': True,
+[36m(TaskRunner pid=11874)[0m           'tokenizer': None,
+[36m(TaskRunner pid=11874)[0m           'train_batch_size': 16,
+[36m(TaskRunner pid=11874)[0m           'train_files': ['/mnt/data/datasets/gsm8k/train.parquet'],
+[36m(TaskRunner pid=11874)[0m           'truncation': 'error',
+[36m(TaskRunner pid=11874)[0m           'trust_remote_code': False,
+[36m(TaskRunner pid=11874)[0m           'use_shm': False,
+[36m(TaskRunner pid=11874)[0m           'val_batch_size': None,
+[36m(TaskRunner pid=11874)[0m           'val_files': ['/mnt/data/datasets/gsm8k/test.parquet'],
+[36m(TaskRunner pid=11874)[0m           'validation_shuffle': False,
+[36m(TaskRunner pid=11874)[0m           'video_key': 'videos'},
+[36m(TaskRunner pid=11874)[0m  'ray_init': {'num_cpus': None, 'timeline_json_file': None},
+[36m(TaskRunner pid=11874)[0m  'reward_model': {'enable': False,
+[36m(TaskRunner pid=11874)[0m                   'forward_max_token_len_per_gpu': 32768,
+[36m(TaskRunner pid=11874)[0m                   'launch_reward_fn_async': False,
+[36m(TaskRunner pid=11874)[0m                   'load_weight': True,
+[36m(TaskRunner pid=11874)[0m                   'max_length': None,
+[36m(TaskRunner pid=11874)[0m                   'megatron': {'context_parallel_size': 1,
+[36m(TaskRunner pid=11874)[0m                                'dist_checkpointing_path': None,
+[36m(TaskRunner pid=11874)[0m                                'expert_model_parallel_size': 1,
+[36m(TaskRunner pid=11874)[0m                                'expert_tensor_parallel_size': None,
+[36m(TaskRunner pid=11874)[0m                                'override_transformer_config': {},
+[36m(TaskRunner pid=11874)[0m                                'param_offload': False,
+[36m(TaskRunner pid=11874)[0m                                'pipeline_model_parallel_size': 1,
+[36m(TaskRunner pid=11874)[0m                                'seed': 42,
+[36m(TaskRunner pid=11874)[0m                                'sequence_parallel': True,
+[36m(TaskRunner pid=11874)[0m                                'tensor_model_parallel_size': 1,
+[36m(TaskRunner pid=11874)[0m                                'use_dist_checkpointing': False,
+[36m(TaskRunner pid=11874)[0m                                'use_distributed_optimizer': False,
+[36m(TaskRunner pid=11874)[0m                                'use_mbridge': False,
+[36m(TaskRunner pid=11874)[0m                                'virtual_pipeline_model_parallel_size': None},
+[36m(TaskRunner pid=11874)[0m                   'micro_batch_size': None,
+[36m(TaskRunner pid=11874)[0m                   'micro_batch_size_per_gpu': None,
+[36m(TaskRunner pid=11874)[0m                   'model': {'external_lib': None,
+[36m(TaskRunner pid=11874)[0m                             'input_tokenizer': '/mnt/data/ckpts/huggingface/Qwen3-8B',
+[36m(TaskRunner pid=11874)[0m                             'path': '~/models/FsfairX-LLaMA3-RM-v0.1',
+[36m(TaskRunner pid=11874)[0m                             'trust_remote_code': False},
+[36m(TaskRunner pid=11874)[0m                   'nccl_timeout': 600,
+[36m(TaskRunner pid=11874)[0m                   'profiler': {'_target_': 'verl.utils.profiler.ProfilerConfig',
+[36m(TaskRunner pid=11874)[0m                                'all_ranks': False,
+[36m(TaskRunner pid=11874)[0m                                'discrete': False,
+[36m(TaskRunner pid=11874)[0m                                'ranks': []},
+[36m(TaskRunner pid=11874)[0m                   'reward_manager': 'naive',
+[36m(TaskRunner pid=11874)[0m                   'sandbox_fusion': {'max_concurrent': 64,
+[36m(TaskRunner pid=11874)[0m                                      'memory_limit_mb': 1024,
+[36m(TaskRunner pid=11874)[0m                                      'url': None},
+[36m(TaskRunner pid=11874)[0m                   'strategy': 'megatron',
+[36m(TaskRunner pid=11874)[0m                   'use_dynamic_bsz': False},
+[36m(TaskRunner pid=11874)[0m  'trainer': {'balance_batch': True,
+[36m(TaskRunner pid=11874)[0m              'controller_nsight_options': {'cuda-graph-trace': 'graph',
+[36m(TaskRunner pid=11874)[0m                                            'cuda-memory-usage': 'true',
+[36m(TaskRunner pid=11874)[0m                                            'trace': 'cuda,nvtx,cublas,ucx'},
+[36m(TaskRunner pid=11874)[0m              'critic_warmup': 0,
+[36m(TaskRunner pid=11874)[0m              'default_hdfs_dir': None,
+[36m(TaskRunner pid=11874)[0m              'default_local_dir': 'checkpoints/verl_grpo_example_gsm8k_math/qwen3_30b_moe_megatron',
+[36m(TaskRunner pid=11874)[0m              'del_local_ckpt_after_load': False,
+[36m(TaskRunner pid=11874)[0m              'device': 'cuda',
+[36m(TaskRunner pid=11874)[0m              'esi_redundant_time': 0,
+[36m(TaskRunner pid=11874)[0m              'experiment_name': 'qwen3_30b_moe_megatron',
+[36m(TaskRunner pid=11874)[0m              'log_val_generations': 0,
+[36m(TaskRunner pid=11874)[0m              'logger': ['console'],
+[36m(TaskRunner pid=11874)[0m              'max_actor_ckpt_to_keep': None,
+[36m(TaskRunner pid=11874)[0m              'max_critic_ckpt_to_keep': None,
+[36m(TaskRunner pid=11874)[0m              'n_gpus_per_node': 8,
+[36m(TaskRunner pid=11874)[0m              'nnodes': 1,
+[36m(TaskRunner pid=11874)[0m              'profile_steps': None,
+[36m(TaskRunner pid=11874)[0m              'project_name': 'verl_grpo_example_gsm8k_math',
+[36m(TaskRunner pid=11874)[0m              'ray_wait_register_center_timeout': 300,
+[36m(TaskRunner pid=11874)[0m              'resume_from_path': None,
+[36m(TaskRunner pid=11874)[0m              'resume_mode': 'auto',
+[36m(TaskRunner pid=11874)[0m              'save_freq': -1,
+[36m(TaskRunner pid=11874)[0m              'test_freq': 1,
+[36m(TaskRunner pid=11874)[0m              'total_epochs': 50,
+[36m(TaskRunner pid=11874)[0m              'total_training_steps': None,
+[36m(TaskRunner pid=11874)[0m              'val_before_train': True,
+[36m(TaskRunner pid=11874)[0m              'worker_nsight_options': {'capture-range': 'cudaProfilerApi',
+[36m(TaskRunner pid=11874)[0m                                        'capture-range-end': None,
+[36m(TaskRunner pid=11874)[0m                                        'cuda-graph-trace': 'graph',
+[36m(TaskRunner pid=11874)[0m                                        'cuda-memory-usage': 'true',
+[36m(TaskRunner pid=11874)[0m                                        'kill': 'none',
+[36m(TaskRunner pid=11874)[0m                                        'trace': 'cuda,nvtx,cublas,ucx'}}}
+[36m(TaskRunner pid=11874)[0m Using dataset class: RLHFDataset
+[36m(TaskRunner pid=11874)[0m dataset len: 7473
+[36m(TaskRunner pid=11874)[0m Using dataset class: RLHFDataset
+[36m(TaskRunner pid=11874)[0m dataset len: 1319
+[36m(TaskRunner pid=11874)[0m WARNING:2025-09-10 08:49:36,023:Waiting for register center actor nSMvxP_register_center to be ready. Elapsed time: 0 seconds out of 300 seconds.
+[36m(TaskRunner pid=11874)[0m Unhandled error (suppress with 'RAY_IGNORE_UNHANDLED_ERRORS=1'): [36mray::WorkerDict.ref_init_model()[39m (pid=14995, ip=172.23.224.85, actor_id=20799b9d735f1dc1b614d8c401000000, repr=<verl.single_controller.ray.base.WorkerDict object at 0x7edc35591270>)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/single_controller/ray/base.py", line 708, in func
+[36m(TaskRunner pid=11874)[0m     return getattr(self.worker_dict[key], name)(*args, **kwargs)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/single_controller/base/decorator.py", line 549, in inner
+[36m(TaskRunner pid=11874)[0m     return func(*args, **kwargs)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 468, in init_model
+[36m(TaskRunner pid=11874)[0m     self.ref_module, self.ref_model_config = self._build_model_optimizer(
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 248, in _build_model_optimizer
+[36m(TaskRunner pid=11874)[0m     ref_module = make_model(wrap_with_ddp=False)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 220, in make_model
+[36m(TaskRunner pid=11874)[0m     return get_model(
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/utils/megatron_utils.py", line 94, in get_model
+[36m(TaskRunner pid=11874)[0m     model = model_provider_func(pre_process=pre_process, post_process=post_process)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 203, in megatron_actor_model_provider
+[36m(TaskRunner pid=11874)[0m     from verl_patch.models.mcore import init_mcore_model
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/__init__.py", line 16, in <module>
+[36m(TaskRunner pid=11874)[0m     from .registry import get_mcore_forward_fn, get_mcore_weight_converter, hf_to_mcore_config, init_mcore_model
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/registry.py", line 41, in <module>
+[36m(TaskRunner pid=11874)[0m     from .model_initializer import (
+[36m(TaskRunner pid=11874)[0m ImportError: cannot import name 'MoonlightModel' from 'verl_patch.models.mcore.model_initializer' (/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/model_initializer.py)
+[36m(TaskRunner pid=11874)[0m [validate_config] All configuration checks passed successfully!
+[36m(TaskRunner pid=11874)[0m Size of train dataloader: 467, Size of val dataloader: 1
+[36m(TaskRunner pid=11874)[0m Total training steps: 23350
+[36m(TaskRunner pid=11874)[0m colocated worker base class <class 'verl.single_controller.base.megatron.worker.MegatronWorker'>
+[36m(WorkerDict pid=14996)[0m Overridden TF init config: {'num_layers': 36, 'hidden_size': 4096, 'num_attention_heads': 32, 'num_query_groups': 8, 'ffn_hidden_size': 12288, 'attention_dropout': 0.0, 'hidden_dropout': 0.0, 'kv_channels': 128, 'layernorm_epsilon': 1e-06, 'add_bias_linear': False, 'activation_func': <function silu at 0x7f6e6dfb83a0>, 'normalization': 'RMSNorm', 'gated_linear_unit': True, 'pipeline_dtype': torch.bfloat16, 'params_dtype': torch.bfloat16, 'bf16': True, 'tensor_model_parallel_size': 2, 'pipeline_model_parallel_size': 1, 'expert_model_parallel_size': 1, 'expert_tensor_parallel_size': 2, 'virtual_pipeline_model_parallel_size': None, 'context_parallel_size': 1, 'overlap_p2p_comm': False, 'batch_p2p_comm': False, 'sequence_parallel': True, 'variable_seq_lengths': False, 'masked_softmax_fusion': True, 'moe_token_dispatcher_type': 'alltoall', 'use_cpu_initialization': False, 'add_qkv_bias': False, 'qk_layernorm': True}
+[36m(WorkerDict pid=14996)[0m TF config: TransformerConfig(tensor_model_parallel_size=2, pipeline_model_parallel_comm_backend=None, pipeline_model_parallel_size=1, virtual_pipeline_model_parallel_size=None, sequence_parallel=True, context_parallel_size=1, hierarchical_context_parallel_sizes=None, expert_model_parallel_size=1, expert_tensor_parallel_size=2, moe_extended_tp=False, perform_initialization=True, use_cpu_initialization=False, fp16=False, bf16=True, params_dtype=torch.bfloat16, timers=None, finalize_model_grads_func=None, grad_scale_func=None, no_sync_func=None, grad_sync_func=None, param_sync_func=None, deterministic_mode=False, enable_autocast=False, autocast_dtype=torch.bfloat16, num_microbatches_with_partial_activation_checkpoints=None, gradient_accumulation_fusion=False, async_tensor_model_parallel_allreduce=False, use_te_rng_tracker=False, tp_comm_overlap=False, tp_comm_bulk_wgrad=True, tp_comm_bulk_dgrad=True, tp_comm_overlap_ag=True, tp_comm_overlap_rs=True, tp_comm_overlap_rs_dgrad=False, tp_comm_split_ag=True, tp_comm_atomic_ag=False, tp_comm_split_rs=True, tp_comm_atomic_rs=False, cross_entropy_loss_fusion=False, cross_entropy_fusion_impl='native', tp_comm_overlap_disable_qkv=False, tp_comm_overlap_disable_fc1=False, tp_comm_bootstrap_backend='nccl', pipeline_dtype=torch.bfloat16, variable_seq_lengths=False, overlap_p2p_comm=False, batch_p2p_comm=False, batch_p2p_sync=True, use_ring_exchange_p2p=False, deallocate_pipeline_outputs=False, defer_embedding_wgrad_compute=False, wgrad_deferral_limit=0, pipeline_model_parallel_split_rank=None, overlap_p2p_comm_warmup_flush=False, microbatch_group_size_per_vp_stage=1, delay_wgrad_compute=False, cpu_offloading=False, cpu_offloading_num_layers=0, _cpu_offloading_context=None, cpu_offloading_activations=True, cpu_offloading_weights=True, barrier_with_L1_time=True, num_layers=36, mtp_num_layers=None, mtp_loss_scaling_factor=None, num_layers_in_first_pipeline_stage=None, num_layers_in_last_pipeline_stage=None, pipeline_model_parallel_layout=None, account_for_embedding_in_pipeline_split=False, account_for_loss_in_pipeline_split=False, hidden_size=4096, num_attention_heads=32, attention_backend=<AttnBackend.auto: 5>, softmax_scale=None, num_query_groups=8, ffn_hidden_size=12288, kv_channels=128, hidden_dropout=0.0, attention_dropout=0.0, fp32_residual_connection=False, apply_residual_connection_post_layernorm=False, layernorm_epsilon=1e-06, layernorm_zero_centered_gamma=False, add_bias_linear=False, add_qkv_bias=False, gated_linear_unit=True, activation_func=<function silu at 0x7f6e6dfb83a0>, activation_func_fp8_input_store=False, num_moe_experts=None, rotary_interleaved=False, window_size=None, normalization='RMSNorm', qk_layernorm=True, test_mode=False, calculate_per_token_loss=False, multi_latent_attention=False, no_rope_freq=None, moe_deepep_num_sms=20, init_method=functools.partial(<function normal_ at 0x7f6e6de4d000>, mean=0.0, std=0.02), output_layer_init_method=functools.partial(<function normal_ at 0x7f6e6de4d000>, mean=0.0, std=0.0023570226039551587), init_method_std=0.02, init_model_with_meta_device=False, apply_query_key_layer_scaling=False, attention_softmax_in_fp32=True, disable_bf16_reduced_precision_matmul=False, bias_activation_fusion=False, masked_softmax_fusion=True, persist_layer_norm=False, memory_efficient_layer_norm=False, bias_dropout_fusion=False, apply_rope_fusion=False, recompute_granularity=None, recompute_method=None, recompute_num_layers=None, distribute_saved_activations=None, recompute_modules=['core_attn'], fp8=None, fp8_recipe='delayed', fp8_param=False, fp8_margin=0, fp8_interval=1, fp8_amax_history_len=1, fp8_amax_compute_algo='most_recent', fp8_wgrad=True, fp8_dot_product_attention=False, fp8_multi_head_attention=False, tp_only_amax_red=False, first_last_layers_bf16=False, num_layers_at_start_in_bf16=1, num_layers_at_end_in_bf16=1, use_kitchen=False, moe_shared_expert_intermediate_size=None, moe_shared_expert_overlap=False, moe_layer_freq=1, moe_ffn_hidden_size=None, moe_router_load_balancing_type='aux_loss', moe_router_topk=2, moe_router_topk_limited_devices=None, moe_router_padding_for_fp8=False, moe_router_num_groups=None, moe_router_group_topk=None, moe_router_pre_softmax=False, moe_router_topk_scaling_factor=None, moe_router_score_function='softmax', moe_router_dtype=None, moe_router_enable_expert_bias=False, moe_router_bias_update_rate=0.001, moe_router_force_load_balancing=False, moe_grouped_gemm=False, moe_use_legacy_grouped_gemm=False, moe_aux_loss_coeff=0, moe_z_loss_coeff=None, moe_input_jitter_eps=None, moe_token_dropping=False, moe_token_dispatcher_type='alltoall', moe_enable_deepep=False, moe_per_layer_logging=False, moe_expert_capacity_factor=None, moe_pad_expert_input_to_capacity=False, moe_token_drop_policy='probs', moe_layer_recompute=False, moe_permute_fusion=False, moe_apply_probs_on_input=False, cp_comm_type=None, enable_cuda_graph=False, cuda_graph_use_single_mempool=False, cuda_graph_retain_backward_graph=False, cuda_graph_warmup_steps=3, external_cuda_graph=False, cuda_graph_scope='full', clone_scatter_output_in_embedding=True, disable_parameter_transpose_cache=False, config_logger_dir='', flash_decode=False, inference_rng_tracker=False, symmetric_ar_type=None, mrope_section=None, is_hybrid_model=False, mamba_state_dim=128, mamba_head_dim=64, mamba_num_groups=8, mamba_num_heads=None, use_mamba_mem_eff_path=True, mlp_chunks_for_prefill=1, heterogeneous_block_specs=False, hetereogenous_dist_checkpoint=False, quant_recipe=None)
+[36m(WorkerDict pid=14996)[0m self.config.ref.load_weight: True
+Error executing job with overrides: ['algorithm.adv_estimator=grpo', "data.train_files=['/mnt/data/datasets/gsm8k/train.parquet']", "data.val_files=['/mnt/data/datasets/gsm8k/test.parquet']", 'data.train_batch_size=16', 'data.max_prompt_length=1024', 'data.max_response_length=2048', 'data.filter_overlong_prompts=False', 'data.truncation=error', 'actor_rollout_ref.model.path=/mnt/data/ckpts/huggingface/Qwen3-8B', 'actor_rollout_ref.actor.optim.lr=2e-6', 'actor_rollout_ref.actor.ppo_mini_batch_size=8', 'actor_rollout_ref.actor.use_dynamic_bsz=False', '+actor_rollout_ref.model.use_remove_padding=False', 'actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=8', 'actor_rollout_ref.actor.megatron.pipeline_model_parallel_size=1', 'actor_rollout_ref.actor.megatron.tensor_model_parallel_size=2', 'actor_rollout_ref.actor.megatron.expert_model_parallel_size=1', 'actor_rollout_ref.actor.megatron.use_dist_checkpointing=True', 'actor_rollout_ref.actor.megatron.dist_checkpointing_path=/mnt/data/ckpts/mcore/Qwen3-8B-to-mcore-verl', 'actor_rollout_ref.actor.use_kl_loss=True', 'actor_rollout_ref.actor.kl_loss_coef=0.0', 'actor_rollout_ref.actor.kl_loss_type=low_var_kl', 'actor_rollout_ref.actor.entropy_coeff=0', 'actor_rollout_ref.model.enable_gradient_checkpointing=True', 'actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=8', 'actor_rollout_ref.rollout.tensor_model_parallel_size=2', 'actor_rollout_ref.rollout.name=vllm', 'actor_rollout_ref.rollout.gpu_memory_utilization=0.6', 'actor_rollout_ref.rollout.n=32', 'actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=8', 'actor_rollout_ref.ref.megatron.pipeline_model_parallel_size=1', 'actor_rollout_ref.ref.megatron.tensor_model_parallel_size=2', 'actor_rollout_ref.ref.megatron.expert_model_parallel_size=1', 'actor_rollout_ref.ref.megatron.use_dist_checkpointing=True', 'actor_rollout_ref.ref.megatron.dist_checkpointing_path=/mnt/data/ckpts/mcore/Qwen3-8B-to-mcore-verl', 'algorithm.use_kl_in_reward=False', 'trainer.critic_warmup=0', 'trainer.logger=[console]', 'trainer.project_name=verl_grpo_example_gsm8k_math', 'trainer.experiment_name=qwen3_30b_moe_megatron', 'trainer.n_gpus_per_node=8', 'trainer.nnodes=1', 'trainer.save_freq=-1', 'trainer.test_freq=1', 'trainer.total_epochs=50']
+Traceback (most recent call last):
+  File "/mnt/data/jerry.lp/Pai-Megatron-Patch/examples/moonlight/verl_entrypoint.py", line 325, in <module>
+    main()
+  File "/usr/local/lib/python3.10/dist-packages/hydra/main.py", line 94, in decorated_main
+    _run_hydra(
+  File "/usr/local/lib/python3.10/dist-packages/hydra/_internal/utils.py", line 394, in _run_hydra
+    _run_app(
+  File "/usr/local/lib/python3.10/dist-packages/hydra/_internal/utils.py", line 457, in _run_app
+    run_and_report(
+  File "/usr/local/lib/python3.10/dist-packages/hydra/_internal/utils.py", line 223, in run_and_report
+    raise ex
+  File "/usr/local/lib/python3.10/dist-packages/hydra/_internal/utils.py", line 220, in run_and_report
+    return func()
+  File "/usr/local/lib/python3.10/dist-packages/hydra/_internal/utils.py", line 458, in <lambda>
+    lambda: hydra.run(
+  File "/usr/local/lib/python3.10/dist-packages/hydra/_internal/hydra.py", line 132, in run
+    _ = ret.return_value
+  File "/usr/local/lib/python3.10/dist-packages/hydra/core/utils.py", line 260, in return_value
+    raise self._return_value
+  File "/usr/local/lib/python3.10/dist-packages/hydra/core/utils.py", line 186, in run_job
+    ret.return_value = task_function(task_cfg)
+  File "/mnt/data/jerry.lp/Pai-Megatron-Patch/examples/moonlight/verl_entrypoint.py", line 39, in main
+    run_ppo(config)
+  File "/mnt/data/jerry.lp/Pai-Megatron-Patch/examples/moonlight/verl_entrypoint.py", line 69, in run_ppo
+    ray.get(runner.run.remote(config))
+  File "/usr/local/lib/python3.10/dist-packages/ray/_private/auto_init_hook.py", line 21, in auto_init_wrapper
+    return fn(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/ray/_private/client_mode_hook.py", line 103, in wrapper
+    return func(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/ray/_private/worker.py", line 2822, in get
+    values, debugger_breakpoint = worker.get_objects(object_refs, timeout=timeout)
+  File "/usr/local/lib/python3.10/dist-packages/ray/_private/worker.py", line 930, in get_objects
+    raise value.as_instanceof_cause()
+ray.exceptions.RayTaskError(ImportError): [36mray::TaskRunner.run()[39m (pid=11874, ip=172.23.224.85, actor_id=ceec4a405ceba3120ba2457301000000, repr=<verl_entrypoint.TaskRunner object at 0x7f7df4fa11e0>)
+  File "/mnt/data/jerry.lp/Pai-Megatron-Patch/examples/moonlight/verl_entrypoint.py", line 232, in run
+    trainer.init_workers()
+  File "/mnt/data/jerry.lp/verl/verl/trainer/ppo/ray_trainer.py", line 911, in init_workers
+    self.ref_policy_wg.init_model()
+  File "/mnt/data/jerry.lp/verl/verl/single_controller/ray/base.py", line 51, in __call__
+    output = ray.get(output)
+ray.exceptions.RayTaskError(ImportError): [36mray::WorkerDict.ref_init_model()[39m (pid=14997, ip=172.23.224.85, actor_id=8dbac193c23fbe34ec05723201000000, repr=<verl.single_controller.ray.base.WorkerDict object at 0x7f18bbf71180>)
+  File "/mnt/data/jerry.lp/verl/verl/single_controller/ray/base.py", line 708, in func
+    return getattr(self.worker_dict[key], name)(*args, **kwargs)
+  File "/mnt/data/jerry.lp/verl/verl/single_controller/base/decorator.py", line 549, in inner
+    return func(*args, **kwargs)
+  File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 468, in init_model
+    self.ref_module, self.ref_model_config = self._build_model_optimizer(
+  File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 248, in _build_model_optimizer
+    ref_module = make_model(wrap_with_ddp=False)
+  File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 220, in make_model
+    return get_model(
+  File "/mnt/data/jerry.lp/verl/verl/utils/megatron_utils.py", line 94, in get_model
+    model = model_provider_func(pre_process=pre_process, post_process=post_process)
+  File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 203, in megatron_actor_model_provider
+    from verl_patch.models.mcore import init_mcore_model
+  File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/__init__.py", line 16, in <module>
+    from .registry import get_mcore_forward_fn, get_mcore_weight_converter, hf_to_mcore_config, init_mcore_model
+  File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/registry.py", line 41, in <module>
+    from .model_initializer import (
+ImportError: cannot import name 'MoonlightModel' from 'verl_patch.models.mcore.model_initializer' (/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/model_initializer.py)
+[36m(TaskRunner pid=11874)[0m Unhandled error (suppress with 'RAY_IGNORE_UNHANDLED_ERRORS=1'): [36mray::WorkerDict.ref_init_model()[39m (pid=14996, ip=172.23.224.85, actor_id=28394d091be1dae27ae973dd01000000, repr=<verl.single_controller.ray.base.WorkerDict object at 0x7f6bdd3ad2a0>)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/single_controller/ray/base.py", line 708, in func
+[36m(TaskRunner pid=11874)[0m     return getattr(self.worker_dict[key], name)(*args, **kwargs)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/single_controller/base/decorator.py", line 549, in inner
+[36m(TaskRunner pid=11874)[0m     return func(*args, **kwargs)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 468, in init_model
+[36m(TaskRunner pid=11874)[0m     self.ref_module, self.ref_model_config = self._build_model_optimizer(
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 248, in _build_model_optimizer
+[36m(TaskRunner pid=11874)[0m     ref_module = make_model(wrap_with_ddp=False)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 220, in make_model
+[36m(TaskRunner pid=11874)[0m     return get_model(
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/utils/megatron_utils.py", line 94, in get_model
+[36m(TaskRunner pid=11874)[0m     model = model_provider_func(pre_process=pre_process, post_process=post_process)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 203, in megatron_actor_model_provider
+[36m(TaskRunner pid=11874)[0m     from verl_patch.models.mcore import init_mcore_model
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/__init__.py", line 16, in <module>
+[36m(TaskRunner pid=11874)[0m     from .registry import get_mcore_forward_fn, get_mcore_weight_converter, hf_to_mcore_config, init_mcore_model
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/registry.py", line 41, in <module>
+[36m(TaskRunner pid=11874)[0m     from .model_initializer import (
+[36m(TaskRunner pid=11874)[0m ImportError: cannot import name 'MoonlightModel' from 'verl_patch.models.mcore.model_initializer' (/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/model_initializer.py)
+[36m(TaskRunner pid=11874)[0m Unhandled error (suppress with 'RAY_IGNORE_UNHANDLED_ERRORS=1'): [36mray::WorkerDict.ref_init_model()[39m (pid=14992, ip=172.23.224.85, actor_id=18da0ba1fa02a35a6873e5b101000000, repr=<verl.single_controller.ray.base.WorkerDict object at 0x7f703abb91e0>)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/single_controller/ray/base.py", line 708, in func
+[36m(TaskRunner pid=11874)[0m     return getattr(self.worker_dict[key], name)(*args, **kwargs)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/single_controller/base/decorator.py", line 549, in inner
+[36m(TaskRunner pid=11874)[0m     return func(*args, **kwargs)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 468, in init_model
+[36m(TaskRunner pid=11874)[0m     self.ref_module, self.ref_model_config = self._build_model_optimizer(
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 248, in _build_model_optimizer
+[36m(TaskRunner pid=11874)[0m     ref_module = make_model(wrap_with_ddp=False)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 220, in make_model
+[36m(TaskRunner pid=11874)[0m     return get_model(
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/utils/megatron_utils.py", line 94, in get_model
+[36m(TaskRunner pid=11874)[0m     model = model_provider_func(pre_process=pre_process, post_process=post_process)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 203, in megatron_actor_model_provider
+[36m(TaskRunner pid=11874)[0m     from verl_patch.models.mcore import init_mcore_model
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/__init__.py", line 16, in <module>
+[36m(TaskRunner pid=11874)[0m     from .registry import get_mcore_forward_fn, get_mcore_weight_converter, hf_to_mcore_config, init_mcore_model
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/registry.py", line 41, in <module>
+[36m(TaskRunner pid=11874)[0m     from .model_initializer import (
+[36m(TaskRunner pid=11874)[0m ImportError: cannot import name 'MoonlightModel' from 'verl_patch.models.mcore.model_initializer' (/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/model_initializer.py)
+[36m(TaskRunner pid=11874)[0m Unhandled error (suppress with 'RAY_IGNORE_UNHANDLED_ERRORS=1'): [36mray::WorkerDict.ref_init_model()[39m (pid=14993, ip=172.23.224.85, actor_id=9d7c08f3b07fe29c2cf794c401000000, repr=<verl.single_controller.ray.base.WorkerDict object at 0x7f8a28b99240>)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/single_controller/ray/base.py", line 708, in func
+[36m(TaskRunner pid=11874)[0m     return getattr(self.worker_dict[key], name)(*args, **kwargs)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/single_controller/base/decorator.py", line 549, in inner
+[36m(TaskRunner pid=11874)[0m     return func(*args, **kwargs)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 468, in init_model
+[36m(TaskRunner pid=11874)[0m     self.ref_module, self.ref_model_config = self._build_model_optimizer(
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 248, in _build_model_optimizer
+[36m(TaskRunner pid=11874)[0m     ref_module = make_model(wrap_with_ddp=False)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 220, in make_model
+[36m(TaskRunner pid=11874)[0m     return get_model(
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/utils/megatron_utils.py", line 94, in get_model
+[36m(TaskRunner pid=11874)[0m     model = model_provider_func(pre_process=pre_process, post_process=post_process)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 203, in megatron_actor_model_provider
+[36m(TaskRunner pid=11874)[0m     from verl_patch.models.mcore import init_mcore_model
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/__init__.py", line 16, in <module>
+[36m(TaskRunner pid=11874)[0m     from .registry import get_mcore_forward_fn, get_mcore_weight_converter, hf_to_mcore_config, init_mcore_model
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/registry.py", line 41, in <module>
+[36m(TaskRunner pid=11874)[0m     from .model_initializer import (
+[36m(TaskRunner pid=11874)[0m ImportError: cannot import name 'MoonlightModel' from 'verl_patch.models.mcore.model_initializer' (/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/model_initializer.py)
+[36m(TaskRunner pid=11874)[0m Unhandled error (suppress with 'RAY_IGNORE_UNHANDLED_ERRORS=1'): [36mray::WorkerDict.ref_init_model()[39m (pid=14994, ip=172.23.224.85, actor_id=e56e625fe20ff286cb91a61d01000000, repr=<verl.single_controller.ray.base.WorkerDict object at 0x7fa37c9b5210>)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/single_controller/ray/base.py", line 708, in func
+[36m(TaskRunner pid=11874)[0m     return getattr(self.worker_dict[key], name)(*args, **kwargs)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/single_controller/base/decorator.py", line 549, in inner
+[36m(TaskRunner pid=11874)[0m     return func(*args, **kwargs)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 468, in init_model
+[36m(TaskRunner pid=11874)[0m     self.ref_module, self.ref_model_config = self._build_model_optimizer(
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 248, in _build_model_optimizer
+[36m(TaskRunner pid=11874)[0m     ref_module = make_model(wrap_with_ddp=False)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 220, in make_model
+[36m(TaskRunner pid=11874)[0m     return get_model(
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/utils/megatron_utils.py", line 94, in get_model
+[36m(TaskRunner pid=11874)[0m     model = model_provider_func(pre_process=pre_process, post_process=post_process)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 203, in megatron_actor_model_provider
+[36m(TaskRunner pid=11874)[0m     from verl_patch.models.mcore import init_mcore_model
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/__init__.py", line 16, in <module>
+[36m(TaskRunner pid=11874)[0m     from .registry import get_mcore_forward_fn, get_mcore_weight_converter, hf_to_mcore_config, init_mcore_model
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/registry.py", line 41, in <module>
+[36m(TaskRunner pid=11874)[0m     from .model_initializer import (
+[36m(TaskRunner pid=11874)[0m ImportError: cannot import name 'MoonlightModel' from 'verl_patch.models.mcore.model_initializer' (/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/model_initializer.py)
+[36m(TaskRunner pid=11874)[0m Unhandled error (suppress with 'RAY_IGNORE_UNHANDLED_ERRORS=1'): [36mray::WorkerDict.ref_init_model()[39m (pid=14998, ip=172.23.224.85, actor_id=2fb92a803c7fd9fe9b2a743b01000000, repr=<verl.single_controller.ray.base.WorkerDict object at 0x7f8e3e189240>)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/single_controller/ray/base.py", line 708, in func
+[36m(TaskRunner pid=11874)[0m     return getattr(self.worker_dict[key], name)(*args, **kwargs)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/single_controller/base/decorator.py", line 549, in inner
+[36m(TaskRunner pid=11874)[0m     return func(*args, **kwargs)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 468, in init_model
+[36m(TaskRunner pid=11874)[0m     self.ref_module, self.ref_model_config = self._build_model_optimizer(
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 248, in _build_model_optimizer
+[36m(TaskRunner pid=11874)[0m     ref_module = make_model(wrap_with_ddp=False)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 220, in make_model
+[36m(TaskRunner pid=11874)[0m     return get_model(
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/verl/verl/utils/megatron_utils.py", line 94, in get_model
+[36m(TaskRunner pid=11874)[0m     model = model_provider_func(pre_process=pre_process, post_process=post_process)
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/workers/megatron_workers.py", line 203, in megatron_actor_model_provider
+[36m(TaskRunner pid=11874)[0m     from verl_patch.models.mcore import init_mcore_model
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/__init__.py", line 16, in <module>
+[36m(TaskRunner pid=11874)[0m     from .registry import get_mcore_forward_fn, get_mcore_weight_converter, hf_to_mcore_config, init_mcore_model
+[36m(TaskRunner pid=11874)[0m   File "/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/registry.py", line 41, in <module>
+[36m(TaskRunner pid=11874)[0m     from .model_initializer import (
+[36m(TaskRunner pid=11874)[0m ImportError: cannot import name 'MoonlightModel' from 'verl_patch.models.mcore.model_initializer' (/mnt/data/jerry.lp/Pai-Megatron-Patch/verl_patch/models/mcore/model_initializer.py)
+[36m(WorkerDict pid=14993)[0m Overridden TF init config: {'num_layers': 36, 'hidden_size': 4096, 'num_attention_heads': 32, 'num_query_groups': 8, 'ffn_hidden_size': 12288, 'attention_dropout': 0.0, 'hidden_dropout': 0.0, 'kv_channels': 128, 'layernorm_epsilon': 1e-06, 'add_bias_linear': False, 'activation_func': <function silu at 0x7f8cb95b83a0>, 'normalization': 'RMSNorm', 'gated_linear_unit': True, 'pipeline_dtype': torch.bfloat16, 'params_dtype': torch.bfloat16, 'bf16': True, 'tensor_model_parallel_size': 2, 'pipeline_model_parallel_size': 1, 'expert_model_parallel_size': 1, 'expert_tensor_parallel_size': 2, 'virtual_pipeline_model_parallel_size': None, 'context_parallel_size': 1, 'overlap_p2p_comm': False, 'batch_p2p_comm': False, 'sequence_parallel': True, 'variable_seq_lengths': False, 'masked_softmax_fusion': True, 'moe_token_dispatcher_type': 'alltoall', 'use_cpu_initialization': False, 'add_qkv_bias': False, 'qk_layernorm': True}[32m [repeated 6x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)[0m
+[36m(WorkerDict pid=14993)[0m TF config: TransformerConfig(tensor_model_parallel_size=2, pipeline_model_parallel_comm_backend=None, pipeline_model_parallel_size=1, virtual_pipeline_model_parallel_size=None, sequence_parallel=True, context_parallel_size=1, hierarchical_context_parallel_sizes=None, expert_model_parallel_size=1, expert_tensor_parallel_size=2, moe_extended_tp=False, perform_initialization=True, use_cpu_initialization=False, fp16=False, bf16=True, params_dtype=torch.bfloat16, timers=None, finalize_model_grads_func=None, grad_scale_func=None, no_sync_func=None, grad_sync_func=None, param_sync_func=None, deterministic_mode=False, enable_autocast=False, autocast_dtype=torch.bfloat16, num_microbatches_with_partial_activation_checkpoints=None, gradient_accumulation_fusion=False, async_tensor_model_parallel_allreduce=False, use_te_rng_tracker=False, tp_comm_overlap=False, tp_comm_bulk_wgrad=True, tp_comm_bulk_dgrad=True, tp_comm_overlap_ag=True, tp_comm_overlap_rs=True, tp_comm_overlap_rs_dgrad=False, tp_comm_split_ag=True, tp_comm_atomic_ag=False, tp_comm_split_rs=True, tp_comm_atomic_rs=False, cross_entropy_loss_fusion=False, cross_entropy_fusion_impl='native', tp_comm_overlap_disable_qkv=False, tp_comm_overlap_disable_fc1=False, tp_comm_bootstrap_backend='nccl', pipeline_dtype=torch.bfloat16, variable_seq_lengths=False, overlap_p2p_comm=False, batch_p2p_comm=False, batch_p2p_sync=True, use_ring_exchange_p2p=False, deallocate_pipeline_outputs=False, defer_embedding_wgrad_compute=False, wgrad_deferral_limit=0, pipeline_model_parallel_split_rank=None, overlap_p2p_comm_warmup_flush=False, microbatch_group_size_per_vp_stage=1, delay_wgrad_compute=False, cpu_offloading=False, cpu_offloading_num_layers=0, _cpu_offloading_context=None, cpu_offloading_activations=True, cpu_offloading_weights=True, barrier_with_L1_time=True, num_layers=36, mtp_num_layers=None, mtp_loss_scaling_factor=None, num_layers_in_first_pipeline_stage=None, num_layers_in_last_pipeline_stage=None, pipeline_model_parallel_layout=None, account_for_embedding_in_pipeline_split=False, account_for_loss_in_pipeline_split=False, hidden_size=4096, num_attention_heads=32, attention_backend=<AttnBackend.auto: 5>, softmax_scale=None, num_query_groups=8, ffn_hidden_size=12288, kv_channels=128, hidden_dropout=0.0, attention_dropout=0.0, fp32_residual_connection=False, apply_residual_connection_post_layernorm=False, layernorm_epsilon=1e-06, layernorm_zero_centered_gamma=False, add_bias_linear=False, add_qkv_bias=False, gated_linear_unit=True, activation_func=<function silu at 0x7f8cb95b83a0>, activation_func_fp8_input_store=False, num_moe_experts=None, rotary_interleaved=False, window_size=None, normalization='RMSNorm', qk_layernorm=True, test_mode=False, calculate_per_token_loss=False, multi_latent_attention=False, no_rope_freq=None, moe_deepep_num_sms=20, init_method=functools.partial(<function normal_ at 0x7f8cb944d000>, mean=0.0, std=0.02), output_layer_init_method=functools.partial(<function normal_ at 0x7f8cb944d000>, mean=0.0, std=0.0023570226039551587), init_method_std=0.02, init_model_with_meta_device=False, apply_query_key_layer_scaling=False, attention_softmax_in_fp32=True, disable_bf16_reduced_precision_matmul=False, bias_activation_fusion=False, masked_softmax_fusion=True, persist_layer_norm=False, memory_efficient_layer_norm=False, bias_dropout_fusion=False, apply_rope_fusion=False, recompute_granularity=None, recompute_method=None, recompute_num_layers=None, distribute_saved_activations=None, recompute_modules=['core_attn'], fp8=None, fp8_recipe='delayed', fp8_param=False, fp8_margin=0, fp8_interval=1, fp8_amax_history_len=1, fp8_amax_compute_algo='most_recent', fp8_wgrad=True, fp8_dot_product_attention=False, fp8_multi_head_attention=False, tp_only_amax_red=False, first_last_layers_bf16=False, num_layers_at_start_in_bf16=1, num_layers_at_end_in_bf16=1, use_kitchen=False, moe_shared_expert_intermediate_size=None, moe_shared_expert_overlap=False, moe_layer_freq=1, moe_ffn_hidden_size=None, moe_router_load_balancing_type='aux_loss', moe_router_topk=2, moe_router_topk_limited_devices=None, moe_router_padding_for_fp8=False, moe_router_num_groups=None, moe_router_group_topk=None, moe_router_pre_softmax=False, moe_router_topk_scaling_factor=None, moe_router_score_function='softmax', moe_router_dtype=None, moe_router_enable_expert_bias=False, moe_router_bias_update_rate=0.001, moe_router_force_load_balancing=False, moe_grouped_gemm=False, moe_use_legacy_grouped_gemm=False, moe_aux_loss_coeff=0, moe_z_loss_coeff=None, moe_input_jitter_eps=None, moe_token_dropping=False, moe_token_dispatcher_type='alltoall', moe_enable_deepep=False, moe_per_layer_logging=False, moe_expert_capacity_factor=None, moe_pad_expert_input_to_capacity=False, moe_token_drop_policy='probs', moe_layer_recompute=False, moe_permute_fusion=False, moe_apply_probs_on_input=False, cp_comm_type=None, enable_cuda_graph=False, cuda_graph_use_single_mempool=False, cuda_graph_retain_backward_graph=False, cuda_graph_warmup_steps=3, external_cuda_graph=False, cuda_graph_scope='full', clone_scatter_output_in_embedding=True, disable_parameter_transpose_cache=False, config_logger_dir='', flash_decode=False, inference_rng_tracker=False, symmetric_ar_type=None, mrope_section=None, is_hybrid_model=False, mamba_state_dim=128, mamba_head_dim=64, mamba_num_groups=8, mamba_num_heads=None, use_mamba_mem_eff_path=True, mlp_chunks_for_prefill=1, heterogeneous_block_specs=False, hetereogenous_dist_checkpoint=False, quant_recipe=None)[32m [repeated 6x across cluster][0m
+[36m(WorkerDict pid=14993)[0m self.config.ref.load_weight: True[32m [repeated 6x across cluster][0m
