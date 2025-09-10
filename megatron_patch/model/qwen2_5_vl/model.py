@@ -13,7 +13,7 @@ from .transformer_config import Qwen2VLTransformerConfig
 from megatron.core.packed_seq_params import PackedSeqParams
 
 from .visionmodel import Qwen2_5VisionModel
-from megatron_patch.model.qwen2_vl.gpt_model import GPTModel
+from .gpt_model import GPTModel
 
 # Note: This is under development and may be missing features.
 class Qwen2_5VLModel(MegatronModule):
@@ -69,7 +69,8 @@ class Qwen2_5VLModel(MegatronModule):
         add_decoder: bool = True,
         language_rotary_base: int = 10000,
         fp16_lm_cross_entropy: bool = False,
-        language_share_embeddings_and_output_weights: bool=False
+        language_share_embeddings_and_output_weights: bool=False,
+        vp_stage: int=None
     ) -> None:
         super().__init__(config=language_transformer_config)
 
@@ -114,9 +115,11 @@ class Qwen2_5VLModel(MegatronModule):
             pre_process=self.pre_process,
             post_process=self.post_process,
             rotary_base=language_rotary_base,
-            mrope_section=language_transformer_config.mrope_section,
             fp16_lm_cross_entropy=fp16_lm_cross_entropy,
-            share_embeddings_and_output_weights=language_share_embeddings_and_output_weights
+            share_embeddings_and_output_weights=language_share_embeddings_and_output_weights,
+            rope_scaling=False,
+            mtp_block_spec=None,
+            vp_stage=vp_stage,
         )
         self.share_embeddings_and_output_weights = (
             self.language_model.share_embeddings_and_output_weights

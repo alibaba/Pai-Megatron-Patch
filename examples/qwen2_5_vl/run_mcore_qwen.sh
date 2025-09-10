@@ -3,7 +3,7 @@ set -e
 ENV=$1
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATCH_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250217:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250624:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export NVTE_APPLY_QK_LAYER_SCALING=0
 export NVTE_ALLOW_NONDETERMINISTIC_ALGO=1
@@ -71,9 +71,11 @@ LR_WARMUP_ITERS=${23}
 OUTPUT_BASEPATH=${24}
 ### OTHERS ###
 if [ $FL = true ]; then
-    export NVTE_FLASH_ATTN=1 NVTE_FUSED_ATTN=0
+    attn_option=" \
+    --attention-backend flash"
 elif [ $FL = false ]; then
-    export NVTE_FLASH_ATTN=0 NVTE_FUSED_ATTN=1
+    attn_option=" \
+    --attention-backend fused"
 fi
 
 if [ $MODEL_SIZE = 3B ]; then
@@ -319,7 +321,7 @@ megatron_options="  \
         --normalization RMSNorm \
         --norm-epsilon ${RMS_NORM_EPS} \
         --use-rotary-position-embeddings \
-        --position-embedding-type rope \
+        --position-embedding-type mrope \
         --disable-bias-linear \
         --add-qkv-bias \
         --rotary-percent 1.0 \
@@ -330,11 +332,12 @@ megatron_options="  \
         --dataloader-type external \
         --transformer-impl transformer_engine \
         --ckpt-format torch \
+        --mrope-section 16 24 24
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
  ${megatron_options} ${dataset_option} ${pr_options} ${load_options} ${activation_checkpoint_options} \
- ${do_options} ${gqa_options} ${sft_option} ${tie_option} ${packing_options} ${uneven_split_option} ${vp_options} ${comm_overlap_option}"
+ ${do_options} ${gqa_options} ${sft_option} ${tie_option} ${packing_options} ${uneven_split_option} ${vp_options} ${comm_overlap_option} ${attn_option}"
 
 echo ${run_cmd}
 eval ${run_cmd}
