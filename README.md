@@ -6,7 +6,7 @@
 |Qwen3       |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3/README.md)|[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3/README_grpo.md) | Coming Soon |
 |QwQ         |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwq/README.md)| N/A | N/A |
 |Qwen2.5-VL  |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen2_5_vl/README.md)| N/A | N/A |
-|Moonlight   |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/moonlight/README.md)|[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/moonlight/README_grpo.md)| N/A |
+|Moonlight   |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/moonlight/README.md)|[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/moonlight/README_grpo.md)| [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/moonlight/README_verl.md) |
 |DeepSeek-V3 |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/deepseek_v3/README.md)| N/A | N/A |
 |DeepSeek-R1 | N/A |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/deepseek_v3/README_grpo.md)| Coming Soon |
 
@@ -18,6 +18,8 @@ English | [简体中文](./README_zh-CN.md)
 Pai-Megatron-Patch (https://github.com/alibaba/Pai-Megatron-Patch) is a deep learning training toolkit built for developers to train and predict LLMs & VLMs by using Megatron framework easily. With the continuous development of LLMs, the model structure and scale are rapidly evolving. Although these models can be conveniently manufactured using Transformers or DeepSpeed training framework, the training efficiency is comparably low. This phenomenon becomes even severer when the model scale exceeds 10 billion. The primary objective of Pai-Megatron-Patch is to effectively utilize the computational power of GPUs for LLM. This tool allows convenient training of commonly used LLM with all the accelerating techniques provided by Megatron-LM.
 
 What's New:
+- **[Experimental]Support Moonlight GRPO Reinforcement Training using Megatron-Core and Verl** [🔥🔥 2025.09.11]
+- **[Experimental]Support Verl smoothly load distributed checkpoints from Pai-Megatron-Patch High-Performance DistCKPT Convertor** [🔥🔥 2025.09.05]
 - **Support all Mcore Models Context Parallel Reinforcement Training via ChatLearn** [🔥🔥 2025.08.31]
 - **Support all Mcore Models GSPO Reinforcement Training via ChatLearn** [🔥🔥 2025.08.11]
 - **Support DeepSeek-V3-671B GRPO Reinforcement Training using Megatron-Core and ChatLearn** [🔥🔥 2025.07.31]
