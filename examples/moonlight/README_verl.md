@@ -19,13 +19,11 @@ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 ```
 
 ## 数据准备
-以[MATH-lighteval](https://www.modelscope.cn/datasets/AI-ModelScope/MATH-lighteval)数据集作为示例.
+以[GSM8k](https://modelscope.cn/datasets/AI-ModelScope/gsm8k)数据集作为示例.
 ```bash
 # 下载数据集
 mkdir -p /mnt/data/datasets
-modelscope download --dataset AI-ModelScope/MATH-lighteval --local_dir /mnt/data/datasets/MATH-lighteval
-# 数据集预处理
-python examples/fsdp/data/data_preprocess/math_lighteval.py --input_dir /mnt/data/datasets/MATH-lighteval --local_dir /mnt/data/datasets/MATH-lighteval
+请按照链接指引准备GSM8K数据集：https://verl.readthedocs.io/en/latest/examples/gsm8k_example.html
 # 下载模型权重
 modelscope download --model moonshotai/Moonlight-16B-A3B-Instruct --local_dir /mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct
 ```
