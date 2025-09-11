@@ -28,3 +28,6 @@
 [submodule "backends/rl/ChatLearn"]
 	path = backends/rl/ChatLearn
 	url = https://github.com/alibaba/ChatLearn.git
+[submodule "backends/rl/verl"]
+	path = backends/rl/verl
+	url = https://github.com/volcengine/verl.git

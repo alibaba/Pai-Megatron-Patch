@@ -258,9 +258,9 @@ def hf_to_mcore_config_dpskv3(
     # DeepseekV3ForCausalLM
     from megatron.core.transformer.enums import AttnBackend
 
-    from .patch_v012 import apply_patch
+    #from .patch_v012 import apply_patch
 
-    apply_patch()
+    #apply_patch()
 
     mla_rope_config = {
         "beta_fast": 32,
@@ -340,9 +340,9 @@ def hf_to_mcore_config_moonlight(
     # DeepseekV3ForCausalLM
     from megatron.core.transformer.enums import AttnBackend
 
-    from .patch_v012 import apply_patch
+    #from .patch_v012 import apply_patch
 
-    apply_patch()
+    #apply_patch()
 
     mla_rope_config = {
         "beta_fast": 32,

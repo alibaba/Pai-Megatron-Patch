@@ -71,7 +71,7 @@ bf16
 
 ```bash
 cd ~/Pai-Megatron-Patch/examples/moonlight
-bash run_mcore_moonlight_grpo.sh
+bash run_mcore_moonlight_verl.sh
 ```
 
 ## 使用 Wandb 监控

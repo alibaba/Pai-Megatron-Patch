@@ -144,13 +144,9 @@ class TaskRunner:
         elif config.actor_rollout_ref.actor.strategy == "megatron":
             assert config.actor_rollout_ref.actor.strategy == config.critic.strategy
             from verl.single_controller.ray.megatron import NVMegatronRayWorkerGroup
-            from verl_patch.workers.megatron_workers import ActorRolloutRefWorker, AsyncActorRolloutRefWorker, CriticWorker
+            from verl_patch.workers.megatron_workers import ActorRolloutRefWorker
 
-            actor_rollout_cls = (
-                AsyncActorRolloutRefWorker
-                if config.actor_rollout_ref.rollout.mode == "async"
-                else ActorRolloutRefWorker
-            )
+            actor_rollout_cls = ActorRolloutRefWorker
             ray_worker_group_cls = NVMegatronRayWorkerGroup
 
         else:
@@ -160,8 +156,7 @@ class TaskRunner:
 
         # Map roles to their corresponding remote worker classes.
         role_worker_mapping = {
-            Role.ActorRollout: ray.remote(actor_rollout_cls),
-            Role.Critic: ray.remote(CriticWorker),
+            Role.ActorRollout: ray.remote(actor_rollout_cls)
         }
 
         # Define the resource pool specification.
