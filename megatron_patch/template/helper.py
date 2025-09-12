@@ -81,7 +81,7 @@ def get_batch(data_iterator):
             None
         )
     elif args.dataset == 'MMAP':
-        # get batches based on the TP rank you are on
+    # get batches based on the TP rank you are on
         if args.train_mode == "pretrain":
             batch = get_batch_on_this_tp_rank(data_iterator)
         else:
@@ -92,25 +92,40 @@ def get_batch(data_iterator):
             # sequence-packing, build cu_seqlens
             position_ids = batch.get('position_ids', None)
             if position_ids is not None:
-                # mbs = 1
-                position_ids = position_ids[0] # shape: [seq_length]
+                # mbs = 1 前提
+                position_ids = position_ids[0]  # shape: [seq_length]
                 start_indices = (position_ids == 0).nonzero(as_tuple=True)[0]
-                seqlens = start_indices[1:] - start_indices[:-1]
-                # NOTE: cu_seqlens: [0, A1, A1+A2, A1+A2+A3, ..., seq_len]
-                cu_seqlens = torch.zeros(start_indices.shape[0] + 1, device=position_ids.device, dtype=torch.int)
-                cu_seqlens[1:-1] = torch.cumsum(seqlens, dim=0)
-                cu_seqlens[-1] = position_ids.shape[0]
-                max_seqlen = torch.max(seqlens.max(), position_ids.max() + 1)
+                
+                if start_indices.numel() < 1:
+                    raise ValueError("Sequence packing error: no subsequence start (position_id==0) found!")
+
+
+
+                ends = torch.cat([
+                    start_indices[1:], 
+                    torch.tensor([position_ids.shape[0]], device=position_ids.device)
+                ])
+                seqlens = ends - start_indices  # shape: [num_subseq]
+
+                # 构造 cu_seqlens = [0, A1, A1+A2, ..., total_tokens]
+                cu_seqlens = torch.cat([
+                    torch.tensor([0], device=position_ids.device, dtype=torch.int),
+                    torch.cumsum(seqlens, dim=0).to(torch.int)
+                ])
+
+                max_seqlen = max(int(seqlens.max().item()), int(position_ids.max().item()) + 1)
+
                 packed_seq_params = PackedSeqParams(
                     cu_seqlens_q=cu_seqlens,
                     cu_seqlens_kv=cu_seqlens,
                     qkv_format='thd',
-                    max_seqlen_q = max_seqlen,
-                    max_seqlen_kv = max_seqlen,
+                    max_seqlen_q=max_seqlen,
+                    max_seqlen_kv=max_seqlen,
                 )
         
         if packed_seq_params is not None and args.context_parallel_size > 1:
             raise ValueError('Sequence Packing is not supported when CP>1 !')
+
         # slice batch along sequence dimension for context parallelism
         num_seqs = batch.pop('num_seqs', None)
         batch = get_batch_on_this_cp_rank(batch)
@@ -126,6 +141,7 @@ def get_batch(data_iterator):
         )
     else:
         raise ValueError("please set correct --dataset ")
+
 
 
 def loss_func(loss_mask: torch.Tensor, num_seqs: torch.Tensor, output_tensor: torch.Tensor):
