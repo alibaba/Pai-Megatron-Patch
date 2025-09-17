@@ -61,22 +61,22 @@ class MG2HFSynchronizer(BaseSynchronizer):
         self._local_params[param_id] = src_tensor
         self._merge_type[param_id] = param_type.value
 
-    def set_preprocess_state(self):
+    def set_preprocess_state(self, mg_model, hf_model):
         '''Set embedding params.'''
         self.copy(
-            self._mgmodel.embedding.word_embeddings.weight, 
-            self._hfmodel.model.embed_tokens.weight, 
+            mg_model.embedding.word_embeddings.weight, 
+            hf_model.model.embed_tokens.weight, 
             param_type=ParamType.COLUMN
         )
 
-    def set_postprocess_state(self):
+    def set_postprocess_state(self, mg_model, hf_model):
         '''Set output layer & norm params.'''
-        self.copy(self._mgmodel.decoder.final_layernorm.weight, self._hfmodel.model.norm.weight)
-        if self._mgmodel.share_embeddings_and_output_weights:
-            output_layer_weight = self._mgmodel.shared_embedding_or_output_weight() 
+        self.copy(mg_model.decoder.final_layernorm.weight, hf_model.model.norm.weight)
+        if mg_model.share_embeddings_and_output_weights:
+            output_layer_weight = mg_model.shared_embedding_or_output_weight() 
         else:
-            output_layer_weight = self._mgmodel.output_layer.weight
-        self.copy(output_layer_weight, self._hfmodel.lm_head.weight, param_type=ParamType.COLUMN)
+            output_layer_weight = mg_model.output_layer.weight
+        self.copy(output_layer_weight, hf_model.lm_head.weight, param_type=ParamType.COLUMN)
 
     def set_mla_selfattn_state(self, attn, hf_attn):
         # NOTE: MLA qkv_bias always False
@@ -169,11 +169,31 @@ class MG2HFSynchronizer(BaseSynchronizer):
             param_type=ParamType.COLUMN
         )
 
+        if mlp.config.add_bias_linear:
+            gate_proj_bias, up_proj_bias = mlp.linear_fc1.bias.reshape(2, -1)
+            self.copy(
+                gate_proj_bias, 
+                hf_mlp.gate_proj.bias,
+                param_type=ParamType.COLUMN
+            )
+
+            self.copy(
+                up_proj_bias, 
+                hf_mlp.up_proj.bias,
+                param_type=ParamType.COLUMN
+            )
+
         self.copy(
             mlp.linear_fc2.weight,
             hf_mlp.down_proj.weight,
             param_type=ParamType.ROW
         )
+
+        if mlp.config.add_bias_linear:
+            self.copy(
+                mlp.linear_fc2.bias,
+                hf_mlp.down_proj.bias
+            )
 
     def set_sequential_mlp_state(self, experts, hf_experts):
         '''Set MOE MLP params.'''

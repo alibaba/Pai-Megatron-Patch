@@ -63,49 +63,41 @@ tar -zxf wds.tgz
 
 ## Megatron-Core模型训练流程
 ### Megatron-Core模型格式转换
-运行`hf2mcore_qwen2.5_vl_convertor.sh`脚本，需要传入的参数列表如下
-```bash
-MODEL_SIZE=$1                 # 模型参数：2B/7B/72B
-SOURCE_CKPT_PATH=$2           # 源llm checkpoint路径
-TARGET_CKPT_PATH=$3           # 目标checkpoint路径
-TP=$4                         # 解码器模型并行度
-PP=$5                         # 解码器流水并行度
-mg2hf=$6                      # 是否执行mcore2hf转换
-PR=$7                         # 精度设置，fp16/bf16/fp32     
-HF_CKPT_PATH=$8               # HF的CKPT的路径【可选，mg2hf=true时必须提供】
+当前qwen2.5-VL已升级至`torch_dist`格式权重训练，为了进行权重转换，需要传入的参数列表如下
 ```
-例如，使用下述脚本将checkpoint转换到MCore-Dense并检查输出
+MODEL_SIZE=$1               # 模型大小，3B, 7B, 32B, 72B
+LOAD_DIR=$2                 # 源权重路径
+SAVE_DIR=$3                 # 目标权重路径
+MG2HF=$4                    # 转换方向 可选: true, false
+USE_CUDA=$5                 # 是否使用GPU转换 建议: true
+PR=$6                       # 转换精度 可选: fp32 bf16 fp16
+HF_DIR=$7                   # HF权重路径(mcore2hf时必须提供)
+```
+例如，使用下述脚本将checkpoint转换到MCore格式
 
 ```bash
-cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen
-bash hf2mcore_qwen2.5_vl_convertor.sh \
+cd /workspace/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
+bash scripts/qwen2_5_vl/run_8xH20.sh \
 3B \
 /mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct \
-/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-tp2pp2 \
-2  \
-2  \
+/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-to-mcore  \
 false \
+true \
 bf16
 ```
 
 当您需要将训练好的checkpoint转换回huggingface格式用于推理时，执行
 
 ```bash
-cd /workspace/Pai-Megatron-Patch/toolkits/model_checkpoints_convertor/qwen
-bash hf2mcore_qwen2_vl_convertor.sh \
-7B \
-/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-tp2pp2 \
-/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-tp2pp2-back \
-2  \
-2  \
+cd /workspace/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
+bash scripts/qwen2_5_vl/run_8xH20.sh \
+3B \
+/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-to-mcore \
+/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-back  \
+true \
 true \
 bf16 \
-/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct
-```
-
-此外，如果您需要在继续预训练时设置不对称PP切分来达到最佳吞吐，在准备模型权重时，与训练阶段类似，您需要手动调整以下环境变量来确定第一个pipeline stage中的Transformer层数
-```bash
-export MP_PP0_LAYERS=16
+/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-back
 ```
 
 ### Megatron-Core预训练
@@ -168,7 +160,7 @@ false \
 100000  \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
-/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-tp2pp2 \
+/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-to-mcore \
 20000  \
 200   \
 /workspace/output_mcore_qwen2_5_vl_pretrain
@@ -199,7 +191,7 @@ false \
 100000  \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
-/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-tp2pp2 \
+/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-to-mcore \
 20000  \
 200   \
 /workspace/output_mcore_qwen2_5_vl_pretrain
