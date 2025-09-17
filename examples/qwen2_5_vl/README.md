@@ -63,7 +63,7 @@ tar -zxf wds.tgz
 
 ## Megatron-Core模型训练流程
 ### Megatron-Core模型格式转换
-当前qwen3已升级至`torch_dist`格式权重训练，为了进行权重转换，需要传入的参数列表如下
+当前qwen2.5-VL已升级至`torch_dist`格式权重训练，为了进行权重转换，需要传入的参数列表如下
 ```
 MODEL_SIZE=$1               # 模型大小，3B, 7B, 32B, 72B
 LOAD_DIR=$2                 # 源权重路径
