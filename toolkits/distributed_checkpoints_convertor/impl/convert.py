@@ -62,6 +62,7 @@ def add_args(parser):
     group.add_argument('--dryrun', action='store_true', help='If set, the conversion will be performed on an empty model and no save occurs, only for mcore2hf debugging.')
     group.add_argument('--num-hf-saver', type=int, default=None, help='Set the amount of huggingface savers in mcore2hf mode, each saver will requires extra memorys for comm, set smaller if OOM occurs, by default it is world_size.')
     group.add_argument('--max-shard-size', type=str, default='4GB', help='Set the sharded size, reduce memory consumption if smaller')
+    group.add_argument('--auto-model', type=str, default='AutoModelForCausalLM', help='Select AutoModel for transformers, e.g., set AutoModelForImageTextToText for Qwen2.5-VL')
     
     return parser
 

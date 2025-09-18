@@ -331,7 +331,7 @@ megatron_options="  \
         --disable-vision-class-token \
         --dataloader-type external \
         --transformer-impl transformer_engine \
-        --ckpt-format torch \
+        --ckpt-format torch_dist \
         --mrope-section 16 24 24
         "
 

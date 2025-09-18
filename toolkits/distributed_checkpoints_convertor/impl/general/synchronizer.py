@@ -7,7 +7,8 @@ from typing import *
 from enum import Enum
 from abc import ABC, abstractmethod
 from torch import distributed as dist
-from transformers import AutoConfig, AutoModelForCausalLM
+import transformers
+from transformers import AutoConfig
 from accelerate import init_empty_weights
 
 from megatron.training import get_args
@@ -61,7 +62,8 @@ class BaseSynchronizer(ABC):
 
         config = AutoConfig.from_pretrained(self.load_dir, trust_remote_code=True)
         with init_empty_weights(include_buffers=True):
-            self._hfmodel = AutoModelForCausalLM.from_config(config, trust_remote_code=True, torch_dtype=config.torch_dtype)
+            automodel_cls = getattr(transformers, self.args.auto_model)
+            self._hfmodel = automodel_cls.from_config(config, trust_remote_code=True, torch_dtype=config.torch_dtype)
 
         self.build_hf_mapping()
 
@@ -86,23 +88,36 @@ class BaseSynchronizer(ABC):
     def _copy_impl(self, src_tensor, dst_tensor, **kwargs):
         ...
     
-    def sync_params(self):
+    def sync_params(self, mg_model = None, hf_model = None):
         # assume TE backend
         if self.args.transformer_impl != "transformer_engine":
             raise NotImplementedError("Currently only TE model is implemented.")
-
-        if self._mgmodel.pre_process:
-            self.set_preprocess_state()
         
-        if self._mgmodel.post_process:
-            self.set_postprocess_state()
+        if mg_model is None:
+            mg_model = self._mgmodel
+        if hf_model is None:
+            hf_model = self._hfmodel
+
+        if mg_model.pre_process:
+            self.set_preprocess_state(mg_model=mg_model, hf_model=hf_model)
+        
+        if mg_model.post_process:
+            self.set_postprocess_state(mg_model=mg_model, hf_model=hf_model)
 
         for mg_layer_id, hf_layer_id in self._build_pipeline_parallel_mapping().items():
             if self.tp_rank == 0 and self.ep_rank == 0 and self.etp_rank == 0:
                 logging.info(f"Converting layer {hf_layer_id}")
-            layer = self._mgmodel.decoder.layers[mg_layer_id]
-            hf_layer = self._hfmodel.model.layers[hf_layer_id]
+            layer = mg_model.decoder.layers[mg_layer_id]
+            hf_layer = hf_model.model.layers[hf_layer_id]
             self.set_layer_state(layer, hf_layer)
+
+    @abstractmethod
+    def set_preprocess_state(self, mg_model, hf_model):
+        ...
+
+    @abstractmethod
+    def set_postprocess_state(self, mg_model, hf_model):
+        ...
 
     @abstractmethod
     def check_and_save(self, output_dir):
