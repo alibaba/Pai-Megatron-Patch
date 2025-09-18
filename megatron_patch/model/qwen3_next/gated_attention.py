@@ -7,7 +7,6 @@ from torch import Tensor
 from megatron.core.inference.contexts import BaseInferenceContext
 from megatron.core.models.common.embeddings.rope_utils import (
     apply_rotary_pos_emb,
-    apply_rotary_pos_emb_with_cos_sin,
 )
 from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.core.parallel_state import (
@@ -47,6 +46,15 @@ except ImportError:
     HAVE_TE = False
     SplitAlongDim, TELinear, set_save_original_input = None, None, None
 
+try:
+    from flashattn_hopper.flash_attn_interface import _flash_attn_forward
+    from flashattn_hopper.flash_attn_interface import (
+        flash_attn_with_kvcache as flash_attn3_with_kvcache,
+    )
+
+    HAVE_FA3 = True
+except:
+    HAVE_FA3 = False
 
 class GatedSoftmaxAttention(Attention):
     """Gated softmax attention layer class
@@ -196,7 +204,7 @@ class GatedSoftmaxAttention(Attention):
                 * self.hidden_size_per_attention_head
             ),
         )
-        mixed_qkv = mixed_qkv.view(*new_tensor_shape)
+        mixed_qgkv = mixed_qgkv.view(*new_tensor_shape)
 
         split_arg_list = [
             (
@@ -217,16 +225,16 @@ class GatedSoftmaxAttention(Attention):
 
             # [sq, b, ng, (np/ng + 2) * hn]
             # --> [sq, b, ng, np/ng * hn], [sq, b, ng, hn], [sq, b, ng, hn]
-            (query, gate, key, value) = SplitAlongDim(mixed_qkv, 3, split_arg_list)
+            (query, gate, key, value) = SplitAlongDim(mixed_qgkv, 3, split_arg_list)
         else:
 
             # [sq, b, ng, (np/ng + 2) * hn]
             # --> [sq, b, ng, np/ng * hn], [sq, b, ng, hn], [sq, b, ng, hn]
-            (query, gate, key, value) = torch.split(mixed_qkv, split_arg_list, dim=3)
+            (query, gate, key, value) = torch.split(mixed_qgkv, split_arg_list, dim=3)
 
         # [sq, b, ng, np/ng * hn] -> [sq, b, np, hn]
         query = query.reshape(query.size(0), query.size(1), -1, self.hidden_size_per_attention_head)
-        gate = gate.reshape(query.size(0), query.size(1), -1, self.hidden_size_per_attention_head)
+        gate = gate.reshape(query.size(0), query.size(1), -1)
 
         if self.q_layernorm is not None:
             query = self.q_layernorm(query)
@@ -257,7 +265,6 @@ class GatedSoftmaxAttention(Attention):
         from megatron.core.extensions.transformer_engine import set_save_original_input
 
         set_save_original_input(self.linear_qkv)
-
 
     def forward(
         self,
@@ -326,9 +333,9 @@ class GatedSoftmaxAttention(Attention):
         # =====================
         # Get the query, key and value tensors based on the type of attention -
         # self or cross attn.
-        nvtx_range_push(suffix="qkv")
+        nvtx_range_push(suffix="qgkv")
         query, gate, key, value = self.get_query_key_value_tensors(hidden_states, key_value_states)
-        nvtx_range_pop(suffix="qkv")
+        nvtx_range_pop(suffix="qgkv")
 
         # ===================================================
         # Adjust key, value, and rotary_pos_emb for inference
@@ -340,7 +347,6 @@ class GatedSoftmaxAttention(Attention):
             and not self.training
         )
 
-
         # This branch only runs in the decode phase of flash decoding and returns after the linear
         # projection. This conditional is not used in the prefill phase or non-flash-decoding cases.
         nvtx_range_push(suffix="adjust_key_value")
@@ -351,6 +357,7 @@ class GatedSoftmaxAttention(Attention):
         if (
             in_decode_mode
             and self.config.enable_cuda_graph
+            and self.config.cuda_graph_scope != "full_iteration"
             and inference_context.is_static_batching()
         ):
             raise ValueError(f"CUDA graphs must use flash decode with static batching!")
@@ -367,7 +374,6 @@ class GatedSoftmaxAttention(Attention):
                 sequence_len_offset,
             )
         )
-        attn_mask_type = self.attn_mask_type
 
         if packed_seq_params is not None:
             query = query.squeeze(1)
@@ -402,11 +408,11 @@ class GatedSoftmaxAttention(Attention):
                         q_pos_emb,
                         config=self.config,
                         cu_seqlens=cu_seqlens_q,
-                        cp_group=self.model_comm_pgs.cp,
+                        cp_group=self.pg_collection.cp,
                     )
                 else:
                     query = inference_context.apply_rotary_emb_query(
-                        query, q_pos_emb, self.config, cu_seqlens_q, self.model_comm_pgs.cp
+                        query, q_pos_emb, self.config, cu_seqlens_q, self.pg_collection.cp
                     )
             if k_pos_emb is not None:
                 key = apply_rotary_pos_emb(
@@ -414,7 +420,7 @@ class GatedSoftmaxAttention(Attention):
                     k_pos_emb,
                     config=self.config,
                     cu_seqlens=cu_seqlens_kv,
-                    cp_group=self.model_comm_pgs.cp,
+                    cp_group=self.pg_collection.cp,
                 )
 
             # TODO, can apply positional embedding to value_layer so it has
@@ -455,9 +461,7 @@ class GatedSoftmaxAttention(Attention):
                 # Dynamic batching attention kernel.
                 q, k, v = (query, key, value)
                 cu_query_lengths, max_seqlen_q = inference_context.cu_query_lengths()
-                cu_kv_lengths, kv_lengths, kv_lengths_decode_only, max_seqlen_k = (
-                    inference_context.cu_kv_lengths()
-                )
+                cu_kv_lengths, kv_lengths, max_seqlen_k = inference_context.cu_kv_lengths()
 
                 core_attn_out = self.flash_decode_and_prefill(
                     q,
@@ -468,7 +472,6 @@ class GatedSoftmaxAttention(Attention):
                     cu_query_lengths,
                     cu_kv_lengths,
                     kv_lengths,
-                    kv_lengths_decode_only,
                     block_table,
                 )
                 core_attn_out = rearrange(core_attn_out, 's b h d -> s b (h d)')
