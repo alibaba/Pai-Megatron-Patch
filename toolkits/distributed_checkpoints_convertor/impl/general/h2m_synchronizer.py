@@ -92,7 +92,7 @@ class HF2MGSynchronizer(BaseSynchronizer):
     def set_preprocess_state(self, mg_model, hf_model):
         '''Set embedding params.'''
         self.copy(
-            hf_model.model.embed_tokens.weight, 
+            hf_model.embed_tokens.weight, 
             mg_model.embedding.word_embeddings.weight, 
             param_type=ParamType.COLUMN
         )
@@ -100,15 +100,18 @@ class HF2MGSynchronizer(BaseSynchronizer):
     def set_postprocess_state(self, mg_model, hf_model):
         '''Set output layer & norm params.'''
         self.copy(
-            hf_model.model.norm.weight, 
+            hf_model.norm.weight, 
             mg_model.decoder.final_layernorm.weight, 
         )
         if mg_model.share_embeddings_and_output_weights:
             output_layer_weight = mg_model.shared_embedding_or_output_weight() 
         else:
             output_layer_weight = mg_model.output_layer.weight
+
+        # NOTE: hf_model refers to TextModel of VLM or Model of LLM and does not
+        # contain lm_head, visit it by directly calling self._hfmodel
         self.copy(
-            hf_model.lm_head.weight, 
+            self._hfmodel.lm_head.weight, 
             output_layer_weight, 
             param_type=ParamType.COLUMN
         )
