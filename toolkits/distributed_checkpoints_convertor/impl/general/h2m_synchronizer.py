@@ -89,26 +89,26 @@ class HF2MGSynchronizer(BaseSynchronizer):
             return dst_tensor.data.copy_(dst_tensor.clone())
         dst_tensor.data.copy_(split_mapping[param_type](src_tensor))
 
-    def set_preprocess_state(self):
+    def set_preprocess_state(self, mg_model, hf_model):
         '''Set embedding params.'''
         self.copy(
-            self._hfmodel.model.embed_tokens.weight, 
-            self._mgmodel.embedding.word_embeddings.weight, 
+            hf_model.model.embed_tokens.weight, 
+            mg_model.embedding.word_embeddings.weight, 
             param_type=ParamType.COLUMN
         )
 
-    def set_postprocess_state(self):
+    def set_postprocess_state(self, mg_model, hf_model):
         '''Set output layer & norm params.'''
         self.copy(
-            self._hfmodel.model.norm.weight, 
-            self._mgmodel.decoder.final_layernorm.weight, 
+            hf_model.model.norm.weight, 
+            mg_model.decoder.final_layernorm.weight, 
         )
-        if self._mgmodel.share_embeddings_and_output_weights:
-            output_layer_weight = self._mgmodel.shared_embedding_or_output_weight() 
+        if mg_model.share_embeddings_and_output_weights:
+            output_layer_weight = mg_model.shared_embedding_or_output_weight() 
         else:
-            output_layer_weight = self._mgmodel.output_layer.weight
+            output_layer_weight = mg_model.output_layer.weight
         self.copy(
-            self._hfmodel.lm_head.weight, 
+            hf_model.lm_head.weight, 
             output_layer_weight, 
             param_type=ParamType.COLUMN
         )
@@ -197,11 +197,18 @@ class HF2MGSynchronizer(BaseSynchronizer):
         '''
         if self.dryrun:
             gate_up_proj_weight = mlp.linear_fc1.weight
+            if mlp.config.add_bias_linear:
+                gate_up_proj_bias = mlp.linear_fc1.bias
         else:
             gate_up_proj_weight = torch.stack([
                 self.load_tensor(hf_mlp.gate_proj.weight),
                 self.load_tensor(hf_mlp.up_proj.weight)
             ])
+            if mlp.config.add_bias_linear:
+                gate_up_proj_bias = torch.stack([
+                    self.load_tensor(hf_mlp.gate_proj.bias),
+                    self.load_tensor(hf_mlp.up_proj.bias)
+                ])
         linear_fc1_weight = getattr(mlp.linear_fc1, f'weight{expert_id}')
         linear_fc2_weight = getattr(mlp.linear_fc2, f'weight{expert_id}')
         self.copy(
@@ -214,6 +221,20 @@ class HF2MGSynchronizer(BaseSynchronizer):
             linear_fc2_weight, 
             param_type=ParamType.ROW if expert_id == '' else ParamType.MOE_ROW
         )
+
+        if mlp.config.add_bias_linear:
+            linear_fc1_bias = getattr(mlp.linear_fc1, f'bias{expert_id}')
+            linear_fc2_bias = getattr(mlp.linear_fc2, f'bias{expert_id}')
+            self.copy(
+                gate_up_proj_bias, 
+                linear_fc1_bias, 
+                param_type=ParamType.GATE_UP if expert_id == '' else ParamType.MOE_GATE_UP
+            )
+            self.copy(
+                hf_mlp.down_proj.bias, 
+                linear_fc2_bias,
+            )
+
 
     def set_sequential_mlp_state(self, experts, hf_experts):
         '''Set MOE MLP params.'''
