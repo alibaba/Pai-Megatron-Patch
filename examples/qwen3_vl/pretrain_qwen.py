@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Alibaba PAI and Nvidia Megatron-LM Team.
+# Copyright (c) 2025 Alibaba PAI and Nvidia Megatron-LM Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Pretrain Qwen2.5-VL."""
+"""Pretrain Qwen3-VL."""
 
 import os
 from functools import partial
@@ -260,7 +260,6 @@ def get_ltor_masks_and_position_ids(
         video_thw_grids,
         target, 
         pad_token, 
-        second_per_grid_ts,
         ignore_index=None
     ):
     """Build masks and position id for left to right model."""
@@ -269,8 +268,7 @@ def get_ltor_masks_and_position_ids(
         input_ids=input_ids,
         image_grid_thw=image_thw_grids,
         video_grid_thw=video_thw_grids,
-        second_per_grid_ts=second_per_grid_ts,
-        attention_mask=input_ids != pad_token
+        attention_mask=input_ids != pad_token # True: valid, False: pad token
     )
 
     # Loss mask.
@@ -311,8 +309,6 @@ def get_batch(data_iterator):
     image_thw_grids = broadcast_data(["image_thw_grids"], data, torch.long)["image_thw_grids"]
     # shape: n_video_samples
     video_thw_grids = broadcast_data(["video_thw_grids"], data, torch.long)["video_thw_grids"]
-    # shape: n_video_samples
-    second_per_grid_ts = broadcast_data(['second_per_grid_ts'], data, torch.float32)['second_per_grid_ts']
 
 
     image_input_mask = broadcast_data(["image_input_mask"], data, torch.bool)["image_input_mask"]
@@ -331,7 +327,7 @@ def get_batch(data_iterator):
     # NOTE: no sequence packing in LLM inputs
     torch.cuda.nvtx.range_push("get_ltor_masks_and_position_ids")
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-        tokens, image_thw_grids, video_thw_grids, labels, tokenizer.pad_token_id, second_per_grid_ts
+        tokens, image_thw_grids, video_thw_grids, labels, tokenizer.pad_token_id
     )
     torch.cuda.nvtx.range_pop()
 

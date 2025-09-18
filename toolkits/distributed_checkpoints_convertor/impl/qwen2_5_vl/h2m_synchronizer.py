@@ -1,10 +1,17 @@
+from packaging.version import Version as PkgVersion
+
+import transformers
+
 from general.h2m_synchronizer import HF2MGSynchronizer as _HF2MGSynchronizer
 from general.synchronizer import ParamType
 
 class HF2MGSynchronizer(_HF2MGSynchronizer):
 
     def sync_params(self):
-        super().sync_params(self._mgmodel.language_model, self._hfmodel)
+        if PkgVersion(transformers.__version__) >= PkgVersion('4.52.0'):
+            super().sync_params(self._mgmodel.language_model, self._hfmodel.model.language_model)
+        else:
+            super().sync_params(self._mgmodel.language_model, self._hfmodel.model)
         if self._mgmodel.pre_process:
             self.set_vision_model_layer_state(
                 self._mgmodel.vision_model,
@@ -22,11 +29,13 @@ class HF2MGSynchronizer(_HF2MGSynchronizer):
         ):
             self.set_vision_layer_state(layer, hf_layer)
         self.copy(hf_vision_model.merger.ln_q.weight, vision_model.decoder.final_layernorm.weight)
-
-        self.copy(hf_vision_model.merger.mlp[0].weight, vision_model.projection.encoder.linear_fc1.weight, param_type=ParamType.COLUMN)
-        self.copy(hf_vision_model.merger.mlp[0].bias, vision_model.projection.encoder.linear_fc1.bias, param_type=ParamType.COLUMN)
-        self.copy(hf_vision_model.merger.mlp[2].weight, vision_model.projection.encoder.linear_fc2.weight, param_type=ParamType.ROW)
-        self.copy(hf_vision_model.merger.mlp[2].bias, vision_model.projection.encoder.linear_fc2.bias)
+        self.set_merger_mlp_state(vision_model.projection.encoder, hf_vision_model.merger.mlp)
+    
+    def set_merger_mlp_state(self, mlp, hf_mlp):
+        self.copy(hf_mlp[0].weight, mlp.linear_fc1.weight, param_type=ParamType.COLUMN)
+        self.copy(hf_mlp[0].bias, mlp.linear_fc1.bias, param_type=ParamType.COLUMN)
+        self.copy(hf_mlp[2].weight, mlp.linear_fc2.weight, param_type=ParamType.ROW)
+        self.copy(hf_mlp[2].bias, mlp.linear_fc2.bias)
 
     def set_vision_layer_state(self, layer, hf_layer):
         self.set_visual_attn_state(layer.self_attention, hf_layer.attn)

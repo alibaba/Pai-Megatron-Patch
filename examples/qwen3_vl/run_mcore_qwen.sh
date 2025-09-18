@@ -98,25 +98,25 @@ gqa_options=" \
 tie_option="" # tie_word_embeddings
 
 
-elif [ $MODEL_SIZE = 7B ]; then
+elif [ $MODEL_SIZE = 8B ]; then
 
-NUM_LAYERS=28
-HIDDEN_SIZE=3584
-NUM_ATTN_HEADS=28
-INTERMEDIATE_SIZE=18944
-NUM_KEY_VALUE_HEADS=4
-MAX_POSITION_EMBEDDINGS=128000
-EXTRA_VOCAB_SIZE=421  # 151643 + 421 = 152064
+NUM_LAYERS=36
+HIDDEN_SIZE=4096
+NUM_ATTN_HEADS=32
+INTERMEDIATE_SIZE=12288
+NUM_KEY_VALUE_HEADS=8
+MAX_POSITION_EMBEDDINGS=40960
+EXTRA_VOCAB_SIZE=293
+ROPE_THETA=1000000
 RMS_NORM_EPS=1e-6
-
 gqa_options=" \
-		    --group-query-attention \
-		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
-
+            --group-query-attention \
+            --num-query-groups ${NUM_KEY_VALUE_HEADS}"
 
 tie_option=" \
         --untie-embeddings-and-output-weights \
         "
+moe_options=""
 
 elif [ $MODEL_SIZE = 32B ]; then
 
@@ -332,7 +332,8 @@ megatron_options="  \
         --dataloader-type external \
         --transformer-impl transformer_engine \
         --ckpt-format torch_dist \
-        --mrope-section 16 24 24
+        --mrope-section 16 24 24 \
+        --patch-size 16
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
