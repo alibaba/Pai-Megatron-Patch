@@ -64,10 +64,8 @@ class Qwen3VisionModel(VisionModule):
             embed_dim=embed_dim,
         )
 
-        # TODO: nn.Embedding ? VocabEmbedding?
         self.pos_embed = nn.Embedding(transformer_config.num_position_embeddings, transformer_config.hidden_size)
         self.num_grid_per_side = int(transformer_config.num_position_embeddings**0.5)
-
 
         head_dim = embed_dim // num_heads
         self.rotary_pos_emb = VisionRotaryEmbedding(head_dim // 2)

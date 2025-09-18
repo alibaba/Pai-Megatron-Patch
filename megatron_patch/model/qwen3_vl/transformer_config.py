@@ -25,6 +25,8 @@ class Qwen3VLTransformerConfig(TransformerConfig):
     rotary_scaling_factor: int = None
     max_position_embeddings: int = None
     moe_aux_loss_coeff: float = 0.0
+    num_position_embeddings: int = 0
+    deepstack_visual_indexes: List = field(default_factory=lambda: [8, 16, 24])
 
     # The following options are set with --disable-bias-linear --add-qkv-bias
     # in the script
@@ -81,7 +83,7 @@ def get_vision_model_config(args, config):
     config.patch_size = 16
     config.in_channels = 3
     config.spatial_merge_size = 2
-    config.num_position_emebddings = 2304
+    config.num_position_embeddings = 2304
 
     return config
 

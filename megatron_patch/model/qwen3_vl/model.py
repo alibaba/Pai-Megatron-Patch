@@ -9,7 +9,7 @@ from megatron.core import InferenceParams, parallel_state
 from megatron.core.transformer import MegatronModule
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_config import TransformerConfig
-from .transformer_config import Qwen2VLTransformerConfig
+from .transformer_config import Qwen3VLTransformerConfig
 from megatron.core.packed_seq_params import PackedSeqParams
 
 from .visionmodel import Qwen3VisionModel
@@ -48,7 +48,7 @@ class Qwen3VLModel(MegatronModule):
 
     def __init__(
         self,
-        language_transformer_config: Qwen2VLTransformerConfig,
+        language_transformer_config: Qwen3VLTransformerConfig,
         language_transformer_layer_spec: ModuleSpec,
         language_vocab_size: int,
         language_max_sequence_length: int,

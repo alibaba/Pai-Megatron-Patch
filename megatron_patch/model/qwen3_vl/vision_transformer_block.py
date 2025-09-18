@@ -578,6 +578,7 @@ class TransformerBlock(MegatronModule):
         with rng_context, outer_fp8_context:
             # Forward pass.
             if self.config.recompute_granularity == 'full' and self.training:
+                raise NotImplementedError()
                 hidden_states = self._checkpointed_forward(
                     hidden_states=hidden_states,
                     attention_mask=attention_mask,
@@ -589,6 +590,7 @@ class TransformerBlock(MegatronModule):
                     use_inner_fp8_context=use_inner_fp8_context,
                 )
             else:
+                deepstack_feature_lists = []
                 for l_no, layer in enumerate(self.layers):
                     inner_fp8_context = (
                         get_fp8_context(self.config, layer.layer_number - 1)
@@ -609,6 +611,15 @@ class TransformerBlock(MegatronModule):
                             packed_seq_params=packed_seq_params,
                             sequence_len_offset=sequence_len_offset,
                         )
+                    
+                    if l_no in self.deepstack_visual_indexes:
+                        idx = self.deepstack_visual_indexes.index(l_no)
+                        deepstack_feature = self.deepstack_merger_list[idx](
+                            self.deepstack_norm_list[idx](
+                                hidden_states.view(-1, self.config.hidden_size)
+                            )
+                        )
+                        deepstack_feature_lists.append(deepstack_feature)
 
                     if (
                         torch.is_grad_enabled()
@@ -632,7 +643,7 @@ class TransformerBlock(MegatronModule):
         if not self.pre_process and len(self.layers) == 0 and not self.final_layernorm:
             hidden_states = hidden_states.clone()
 
-        return hidden_states
+        return hidden_states, deepstack_feature_lists
 
     def sharded_state_dict(
         self, prefix: str = '', sharded_offsets: tuple = (), metadata: dict = None
