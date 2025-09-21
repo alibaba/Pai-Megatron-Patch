@@ -11,8 +11,8 @@ gsm8k_test_path=/mnt/data/datasets/gsm8k/test.parquet
 train_files="['$gsm8k_train_path']"
 test_files="['$gsm8k_test_path']"
 
-HF_MODEL_PATH=/mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct
-DIST_CKPT_PATH=/mnt/data/ckpts/mcore/Moonlight-16B-A3B-Instruct-to-mcore
+HF_MODEL_PATH=/mnt/data/ckpts/huggingface/Qwen3-4B
+DIST_CKPT_PATH=/mnt/data/ckpts/mcore/Qwen3-4B-to-mcore
 
 
 # If you are using vllm<=0.6.3, you might need to set the following environment variable to avoid bugs:
@@ -31,7 +31,7 @@ if [ $NODE_RANK -eq 0 ]; then
 
 ray start --block --head --port=6379 &
 
-python ../qwen3/verl_entrypoint.py --config-path=../qwen3/verl_configs \
+python verl_entrypoint.py --config-path=verl_configs \
     --config-name='ppo_megatron_trainer.yaml'\
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
@@ -74,7 +74,7 @@ python ../qwen3/verl_entrypoint.py --config-path=../qwen3/verl_configs \
     trainer.critic_warmup=0 \
     trainer.logger=['console'] \
     trainer.project_name='verl_grpo_example_gsm8k_math' \
-    trainer.experiment_name='moonlight_megatron' \
+    trainer.experiment_name='qwen3_4b_megatron' \
     trainer.n_gpus_per_node=${GPUS_PER_NODE} \
     trainer.nnodes=${NNODES} \
     trainer.save_freq=-1 \
