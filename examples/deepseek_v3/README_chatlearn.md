@@ -1,4 +1,4 @@
-# 基于 Mcore 的端到端GRPO训练流程
+# 基于Mcore版本Chatlearn的端到端GRPO训练流程
 
 本文档提供使用 ChatLearn、Mcore 和 vLLM 框架来对DeepSeek-V3模型进行GRPO训练的快速开始指南。
 
@@ -57,7 +57,7 @@ bf16
 
 ```bash
 cd ~/Pai-Megatron-Patch/examples/deepseek_v3
-bash run_mcore_deepseek_grpo.sh
+bash run_mcore_deepseek_chatlearn.sh
 ```
 
 ## 使用 Wandb 监控

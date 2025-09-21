@@ -40,7 +40,7 @@ export log_dir=${output_dir}/logs
 mkdir -p $log_dir
 log_file=$log_dir/${exp_name}_rank${RANK}.log
 
-python ../qwen3/entrypoint.py grpo --config-file ../qwen3/configs/grpo_megatron.yaml \
+python ../qwen3/chatlearn_entrypoint.py grpo --config-file ../qwen3/chatlearn_configs/grpo_megatron.yaml \
         runtime_args.exp_name=${exp_name} \
         runtime_args.log_args_dict.enable_tensorboard=True \
         runtime_args.train_backend=megatron \

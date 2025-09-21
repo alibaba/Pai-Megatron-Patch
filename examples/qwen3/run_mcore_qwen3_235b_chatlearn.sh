@@ -31,16 +31,16 @@ export RAY_DEDUP_LOGS=0
 export VLLM_USE_RAY_SPMD_WORKER=1
 export VLLM_USE_RAY_COMPILED_DAG=1
 
-hf_ckpt_path=/mnt/data/ckpts/huggingface/Qwen3-30B-A3B
-mcore_ckpt_path=/mnt/data/ckpts/mcore/Qwen3-30B-A3B-to-mcore
-exp_name="test_qwen3_30b"
+hf_ckpt_path=/mnt/data/ckpts/huggingface/Qwen3-235B-A22B
+mcore_ckpt_path=/mnt/data/ckpts/mcore/Qwen3-235B-A22B-to-mcore
+exp_name="test_qwen3_235b_grpo"
 export output_dir=${MEGATRON_PATCH_PATH}/output/${exp_name}
 mkdir -p $output_dir/
 export log_dir=${output_dir}/logs
 mkdir -p $log_dir
 log_file=$log_dir/${exp_name}_rank${RANK}.log
 
-python entrypoint.py grpo --config-file configs/grpo_megatron.yaml \
+python chatlearn_entrypoint.py grpo --config-file chatlearn_configs/grpo_megatron.yaml \
         runtime_args.exp_name=${exp_name} \
         runtime_args.log_args_dict.enable_tensorboard=True \
         runtime_args.train_backend=megatron \
@@ -65,9 +65,9 @@ python entrypoint.py grpo --config-file configs/grpo_megatron.yaml \
         models.policy_trainer.recompute_granularity=null \
         models.policy_trainer.seq_length=2048 \
         models.policy_trainer.tensor_model_parallel_size=4 \
-        models.policy_trainer.pipeline_model_parallel_size=1 \
-        models.policy_trainer.expert_tensor_parallel_size=4 \
-        models.policy_trainer.expert_model_parallel_size=1 \
+        models.policy_trainer.pipeline_model_parallel_size=4 \
+        models.policy_trainer.expert_tensor_parallel_size=1 \
+        models.policy_trainer.expert_model_parallel_size=8 \
         models.policy_trainer.generation_batch_size=128 \
         models.policy_trainer.load=${mcore_ckpt_path} \
         models.policy_trainer.optimizer.lr=2e-6 \
@@ -77,7 +77,7 @@ python entrypoint.py grpo --config-file configs/grpo_megatron.yaml \
         models.reward.generation_batch_size=128 \
         models.policy.load=${hf_ckpt_path} \
         models.policy.generation_batch_size=128 \
-        models.policy.tensor_model_parallel_size=4 \
+        models.policy.tensor_model_parallel_size=8 \
         models.policy.seq_length=2048 \
         models.policy.max_seq_len_to_capture=2348 \
         models.policy.num_inference_per_prompt=32 \

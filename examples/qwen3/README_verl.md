@@ -1,6 +1,6 @@
-# 基于Mcore版本Verl的端到端GRPO训练流程
+# 基于 Mcore 的端到端GRPO训练流程
 
-本文档提供使用Verl、Mcore 和 vLLM 框架来对Moonlight模型进行GRPO训练的快速开始指南。
+本文档提供使用Verl、Mcore 和 vLLM 框架来对Qwen3模型进行GRPO训练的快速开始指南。
 
 ## 环境配置
 1. Docker镜像准备
@@ -28,22 +28,6 @@ mkdir -p /mnt/data/datasets
 modelscope download --model moonshotai/Moonlight-16B-A3B-Instruct --local_dir /mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct
 ```
 
-## 代码&CKPT修改
-```bash
-vim ~/Pai-Megatron-Patch/backends/megatron/Megatron-LM-250624/megatron/training/tokenizer/tokenizer.py
-143行修改为：
-self._tokenizer = transformers.AutoTokenizer.from_pretrained(
-    pretrained_model_name_or_path=pretrained_model_name_or_path, trust_remote_code=True, **kwargs
-)
-vim /mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct/config.json
-将"AutoModel"和"AutoModelForCausalLM"修改为：
-"auto_map": {
-"AutoConfig": "configuration_deepseek.DeepseekV3Config",
-"AutoModel": "modeling_deepseek_pai.DeepseekV3Model",
-"AutoModelForCausalLM": "modeling_deepseek_pai.DeepseekV3ForCausalLM"
-}
-cp ~/Pai-Megatron-Patch/examples/moonlight/modeling_deepseek_pai.py /mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct
-```
 
 ## 模型转换
 
@@ -51,14 +35,14 @@ cp ~/Pai-Megatron-Patch/examples/moonlight/modeling_deepseek_pai.py /mnt/data/ck
 高性能分布式权重转换可以参考：https://github.com/alibaba/Pai-Megatron-Patch/tree/main/toolkits/distributed_checkpoints_convertor
 
 
-例如，使用下述脚本将16B量级的Moonlight的Huggingface格式的模型转换到MCore格式
+例如，使用下述脚本将8B量级的Qwen3的Huggingface格式的模型转换到MCore格式
 ```bash
 git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 cd ~/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
-bash scripts/moonlight/run_2xH20.sh \
-16B \
-/mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct \
-/mnt/data/ckpts/mcore/Moonlight-16B-A3B-Instruct-to-mcore \
+bash scripts/qwen3/run_8xH20.sh \
+4B \
+/mnt/data/ckpts/huggingface/Qwen3-4B \
+/mnt/data/ckpts/mcore/Qwen3-4B-to-mcore \
 false \
 true \
 bf16
@@ -68,8 +52,8 @@ bf16
 运行以下命令开始训练：
 
 ```bash
-cd ~/Pai-Megatron-Patch/examples/moonlight
-bash run_mcore_moonlight_verl.sh
+cd ~/Pai-Megatron-Patch/examples/qwen3
+bash run_mcore_qwen3_verl.sh
 ```
 
 ## 使用 Wandb 监控
