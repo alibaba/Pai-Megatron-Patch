@@ -3,6 +3,7 @@ from typing import Optional
 from megatron.core.extensions.transformer_engine import (
     TEDotProductAttention,
     TELayerNormColumnParallelLinear,
+    TEColumnParallelLinear,
     TERowParallelLinear,
 )
 from megatron.core.fusions.fused_bias_dropout import get_bias_dropout_add
@@ -98,7 +99,7 @@ def get_qwen3_next_layer_spec(args):
                     mixer=ModuleSpec(
                         module=GatedDeltaNetMixer,
                         submodules=MambaMixerSubmodules(
-                            in_proj=TELayerNormColumnParallelLinear, out_proj=TERowParallelLinear
+                            in_proj=TEColumnParallelLinear, out_proj=TERowParallelLinear
                         ),
                     ),
                     mamba_bda=get_bias_dropout_add,

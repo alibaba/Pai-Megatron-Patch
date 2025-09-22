@@ -2,8 +2,9 @@
 
 ## Table of Contents
    * [安装](#安装)
-   * [数据集&模型下载](#数据集和模型下载)
-   * [Megatron-Core-MoE模型训练流程](#Megatron-Core-MoE模型训练流程)
+   * [数据集&模型下载](#预训练数据集和模型下载)
+   * [DeepSeek-V3模型训练流程精简版](#DeepSeek-V3模型训练流程精简版)
+   * [DeepSeek-V3模型训练流程标准版](#DeepSeek-V3模型训练流程标准版)
       * [模型格式转换](#Megatron-Core-MoE模型格式转换)
       * [继续预训练](#预训练示例)
       * [指令微调](#指令微调示例)
@@ -53,8 +54,13 @@ wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models
 wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/deepseek-datasets/mmap_deepseekv3_datasets_text_document.idx
 ```
 
+## DeepSeek-V3模型训练流程精简版
+您可以直接将精简版的内容复制到DLC的执行命令栏中进行修改以及训练。精简版将参数分为了三大类：MODEL_ARGS，TRAINING_ARGS以及INFRA_ARGS。
+```bash
+bash run_mcore_deepseek_lite.sh  \
+```
 
-## Megatron-Core-MoE模型训练流程
+## DeepSeek-V3模型训练流程标准版
 ### Megatron-Core-MoE模型格式转换
 运行`hf2mcore_deepseek_v3_moe_convertor.sh`脚本，需要传入的参数列表如下
 ```

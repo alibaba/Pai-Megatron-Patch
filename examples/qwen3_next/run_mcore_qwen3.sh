@@ -14,8 +14,8 @@ if [ $ENV = dsw ]; then
     MASTER_PORT=$(shuf -n 1 -i 10000-65535)
     NNODES=1
     NODE_RANK=0
-    # GPUS_PER_NODE=`python -c "import torch; print(torch.cuda.device_count())"`
-    GPUS_PER_NODE=2
+    GPUS_PER_NODE=`python -c "import torch; print(torch.cuda.device_count())"`
+    #GPUS_PER_NODE=2
 elif [ $ENV = dlc ]; then
     NNODES=${WORLD_SIZE}
     NODE_RANK=${RANK}
@@ -81,7 +81,7 @@ if [ $MODEL_SIZE = A3B ]; then
     HIDDEN_SIZE=2048
     NUM_ATTENTION_HEADS=16
     # NUM_LAYERS=96 # 48 * 2, each layer in huggingface equals to one attention layer + one mlp layer
-    NUM_LAYERS=8
+    NUM_LAYERS=96
     INTERMEDIATE_SIZE=5120
     MOE_INTERMEDIATE_SIZE=512
     MAX_POSITION_EMBEDDINGS=262144
@@ -117,7 +117,7 @@ if [ $MODEL_SIZE = A3B ]; then
     hybrid_model_options=" \
                 --hybrid-attention-ratio 0.125 \
                 --hybrid-mlp-ratio 0.5 \
-                --hybrid-override-pattern M-M-M-*- \
+                --hybrid-override-pattern M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*- \
                 --is-hybrid-model \
                 --mamba-state-dim 128 \
                 --mamba-head-dim 128 \
