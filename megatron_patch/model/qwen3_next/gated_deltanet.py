@@ -656,4 +656,3 @@ def _split_tensor_factory(
     return ShardedTensorFactory(
         orig_sh_ten.key, orig_sh_ten.data, sh_ten_build_fn, sh_ten_merge_fn, orig_sh_ten.replica_id
     )
-
