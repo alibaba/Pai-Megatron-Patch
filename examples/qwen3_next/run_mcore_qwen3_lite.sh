@@ -76,8 +76,9 @@ MODEL_ARGS_SMALL=(
     --moe-router-topk 10
     --moe-shared-expert-intermediate-size 512 
     --num-experts 512
-    --extra-vocab-size 421 
+    --extra-vocab-size 293
     --patch-tokenizer-type Qwen3Tokenizer
+    --kv-channels 256
 )
 
 TRAINING_ARGS=(

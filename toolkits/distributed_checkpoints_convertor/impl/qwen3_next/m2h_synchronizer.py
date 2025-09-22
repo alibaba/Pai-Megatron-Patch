@@ -1,9 +1,11 @@
 import logging
+
+import torch
 from typing import Dict
-from general.h2m_synchronizer import HF2MGSynchronizer as _HF2MGSynchronizer
+from general.m2h_synchronizer import MG2HFSynchronizer as _MG2HFSynchronizer
+from general.synchronizer import ParamType
 
-
-class HF2MGSynchronizer(_HF2MGSynchronizer):
+class MG2HFSynchronizer(_MG2HFSynchronizer):
     # TODO: to be refactored to Hybrid Model convertor
     def __init__(self, load_dir, model_provider_func=None):
         super().__init__(load_dir, model_provider_func)
@@ -29,9 +31,10 @@ class HF2MGSynchronizer(_HF2MGSynchronizer):
             self.set_preprocess_state(mg_model=mg_model, hf_model=hf_model)
         
         if mg_model.post_process:
-            self.set_postprocess_state(mg_model=mg_model, hf_model=hf_model)
+            self.set_postprocess_state(mg_model=mg_model, hf_model=hf_model, is_mamba=True)
 
-        for mg_layer_id, hf_layer_id in self._build_pipeline_parallel_mapping().items():
+        for mg_layer_id, global_mg_layer_id in self._build_pipeline_parallel_mapping().items():
+            hf_layer_id  = global_mg_layer_id // 2
             if self.tp_rank == 0 and self.ep_rank == 0 and self.etp_rank == 0:
                 logging.info(f"Converting layer {hf_layer_id}")
             
@@ -45,12 +48,12 @@ class HF2MGSynchronizer(_HF2MGSynchronizer):
                 self.copy(layer.norm.weight, hf_layer.input_layernorm.weight)
             elif self.layout[global_mg_layer_id] == '-':
                 # transformer_layer of MLP
-                self.set_mlp_state(layer.mlp, hf_layer.mlp)
-                self.copy(layer.mlp.linear_fc1.layer_norm_weight, hf_layer.post_attention_layernorm.weight)
+                self.set_moe_layer_state(layer.mlp, hf_layer.mlp)
+                self.copy(layer.pre_mlp_layernorm.weight, hf_layer.post_attention_layernorm.weight)
             elif self.layout[global_mg_layer_id] == '*':
                 # transformer_layer of Attention
-                self.set_selfattn_state(layer.self_attention, hf_layer.self_attn)
-                self.copy(layer.input_layernorm.weight, hf_layer.input_layernorm.weight)
+                self.set_gated_selfattn_state(layer.self_attention, hf_layer.self_attn)
+                self.copy(layer.self_attention.linear_qgkv.layer_norm_weight, hf_layer.input_layernorm.weight)
             else:
                 raise ValueError(f"Unrecognized layer type {self.layout[global_mg_layer_id]} in {self.layout}")
 
@@ -65,11 +68,59 @@ class HF2MGSynchronizer(_HF2MGSynchronizer):
         pp_layers_per_stage = [remained_num_layers // remained_stages] * remained_stages
 
         pp_mapping = {
-            i: v // 2 for i, v in enumerate(
+            i: v for i, v in enumerate(
                 range(
-                    sum(pp_layers_per_stage[:self.pp_rank]) * 2, 
-                    sum(pp_layers_per_stage[:self.pp_rank + 1]) * 2
+                    sum(pp_layers_per_stage[:self.pp_rank]), 
+                    sum(pp_layers_per_stage[:self.pp_rank + 1])
                 )
             )
         }
         return pp_mapping
+
+    def set_gated_selfattn_state(self, attn, hf_attn):
+        '''Set gated self-attention params.'''
+        # Reshape loaded weights.
+        tp = self.tp_size
+        num_heads = self.args.num_attention_heads
+        num_query_groups = (self.args.num_query_groups if self.args.group_query_attention else self.args.num_attention_heads)
+        num_querys_per_group = num_heads // num_query_groups
+        dim = self.args.kv_channels
+        assert num_heads % num_querys_per_group == 0
+        # copy qk norm if indeed.
+        if self.args.qk_layernorm:
+            self.copy(attn.q_layernorm.weight, hf_attn.q_norm.weight)
+            self.copy(attn.k_layernorm.weight, hf_attn.k_norm.weight)
+
+        # Copy weights (re-order dimensions for Megatron).
+        attn_proj_weight = attn.linear_qgkv.weight.reshape(
+            (num_query_groups // tp, (2 + num_querys_per_group*2)*dim, -1)
+        )
+        (
+            q_proj_weight, 
+            k_proj_weight, 
+            v_proj_weight
+        ) = torch.split(attn_proj_weight, [2*num_querys_per_group*dim, dim, dim], dim=1)
+
+        self.copy(q_proj_weight, hf_attn.q_proj.weight, param_type=ParamType.QKV_W)
+        self.copy(k_proj_weight, hf_attn.k_proj.weight, param_type=ParamType.QKV_W)
+        self.copy(v_proj_weight, hf_attn.v_proj.weight, param_type=ParamType.QKV_W)
+
+        self.copy(
+            attn.linear_proj.weight,
+            hf_attn.o_proj.weight,
+            param_type=ParamType.ROW
+        )
+
+        # Copy bias
+        if self.args.add_qkv_bias:
+            attn_proj_bias = attn.linear_qkv.bias.reshape(
+                (num_query_groups // tp, (2 + num_querys_per_group * 2)*dim, -1)
+            )
+            q_proj_bias, k_proj_bias, v_proj_bias = torch.split(
+                attn_proj_bias, 
+                [2*num_querys_per_group*dim, dim, dim], 
+                dim=1
+            )
+            self.copy(q_proj_bias, hf_attn.q_proj.bias, param_type=ParamType.QKV_B)
+            self.copy(k_proj_bias, hf_attn.k_proj.bias, param_type=ParamType.QKV_B)
+            self.copy(v_proj_bias, hf_attn.v_proj.bias, param_type=ParamType.QKV_B)

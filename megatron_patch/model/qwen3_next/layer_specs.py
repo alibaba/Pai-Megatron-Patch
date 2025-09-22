@@ -5,6 +5,7 @@ from megatron.core.extensions.transformer_engine import (
     TELayerNormColumnParallelLinear,
     TEColumnParallelLinear,
     TERowParallelLinear,
+    TENorm
 )
 from megatron.core.fusions.fused_bias_dropout import get_bias_dropout_add
 from megatron.core.ssm.mamba_block import MambaStack, MambaStackSubmodules
@@ -102,6 +103,7 @@ def get_qwen3_next_layer_spec(args):
                             in_proj=TEColumnParallelLinear, out_proj=TERowParallelLinear
                         ),
                     ),
+                    norm=TENorm, # TODO: make layernorm-col-linear
                     mamba_bda=get_bias_dropout_add,
                 ),
             ),
@@ -118,6 +120,8 @@ def get_qwen3_next_layer_spec(args):
                             linear_qkv=TELayerNormColumnParallelLinear,
                             core_attention=TEDotProductAttention,
                             linear_proj=TERowParallelLinear,
+                            q_layernorm=TENorm,
+                            k_layernorm=TENorm
                         ),
                     ),
                     self_attn_bda=get_bias_dropout_add,
@@ -129,6 +133,7 @@ def get_qwen3_next_layer_spec(args):
             mlp_layer = ModuleSpec(
                 module=TransformerLayer,
                 submodules=TransformerLayerSubmodules(
+                    pre_mlp_layernorm=TENorm,
                     mlp=get_moe_module_spec(
                         num_experts=args.num_experts,
                         moe_grouped_gemm=args.moe_grouped_gemm,

@@ -97,12 +97,18 @@ class HF2MGSynchronizer(BaseSynchronizer):
             param_type=ParamType.COLUMN
         )
 
-    def set_postprocess_state(self, mg_model, hf_model):
+    def set_postprocess_state(self, mg_model, hf_model, is_mamba: bool=False):
         '''Set output layer & norm params.'''
-        self.copy(
-            hf_model.model.norm.weight, 
-            mg_model.decoder.final_layernorm.weight, 
-        )
+        if is_mamba:
+            self.copy(
+                hf_model.model.norm.weight, 
+                mg_model.decoder.final_norm.weight, 
+            )
+        else:
+            self.copy(
+                hf_model.model.norm.weight, 
+                mg_model.decoder.final_layernorm.weight, 
+            )
         if mg_model.share_embeddings_and_output_weights:
             output_layer_weight = mg_model.shared_embedding_or_output_weight() 
         else:
@@ -266,7 +272,12 @@ class HF2MGSynchronizer(BaseSynchronizer):
         if moe.shared_experts is not None:
             if moe.shared_experts.use_shared_expert_gate:
                 self.copy(hf_moe.shared_expert_gate.weight, moe.shared_experts.gate_weight)
-            self.set_mlp_state(moe.shared_experts, hf_moe.shared_experts)
+            
+            try:
+                hf_shared_expert = hf_moe.shared_experts
+            except AttributeError:
+                hf_shared_expert = hf_moe.shared_expert
+            self.set_mlp_state(moe.shared_experts, hf_shared_expert)
 
     def set_layer_state(self, layer, hf_layer):
         '''Set transformer layer params.'''
