@@ -31,3 +31,6 @@
 [submodule "backends/rl/verl"]
 	path = backends/rl/verl
 	url = https://github.com/volcengine/verl.git
+[submodule "backends/megatron/Megatron-LM-250908"]
+	path = backends/megatron/Megatron-LM-250908
+	url = https://github.com/NVIDIA/Megatron-LM.git

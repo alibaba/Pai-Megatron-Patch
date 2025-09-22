@@ -243,7 +243,10 @@ def build_tokenizer(args):
         args.padded_vocab_size = tokenizer.vocab_size
 
     elif args.patch_tokenizer_type == 'Qwen3Tokenizer':
-        from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
+        try:
+            from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
+        except ImportError:
+            from megatron.core.datasets.megatron_tokenizer import MegatronLegacyTokenizer as MegatronTokenizer
         class _Qwen3Tokenizer(MegatronTokenizer):
             def __init__(self, tokenizer_path, extra_vocab_size):
                 super().__init__(tokenizer_path)

@@ -180,10 +180,23 @@ def forward_step(data_iterator, model):
     timers("batch-generator", log_level=2).start()
     tokens, labels, loss_mask, attention_mask, position_ids, num_seqs, packed_seq_params = get_batch(data_iterator)
     timers("batch-generator").stop()
-    if 'loss_mask' in inspect.signature(GPTModel.forward).parameters:
+
+    input_kwargs = {
+        'input_ids': tokens,
+        'position_ids': position_ids,
+        'attention_mask': attention_mask,
+        'labels': labels
+    }
+
+    if 'loss_mask' in inspect.signature(model.forward).parameters:
         # NOTE: MTP-head (since 0328) requires loss_mask to compute correct loss scale.
-        output_tensor = model(tokens, position_ids, attention_mask, labels=labels, packed_seq_params=packed_seq_params, loss_mask=loss_mask)
+        input_kwargs['loss_mask'] = loss_mask
+    
+    if 'packed_seq_params' in inspect.signature(model.forward).parameters:
+        input_kwargs['packed_seq_params'] = packed_seq_params
     else:
-        output_tensor = model(tokens, position_ids, attention_mask, labels=labels, packed_seq_params=packed_seq_params)
+        assert packed_seq_params is None, f"Sequence Packing is not supported for {model}"
+
+    output_tensor = model(**input_kwargs)
 
     return output_tensor, partial(loss_func, loss_mask, num_seqs)
