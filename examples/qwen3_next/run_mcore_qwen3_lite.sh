@@ -13,7 +13,7 @@ GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU:-$(python -c "import torch; pr
 [ -z "$MASTER_ADDR" ] && export MASTER_ADDR=localhost
 [ -z "$MASTER_PORT" ] && export MASTER_PORT=${MASTER_PORT:-$(shuf -n 1 -i 10000-65535)}
 
-TP=1
+TP=2
 PP=1
 EP=2
 ETP=1
@@ -43,7 +43,7 @@ MODEL_ARGS_SMALL=(
     --transformer-impl transformer_engine
     --attention-dropout 0.0
     --hidden-dropout 0.0
-    --num-layers 96
+    --num-layers 8
     --hidden-size 2048
     --ffn-hidden-size 5120
     --moe-ffn-hidden-size 512
@@ -52,7 +52,7 @@ MODEL_ARGS_SMALL=(
     --num-query-groups 2
     --hybrid-attention-ratio 0.125 
     --hybrid-mlp-ratio 0.5 
-    --hybrid-override-pattern M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*- 
+    --hybrid-override-pattern M-M-M-*-
     --is-hybrid-model 
     --normalization RMSNorm
     --qk-layernorm 
@@ -70,7 +70,46 @@ MODEL_ARGS_SMALL=(
     --moe-grouped-gemm
     --moe-permute-fusion
     --moe-router-dtype fp32
-    --moe-router-pre-softmax
+    --moe-aux-loss-coeff 0.001
+    --moe-router-score-function softmax
+    --moe-router-topk 10
+    --moe-shared-expert-intermediate-size 512 
+    --num-experts 512
+    --extra-vocab-size 421 
+    --patch-tokenizer-type Qwen3Tokenizer
+)
+
+MODEL_ARGS=(
+    --transformer-impl transformer_engine
+    --attention-dropout 0.0
+    --hidden-dropout 0.0
+    --num-layers 96
+    --hidden-size 2048
+    --ffn-hidden-size 5120
+    --moe-ffn-hidden-size 512
+    --num-attention-heads 16
+    --group-query-attention
+    --num-query-groups 2
+    --hybrid-attention-ratio 0.125 
+    --hybrid-mlp-ratio 0.5 
+    --hybrid-override-pattern M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-
+    --is-hybrid-model 
+    --normalization RMSNorm
+    --qk-layernorm 
+    --norm-epsilon 1e-6
+    --swiglu
+    --disable-bias-linear
+    --use-rotary-position-embeddings
+    --rotary-base 10000000
+    --rotary-percent 0.25
+    --seq-length ${SEQ_LEN}
+    --max-position-embeddings ${SEQ_LEN}
+    --position-embedding-type rope
+    --untie-embeddings-and-output-weights
+    --moe-router-load-balancing-type aux_loss
+    --moe-grouped-gemm
+    --moe-permute-fusion
+    --moe-router-dtype fp32
     --moe-aux-loss-coeff 0.001
     --moe-router-score-function softmax
     --moe-router-topk 10
@@ -108,6 +147,7 @@ TRAINING_ARGS=(
     --manual-gc-interval 10
     --no-load-optim
     --no-load-rng
+    --auto-detect-ckpt-format
     --save-interval 5000000
     --eval-iters 32
     --eval-interval 20000000
@@ -138,7 +178,7 @@ INFRA_ARGS=(
 )
 
 cmd="torchrun ${DISTRIBUTED_ARGS[@]} pretrain_qwen3_next.py \
-    ${MODEL_ARGS_SMALL[@]} \
+    ${MODEL_ARGS[@]} \
     ${TRAINING_ARGS[@]} \
     ${INFRA_ARGS[@]}"
 
