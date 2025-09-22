@@ -15,14 +15,16 @@ GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU:-$(python -c "import torch; pr
 
 TP=1
 PP=1
-EP=1
+EP=2
 ETP=1
 CP=1
 MBS=1
 GBS=8
 SEQ_LEN=2048
-DATA_PATH='1.0 /mnt/data/datasets/mmap_qwen3_datasets_text_document'
-PRETRAIN_CHECKPOINT_PATH=/mnt/data/models/Qwen3-Next-80B-A3B-Instruct
+DATA_PATH=/mnt/data/datasets/mmap_qwen3_datasets_text_document
+PRETRAIN_CHECKPOINT_PATH=/mnt/data/ckpts/huggingface/Qwen3-Next-80B-A3B-Instruct
+TENSORBOARD_DIR=/mnt/data/jerry.lp/tensorboard/test_qwen3_next_pretrain
+mkdir -p ${TENSORBOARD_DIR}
 TRAIN_TOKENS=10000000
 WARMUP_TOKENS=10000
 TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GBS} / ${SEQ_LEN} ))
@@ -41,7 +43,7 @@ MODEL_ARGS_SMALL=(
     --transformer-impl transformer_engine
     --attention-dropout 0.0
     --hidden-dropout 0.0
-    --num-layers 8
+    --num-layers 96
     --hidden-size 2048
     --ffn-hidden-size 5120
     --moe-ffn-hidden-size 512
@@ -50,7 +52,7 @@ MODEL_ARGS_SMALL=(
     --num-query-groups 2
     --hybrid-attention-ratio 0.125 
     --hybrid-mlp-ratio 0.5 
-    --hybrid-override-pattern M-M-M-*- 
+    --hybrid-override-pattern M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*- 
     --is-hybrid-model 
     --normalization RMSNorm
     --qk-layernorm 
@@ -98,20 +100,18 @@ TRAINING_ARGS=(
     --data-path ${DATA_PATH}
     --split 99,1,0
     --dataset MMAP
-    --num-workers 6
+    --num-workers 32
     --distributed-timeout-minutes 60
     --exit-duration-in-mins 220
     --no-save-optim
-    --no-check-for-nan-in-loss-and-grad
     --manual-gc
     --manual-gc-interval 10
     --no-load-optim
     --no-load-rng
-    --auto-detect-ckpt-format
     --save-interval 5000000
     --eval-iters 32
     --eval-interval 20000000
-    --dist-ckpt-strictness log_all
+    --tensorboard-dir ${TENSORBOARD_DIR}
     --log-timers-to-tensorboard
     --log-memory-to-tensorboard
     --log-validation-ppl-to-tensorboard

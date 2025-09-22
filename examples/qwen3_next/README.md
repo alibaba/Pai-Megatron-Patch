@@ -16,6 +16,7 @@
 ```bash
 # 修改NGC镜像中的一个小错误
 vim /usr/local/lib/python3.12/dist-packages/triton/backends/nvidia/driver.py
+将第26行修改为以下内容
 libs = subprocess.check_output(["/sbin/ldconfig", "-p"]).decode(errors="ignore")
 
 # 升级Transformer Engine版本
