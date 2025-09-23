@@ -214,8 +214,6 @@ class GatedDeltaNetMixer(MegatronModule):
         self.d_inner_local_tp = self.d_inner // tp_size
         self.ngroups_local_tp = self.ngroups // tp_size
  
-
-
         # Assume sequence parallelism: input is already partitioned along the sequence dimension
         self.in_proj = build_module(
             submodules.in_proj,
@@ -256,20 +254,6 @@ class GatedDeltaNetMixer(MegatronModule):
 
         with get_cuda_rng_tracker().fork():
             # Initialize dt bias so that F.softplus(dt_bias) is between dt_min and dt_max
-            """
-            dt = torch.exp(
-                torch.rand(
-                    self.nheads_local_tp,
-                    device=torch.cuda.current_device(),
-                    dtype=config.params_dtype,
-                )
-                * (math.log(dt_max) - math.log(dt_min))
-                + math.log(dt_min)
-            ).clamp(min=dt_init_floor)
-            # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
-            inv_dt = dt + torch.log(-torch.expm1(-dt))
-            #self.dt_bias = nn.Parameter(inv_dt)
-            """
             self.dt_bias = nn.Parameter(torch.ones(self.nheads_local_tp))
             # Our initialization would set all Linear.bias to zero,
             # need to mark this one as _no_reinit
@@ -281,14 +265,6 @@ class GatedDeltaNetMixer(MegatronModule):
             setattr(self.dt_bias, "tensor_model_parallel", True)
 
             # A parameter
-            """
-            assert A_init_range[0] > 0 and A_init_range[1] >= A_init_range[0]
-            A = torch.empty(
-                self.nheads_local_tp, dtype=torch.float32, device=torch.cuda.current_device()
-            ).uniform_(*A_init_range)
-            A_log = torch.log(A)  # Keep A_log in fp32
-            self.A_log = nn.Parameter(A_log)
-            """
             A = torch.empty(self.nheads_local_tp).uniform_(0, 16)
             self.A_log = nn.Parameter(torch.log(A))
             self.A_log._no_weight_decay = True
@@ -362,7 +338,7 @@ class GatedDeltaNetMixer(MegatronModule):
 
         zVQKba, _ = self.in_proj(hidden_states)
 
-        zVQKba = self.cp.pre_conv_ssm(zVQKba)
+        #zVQKba = self.cp.pre_conv_ssm(zVQKba)
 
         zVQKba = rearrange(zVQKba, "l b d -> b l d").contiguous()
 
@@ -432,24 +408,12 @@ class GatedDeltaNetMixer(MegatronModule):
             use_qk_l2norm_in_kernel=True,
         )
         
-        """
-        z_shape_og = z.shape
-        # reshape input data into 2D tensor
-        core_attn_out = core_attn_out.reshape(-1, core_attn_out.shape[-1])
-        z = z.reshape(-1, z.shape[-1])
-        core_attn_out = self.norm(core_attn_out, z)
-        core_attn_out = core_attn_out.reshape(z_shape_og)
-        core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1)
-        core_attn_out = core_attn_out.permute(1, 0, 2).contiguous()
-        out, out_bias = self.out_proj(core_attn_out)
-        """
-
         y = rearrange(core_attn_out, "b l h p -> l b (h p)").contiguous()
-        y = self.cp.post_conv_ssm(y)
+        #y = self.cp.post_conv_ssm(y)
 
         if self.rmsnorm:
             z = rearrange(z, "b l h p -> l b (h p)").contiguous()
-            z = self.cp.post_conv_ssm(z)
+            #z = self.cp.post_conv_ssm(z)
             y = self.norm(y, z)
         out, out_bias = self.out_proj(y)
 
