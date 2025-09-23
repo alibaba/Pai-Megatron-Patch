@@ -1,3 +1,16 @@
+# Copyright (c) 2025 Alibaba PAI Team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import logging
 
 import torch
@@ -10,7 +23,7 @@ class MG2HFSynchronizer(_MG2HFSynchronizer):
     def __init__(self, load_dir, model_provider_func=None):
         super().__init__(load_dir, model_provider_func)
         self.layout = self.get_hybrid_layout()
-        
+        assert self.tp_size == 1, "MCore2HF conversion of DeltaNet when TP > 1 is not implemented!"
 
     def get_hybrid_layout(self) -> str:
         assert self.args.hybrid_override_pattern is not None
@@ -37,8 +50,7 @@ class MG2HFSynchronizer(_MG2HFSynchronizer):
             hf_layer_id  = global_mg_layer_id // 2
             if self.tp_rank == 0 and self.ep_rank == 0 and self.etp_rank == 0:
                 logging.info(f"Converting layer {hf_layer_id}")
-            
-            global_mg_layer_id = hf_layer_id * 2
+
             layer = mg_model.decoder.layers[mg_layer_id]
             hf_layer = hf_model.model.layers[hf_layer_id]
 
@@ -58,9 +70,31 @@ class MG2HFSynchronizer(_MG2HFSynchronizer):
                 raise ValueError(f"Unrecognized layer type {self.layout[global_mg_layer_id]} in {self.layout}")
 
     def set_mamba_layer_state(self, mixer, hf_mixer):
-        # copy linear_attn to mamba mixer
-        ...
-    
+        # NOTE: qkvzba is hard to implement when TP > 1, we write a simple version here.
+        split_size_list = [
+            hf_mixer.value_dim, 
+            hf_mixer.value_dim,
+            hf_mixer.key_dim, 
+            hf_mixer.key_dim, 
+            hf_mixer.num_v_heads,
+            hf_mixer.num_v_heads,
+        ]
+        z, v, k, q, b, a = torch.split(
+            mixer.in_proj.weight,
+            split_size_list,
+            dim=0
+        )
+        in_proj_qkvz_weight = torch.cat([q, k, v, z], dim=0)
+        in_proj_ba_weight = torch.cat([b, a], dim=0)
+        self.copy(in_proj_qkvz_weight, hf_mixer.in_proj_qkvz.weight, param_type=ParamType.UNIQUE)
+        self.copy(in_proj_ba_weight, hf_mixer.in_proj_ba.weight, param_type=ParamType.UNIQUE)
+
+
+        self.copy(mixer.dt_bias, hf_mixer.dt_bias, param_type=ParamType.COLUMN)
+        self.copy(mixer.A_log, hf_mixer.A_log, param_type=ParamType.COLUMN)
+        self.copy(mixer.conv1d.weight, hf_mixer.conv1d.weight, param_type=ParamType.COLUMN)
+        self.copy(mixer.norm.weight, hf_mixer.norm.weight, param_type=ParamType.UNIQUE)
+        self.copy(mixer.out_proj.weight, hf_mixer.out_proj.weight, param_type=ParamType.ROW)
 
     def _build_pipeline_parallel_mapping(self) -> Dict[int, int]:
         remained_num_layers = self.args.num_layers

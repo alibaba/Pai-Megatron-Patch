@@ -1,3 +1,16 @@
+# Copyright (c) 2025 Alibaba PAI Team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import torch
 import logging
 from typing import Dict
@@ -56,9 +69,29 @@ class HF2MGSynchronizer(_HF2MGSynchronizer):
                 raise ValueError(f"Unrecognized layer type {self.layout[global_mg_layer_id]} in {self.layout}")
 
     def set_mamba_layer_state(self, mixer, hf_mixer):
-        # copy linear_attn to mamba mixer
-        ...
-    
+        # hf: qkvz+ba  mcore:zVKQba
+        split_size_list = [
+            hf_mixer.key_dim, 
+            hf_mixer.key_dim, 
+            hf_mixer.value_dim, 
+            hf_mixer.value_dim
+        ]
+        q, k, v, z = torch.split(
+            self.load_tensor(hf_mixer.in_proj_qkvz.weight),
+            split_size_list,
+            dim=0
+        )
+        b, a = torch.chunk(self.load_tensor(hf_mixer.in_proj_ba.weight), 2, dim=0)
+        self.copy([
+            z, v, k, q, b, a
+        ], mixer.in_proj.weight, param_type=ParamType.MERGED_LINEAR)
+
+        self.copy(hf_mixer.dt_bias, mixer.dt_bias, param_type=ParamType.COLUMN)
+        self.copy(hf_mixer.A_log, mixer.A_log, param_type=ParamType.COLUMN)
+        self.copy(hf_mixer.conv1d.weight, mixer.conv1d.weight, param_type=ParamType.COLUMN)
+        self.copy(hf_mixer.norm.weight, mixer.norm.weight, param_type=ParamType.UNIQUE)
+        self.copy(hf_mixer.out_proj.weight, mixer.out_proj.weight, param_type=ParamType.ROW)
+
 
     def _build_pipeline_parallel_mapping(self) -> Dict[int, int]:
         remained_num_layers = self.args.num_layers
