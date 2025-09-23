@@ -186,7 +186,11 @@ class GatedDeltaNetMixer(MegatronModule):
         super().__init__(config)
         self.config = config
         self.d_model = d_model
+        self.d_conv = d_conv
+        self.conv_init = conv_init
+        self.D_has_hdim = D_has_hdim
         self.rmsnorm = rmsnorm
+        self.norm_before_gate = norm_before_gate
         assert pg_collection is not None, "pg_collection must be provided for MambaMixer"
         self.pg_collection = pg_collection
 
@@ -196,12 +200,25 @@ class GatedDeltaNetMixer(MegatronModule):
         self.num_v_heads = self.config.num_v_heads
         self.key_dim = self.head_k_dim * self.num_k_heads
         self.value_dim = self.head_v_dim * self.num_v_heads
+
+        self.d_state = self.head_k_dim
+        self.headdim = self.head_v_dim
+        self.ngroups = self.num_k_heads
+        self.nheads = self.num_v_heads
+        self.d_inner = self.nheads * self.headdim
+
         
-        projection_size_qkvz = self.key_dim * 2 + self.value_dim * 2
-        self.in_proj_qkvz = build_module(
+        tp_size = self.pg_collection.tp.size()
+
+        self.nheads_local_tp = self.nheads // tp_size
+        self.d_inner_local_tp = self.d_inner // tp_size
+        self.ngroups_local_tp = self.ngroups // tp_size
+ 
+        # Assume sequence parallelism: input is already partitioned along the sequence dimension
+        self.in_proj = build_module(
             submodules.in_proj,
             self.d_model,
-            projection_size_qkvz,
+            self.d_inner * 2 + 2 * self.ngroups * self.d_state + self.nheads * 2,
             config=self.config,
             init_method=self.config.init_method,
             gather_output=False,
@@ -212,46 +229,73 @@ class GatedDeltaNetMixer(MegatronModule):
             tp_group=self.pg_collection.tp,
         )
 
-        projection_size_ba = self.num_v_heads * 2
-        self.in_proj_ba = build_module(
-            submodules.in_proj,
-            self.d_model,
-            projection_size_ba,
-            config=self.config,
-            init_method=self.config.init_method,
-            gather_output=False,
-            bias=bias,
-            skip_bias_add=False,
-            is_expert=False,
-            tp_comm_buffer_name="fc1",
-            tp_group=self.pg_collection.tp,
-        )
+        conv_dim = self.d_inner_local_tp + 2 * self.ngroups_local_tp * self.d_state  # x B C
+        with get_cuda_rng_tracker().fork():
+            # weight shape: [conv_dim, 1, d_conv]
+            # bias shape: [conv_dim]
+            self.conv1d = nn.Conv1d(
+                in_channels=conv_dim,
+                out_channels=conv_dim,
+                bias=conv_bias,
+                kernel_size=d_conv,
+                groups=conv_dim,
+                padding=d_conv - 1,
+                device=torch.cuda.current_device(),
+                dtype=config.params_dtype,
+            )
+            setattr(self.conv1d.weight, "tensor_model_parallel", True)
+            setattr(self.conv1d.bias, "tensor_model_parallel", True)
 
-        self.conv_kernel_size = 4
-        self.conv_dim = self.key_dim * 2 + self.value_dim
-        self.conv1d = nn.Conv1d(
-            in_channels=self.conv_dim,
-            out_channels=self.conv_dim,
-            bias=False,
-            kernel_size=self.conv_kernel_size,
-            groups=self.conv_dim,
-            padding=self.conv_kernel_size - 1,
-        )
+            if self.conv_init is not None:
+                nn.init.uniform_(self.conv1d.weight, -self.conv_init, self.conv_init)
 
         self.activation = "silu"
-        self.dt_bias = nn.Parameter(torch.ones(self.num_v_heads))
-        A = torch.empty(self.num_v_heads).uniform_(0, 16)
-        self.A_log = nn.Parameter(torch.log(A))
+        self.act = nn.SiLU()
 
+        with get_cuda_rng_tracker().fork():
+            # Initialize dt bias so that F.softplus(dt_bias) is between dt_min and dt_max
+            self.dt_bias = nn.Parameter(torch.ones(self.nheads_local_tp))
+            # Our initialization would set all Linear.bias to zero,
+            # need to mark this one as _no_reinit
+            self.dt_bias._no_reinit = True
+            # Just to be explicit. Without this we already don't
+            # put wd on dt_bias because of the check
+            # name.endswith("bias") in param_grouping.py
+            self.dt_bias._no_weight_decay = True
+            setattr(self.dt_bias, "tensor_model_parallel", True)
+
+            # A parameter
+            A = torch.empty(self.nheads_local_tp).uniform_(0, 16)
+            self.A_log = nn.Parameter(torch.log(A))
+            self.A_log._no_weight_decay = True
+            setattr(self.A_log, "tensor_model_parallel", True)
+
+        # D "skip" parameter
+        self.D = nn.Parameter(
+            torch.ones(
+                self.d_inner_local_tp if self.D_has_hdim else self.nheads_local_tp,
+                device=torch.cuda.current_device(),
+            )
+        )  # Keep in fp32
+        self.D._no_weight_decay = True
+        setattr(self.D, "tensor_model_parallel", True)
         if self.rmsnorm:
             assert RMSNormGated is not None
-            self.norm = Qwen3NextRMSNormGated(self.head_v_dim, eps=1e-6)
+            #self.norm = Qwen3NextRMSNormGated(self.head_v_dim, eps=1e-6)
+            self.norm = ExtendedRMSNorm(
+                self.d_inner_local_tp,
+                eps=self.config.layernorm_epsilon,
+                group_size=self.d_inner_local_tp // self.ngroups_local_tp,
+                norm_before_gate=self.norm_before_gate,
+                device=torch.cuda.current_device(),
+                dtype=config.params_dtype,
+            )
 
         # Assume sequence parallelism: input is partitioned along d_inner and
         # output is partitioned along the sequence dimension
         self.out_proj = build_module(
             submodules.out_proj,
-            self.value_dim,
+            self.d_inner,
             self.d_model,
             config=self.config,
             init_method=self.config.output_layer_init_method,
@@ -263,34 +307,23 @@ class GatedDeltaNetMixer(MegatronModule):
             tp_group=self.pg_collection.tp,
         )
 
-    def fix_query_key_value_ordering(self, mixed_qkvz, mixed_ba):
-        """
-        Derives `query`, `key` and `value` tensors from `mixed_qkvz` and `mixed_ba`.
-        """
-
-        new_tensor_shape_qkvz = mixed_qkvz.size()[:-1] + (
-            self.num_k_heads,
-            2 * self.head_k_dim + 2 * self.head_v_dim * self.num_v_heads // self.num_k_heads,
+        # Regarding `conv1d`.{`weight`, `bias`}, `dt_bias`, `A_log`, and `D`: these are the
+        # trainable variables for the current tensor parallel rank, with each tensor parallel rank
+        # having indepdendent trainable variables. All context parallel ranks in a tensor parallel
+        # rank store the same trainable variables, but only use and update their unique/independent
+        # slice of them.
+        self.cp = MambaContextParallel(
+            cp_group=self.pg_collection.cp,
+            d_inner_local_tp=self.d_inner_local_tp,
+            nheads_local_tp=self.nheads_local_tp,
+            ngroups_local_tp=self.ngroups_local_tp,
+            d_state=self.d_state,
+            conv1d_cp1=self.conv1d,
+            dt_bias_cp1=self.dt_bias,
+            A_log_cp1=self.A_log,
+            D_cp1=self.D,
+            D_has_hdim=self.D_has_hdim,
         )
-        new_tensor_shape_ba = mixed_ba.size()[:-1] + (self.num_k_heads, 2 * self.num_v_heads // self.num_k_heads)
-
-        mixed_qkvz = mixed_qkvz.view(*new_tensor_shape_qkvz)
-        mixed_ba = mixed_ba.view(*new_tensor_shape_ba)
-        split_arg_list_qkvz = [
-            self.head_k_dim,
-            self.head_k_dim,
-            (self.num_v_heads // self.num_k_heads * self.head_v_dim),
-            (self.num_v_heads // self.num_k_heads * self.head_v_dim),
-        ]
-        split_arg_list_ba = [self.num_v_heads // self.num_k_heads, self.num_v_heads // self.num_k_heads]
-        query, key, value, z = torch.split(mixed_qkvz, split_arg_list_qkvz, dim=3)
-        b, a = torch.split(mixed_ba, split_arg_list_ba, dim=3)
-        # [b, sq, ng, np/ng * hn] -> [b, sq, np, hn]
-        value = value.reshape(value.size(0), value.size(1), -1, self.head_v_dim)
-        z = z.reshape(z.size(0), z.size(1), -1, self.head_v_dim)
-        b = b.reshape(b.size(0), b.size(1), self.num_v_heads)
-        a = a.reshape(a.size(0), a.size(1), self.num_v_heads)
-        return query, key, value, z, b, a
 
     def forward(
         self,
@@ -299,57 +332,70 @@ class GatedDeltaNetMixer(MegatronModule):
         *,
         inference_params: Optional[BaseInferenceContext] = None,
     ):
-        """
-        hidden_states: (nL, B, D) / (L B D)
-        Returns: same shape as hidden_states
-        """
-        
 
+        
         seq_len, batch_size, dim = hidden_states.shape
 
-        conv_state, ssm_state = None, None
+        zVQKba, _ = self.in_proj(hidden_states)
 
-        #projected_states_qkvz (seqlen, batch_size, dim)
-        projected_states_qkvz, _ = self.in_proj_qkvz(hidden_states)
-        projected_states_ba, _ = self.in_proj_ba(hidden_states)
-        projected_states_qkvz = projected_states_qkvz.permute(1, 0, 2).contiguous()
-        projected_states_ba = projected_states_ba.permute(1, 0, 2).contiguous()
+        #zVQKba = self.cp.pre_conv_ssm(zVQKba)
 
-        query, key, value, z, b, a = self.fix_query_key_value_ordering(projected_states_qkvz, projected_states_ba)
-        query, key, value = (x.reshape(x.shape[0], x.shape[1], -1) for x in (query, key, value))
+        zVQKba = rearrange(zVQKba, "l b d -> b l d").contiguous()
 
-        mixed_qkv = torch.cat((query, key, value), dim=-1)
-        mixed_qkv = mixed_qkv.transpose(1, 2)
-
-        mixed_qkv = causal_conv1d_fn(
-            x=mixed_qkv,
-            weight=self.conv1d.weight.squeeze(1),
-            bias=self.conv1d.bias,
-            activation=self.activation,
-            seq_idx=None,
-        )
-        
-        mixed_qkv = mixed_qkv.transpose(1, 2)
-        query, key, value = torch.split(
-            mixed_qkv,
+        z, VQK, ba = torch.split(
+            zVQKba,
             [
-                self.key_dim,
-                self.key_dim,
-                self.value_dim,
+                self.cp.d_inner_local_tpcp,
+                self.cp.d_inner_local_tpcp + 2 * self.cp.ngroups_local_tpcp * self.d_state,
+                self.cp.nheads_local_tpcp*2,
             ],
             dim=-1,
         )
+
+        VQK = rearrange(VQK, "b l d -> b d l").contiguous()
+
+        VQK = causal_conv1d_fn(
+            x=VQK,
+            weight=rearrange(self.cp.get_conv1d_weight(), "d 1 w -> d w"),
+            bias=self.cp.get_conv1d_bias(),
+            activation=self.activation,
+        )
+        
+
+        VQK= rearrange(VQK, "b d l ->  b l d").contiguous()
+
+        value, query, key = torch.split(
+                VQK,
+                [
+                    self.cp.d_inner_local_tpcp,
+                    self.cp.ngroups_local_tpcp * self.d_state,
+                    self.cp.ngroups_local_tpcp * self.d_state,
+                ],
+                dim=-1,
+        )
+
+        b, a= torch.split(
+                ba,
+                [
+                    self.cp.nheads_local_tpcp,
+                    self.cp.nheads_local_tpcp,
+
+                ],
+                dim=-1,
+        )
+
+        z = z.reshape(z.shape[0], z.shape[1], -1, self.head_k_dim)
         query = query.reshape(query.shape[0], query.shape[1], -1, self.head_k_dim)
         key = key.reshape(key.shape[0], key.shape[1], -1, self.head_k_dim)
         value = value.reshape(value.shape[0], value.shape[1], -1, self.head_v_dim)
 
+
         beta = b.sigmoid()
         # If the model is loaded in fp16, without the .float() here, A might be -inf
         g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
-        if self.num_v_heads // self.num_k_heads > 1:
-            query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
-            key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
-
+        if self.cp.nheads_local_tpcp // self.cp.ngroups_local_tpcp > 1:
+            query = query.repeat_interleave(self.cp.nheads_local_tpcp // self.cp.ngroups_local_tpcp, dim=2)
+            key = key.repeat_interleave(self.cp.nheads_local_tpcp // self.cp.ngroups_local_tpcp, dim=2)
 
         core_attn_out, last_recurrent_state = chunk_gated_delta_rule(
             query,
@@ -361,290 +407,17 @@ class GatedDeltaNetMixer(MegatronModule):
             output_final_state=False,
             use_qk_l2norm_in_kernel=True,
         )
-
-        z_shape_og = z.shape
-        # reshape input data into 2D tensor
-        core_attn_out = core_attn_out.reshape(-1, core_attn_out.shape[-1])
-        z = z.reshape(-1, z.shape[-1])
-        core_attn_out = self.norm(core_attn_out, z)
-        core_attn_out = core_attn_out.reshape(z_shape_og)
-        core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1)
-        core_attn_out = core_attn_out.permute(1, 0, 2).contiguous()
         
-        out, out_bias = self.out_proj(core_attn_out)
-
-        """
-        zxBCdt = self.cp.pre_conv_ssm(zxBCdt)
-
-        # transpose: l b pd --> b l pd
-        zxBCdt = rearrange(zxBCdt, "l b d -> b l d").contiguous()
-
-        # (nheads_local_tpcp)
-        A = -torch.exp(self.cp.get_A_log().float())
-
-        if self.use_mem_eff_path and inference_context is None:
-            assert ssm_state is None
-
-            # TODO(duncan): Can this code be removed?
-            if self.conv1d.bias is not None:
-                self.conv1d.bias.data_ptr()
-
-            y = mamba_split_conv1d_scan_combined(
-                zxBCdt,
-                rearrange(self.cp.get_conv1d_weight(), "d 1 w -> d w"),
-                self.cp.get_conv1d_bias(),
-                self.cp.get_dt_bias().float(),
-                A,
-                D=(
-                    rearrange(self.cp.get_D().float(), "(h p) -> h p", p=self.headdim)
-                    if self.D_has_hdim
-                    else self.cp.get_D()
-                ),
-                chunk_size=self.chunk_size,
-                activation=self.activation,
-                headdim=None if self.D_has_hdim else self.headdim,
-                ngroups=self.cp.ngroups_local_tpcp,
-                norm_before_gate=self.norm_before_gate,
-            )
-
-            y = rearrange(y, "b l d -> l b d").contiguous()
-            y = self.cp.post_conv_ssm(y)
-
-            if self.rmsnorm:
-                y = self.norm(y)
-        else:
-            # This path is always used for the inference prefill phase.
-            # `mamba_split_conv1d_scan_combined`, used in the other branch above, reduces the size
-            # of forward activations stored for backprop, which reduces memory pressure during
-            # training, and does not provide increased speed in the forward direction.
-            z, xBC, dt = torch.split(
-                zxBCdt,
-                [
-                    self.cp.d_inner_local_tpcp,
-                    self.cp.d_inner_local_tpcp + 2 * self.cp.ngroups_local_tpcp * self.d_state,
-                    self.cp.nheads_local_tpcp,
-                ],
-                dim=-1,
-            )
-
-            # transpose: b l pd --> b pd l
-            xBC = rearrange(xBC, "b l d -> b d l").contiguous()
-
-            # Compute short convolution
-            if conv_state is not None:
-                # If we just take x[:, :, -self.d_conv :], it will error if seqlen < self.d_conv
-                # Instead F.pad will pad with zeros if seqlen < self.d_conv, and truncate otherwise.
-                conv_state.copy_(
-                    F.pad(xBC, (self.d_conv - xBC.shape[-1], 0))
-                )  # Update state (B D W)
-
-            seqlen = xBC.size(2)
-            if causal_conv1d_fn is None:
-                xBC = self.act(self.cp.conv1d(xBC)[..., :seqlen])
-            else:
-                assert self.activation in ["silu", "swish"]
-                xBC = causal_conv1d_fn(
-                    x=xBC,
-                    weight=rearrange(self.cp.get_conv1d_weight(), "d 1 w -> d w"),
-                    bias=self.cp.get_conv1d_bias(),
-                    activation=self.activation,
-                )
-
-            # transpose b pd l --> b l pd
-            xBC = rearrange(xBC, "b d l ->  b l d").contiguous()
-
-            x, B, C = torch.split(
-                xBC,
-                [
-                    self.cp.d_inner_local_tpcp,
-                    self.cp.ngroups_local_tpcp * self.d_state,
-                    self.cp.ngroups_local_tpcp * self.d_state,
-                ],
-                dim=-1,
-            )
-
-            # TODO Vijay: fuse most of the transposes with the GEMMS
-            x = rearrange(x, "b l (h p) -> b l h p", p=self.headdim).contiguous()
-            dt = dt.contiguous()
-            B = rearrange(B, "b l (g n) -> b l g n", n=self.d_state).contiguous()
-            C = rearrange(C, "b l (g n) -> b l g n", n=self.d_state).contiguous()
-            z = rearrange(z, "b l (h p) -> b l h p", p=self.headdim).contiguous()
-
-            # If `rmsnorm == False`, then the norm inside `mamba_chunk_scan_combined` will be used.
-            # In this case, if `cp_size > 1` then that norm could be performed on less heads than if
-            # `cp_size == 1` (groups of heads can be sharded across CP ranks), which would be
-            # mathematically incorrect, and potentially arithmetically unstable.
-            assert (
-                self.cp.cp_size == 1 or self.rmsnorm
-            ), "Context parallel not supported for use_mem_eff_path==False and rmsnorm==False"
-
-            y = mamba_chunk_scan_combined(
-                x,
-                dt,
-                A,
-                B,
-                C,
-                self.chunk_size,
-                D=(
-                    rearrange(self.cp.get_D().float(), "(h p) -> h p", p=self.headdim)
-                    if self.D_has_hdim
-                    else self.cp.get_D()
-                ),
-                z=z if not self.rmsnorm else None,
-                dt_bias=self.cp.get_dt_bias().float(),
-                dt_softplus=True,
-                return_final_states=ssm_state is not None,
-            )
-
-            if ssm_state is not None:
-                y, last_state = y
-                ssm_state.copy_(last_state)
-
-            y = rearrange(y, "b l h p -> l b (h p)").contiguous()
-            y = self.cp.post_conv_ssm(y)
-
-            if self.rmsnorm:
-                z = rearrange(z, "b l h p -> l b (h p)").contiguous()
-                z = self.cp.post_conv_ssm(z)
-                y = self.norm(y, z)
-
-        out, out_bias = self.out_proj(y)
-        """
-        
-        return out, out_bias
-
-    def step(self, hidden_states, conv_state, ssm_state):
-        """
-        Performs inference step for decoding
-        """
-        # assert self.ngroups_local_tp == 1, "Only support ngroups=1 for inference for now"
-        dtype = hidden_states.dtype
-        assert hidden_states.shape[0] == 1, "Only support decoding with 1 token at a time for now"
-
-        # l b d --> b d
-        hidden_states = hidden_states.squeeze(0)
-
-        #  b d_model --> b p(2d)
-        zxBCdt, _ = self.in_proj(hidden_states)
-
-        assert self.cp.cp_size == 1, "Context parallel not supported for Mamba inferenece decode"
-
-        z, xBC, dt = torch.split(
-            zxBCdt,
-            [
-                self.d_inner_local_tp,
-                self.d_inner_local_tp + 2 * self.ngroups_local_tp * self.d_state,
-                self.nheads_local_tp,
-            ],
-            dim=-1,
-        )
-
-        # Conv step
-        if causal_conv1d_update is None:
-            conv_state.copy_(torch.roll(conv_state, shifts=-1, dims=-1))  # Update state (B D W)
-            conv_state[:, :, -1] = xBC
-            xBC = torch.sum(
-                conv_state * rearrange(self.conv1d.weight, "d 1 w -> d w"), dim=-1
-            )  # (B D)
-            if self.conv1d.bias is not None:
-                xBC = xBC + self.conv1d.bias
-            xBC = self.act(xBC).to(dtype=dtype)
-        else:
-            xBC = causal_conv1d_update(
-                xBC,
-                conv_state,
-                rearrange(self.conv1d.weight, "d 1 w -> d w"),
-                self.conv1d.bias,
-                self.activation,
-            )
-
-        x, B, C = torch.split(
-            xBC,
-            [
-                self.d_inner_local_tp,
-                self.ngroups_local_tp * self.d_state,
-                self.ngroups_local_tp * self.d_state,
-            ],
-            dim=-1,
-        )
-        A = -torch.exp(self.A_log.float())
-
-        # SSM step
-        if selective_state_update is None:
-            if self.ngroups_local_tp > 1:
-                B = rearrange(B, "b (g n) -> b g n", n=self.d_state)
-                C = rearrange(C, "b (g n) -> b g n", n=self.d_state)
-                B = repeat(
-                    B, "b g n -> b (g h) n", h=self.d_inner_local_tp // self.ngroups_local_tp
-                )
-                C = repeat(
-                    C, "b g n -> b (g h) n", h=self.d_inner_local_tp // self.ngroups_local_tp
-                )
-
-                dt = repeat(dt, "b h -> b (h p)", p=self.headdim)
-                dt_bias = repeat(self.dt_bias, "h -> (h p)", p=self.headdim)
-                A = repeat(A, "h -> (h p) n", p=self.headdim, n=self.d_state)
-                D = repeat(self.D, "h -> (h p)", p=self.headdim)
-
-                dt = F.softplus(dt + dt_bias.to(dtype=dt.dtype))
-                dA = torch.exp(torch.einsum("bd,dn->bdn", dt, A))
-
-                dB_x = torch.einsum("bd,bdn,bd->bdn", dt, B, x)
-                ssm_state.copy_(
-                    ssm_state * rearrange(dA, "b (h p) n -> b h p n", p=self.headdim)
-                    + rearrange(dB_x, "b (h p) n -> b h p n", p=self.headdim)
-                )
-
-                y = torch.einsum(
-                    "bdn,bdn->bd",
-                    rearrange(ssm_state.to(dtype), "b h p n -> b (h p) n", p=self.headdim),
-                    C,
-                )
-                y = y + D.to(dtype) * x
-                if not self.rmsnorm:
-                    y = y * self.act(z)  # (B D)
-            else:
-                # Discretize A and B (b (g n))
-                dt = F.softplus(dt + self.dt_bias.to(dtype=dt.dtype))  # (batch, nheads)
-                dA = torch.exp(dt * A)
-                x = rearrange(x, "b (h p) -> b h p", p=self.headdim)
-                dBx = torch.einsum("bh,bn,bhp->bhpn", dt, B, x)
-                ssm_state.copy_(ssm_state * rearrange(dA, "b h -> b h 1 1") + dBx)
-                y = torch.einsum("bhpn,bn->bhp", ssm_state.to(dtype), C)
-                y = y + rearrange(self.D.to(dtype), "h -> h 1") * x
-                y = rearrange(y, "b h p -> b (h p)")
-                if not self.rmsnorm:
-                    y = y * self.act(z)  # (B D)
-        else:
-            A = repeat(A, "h -> h p n", p=self.headdim, n=self.d_state).to(dtype=torch.float32)
-            dt = repeat(dt, "b h -> b h p", p=self.headdim)
-            dt_bias = repeat(self.dt_bias, "h -> h p", p=self.headdim)
-            D = repeat(self.D, "h -> h p", p=self.headdim)
-            B = rearrange(B, "b (g n) -> b g n", g=self.ngroups_local_tp)
-            C = rearrange(C, "b (g n) -> b g n", g=self.ngroups_local_tp)
-            x_reshaped = rearrange(x, "b (h p) -> b h p", p=self.headdim)
-            if not self.rmsnorm:
-                z = rearrange(z, "b (h p) -> b h p", p=self.headdim)
-            y = selective_state_update(
-                ssm_state,
-                x_reshaped,
-                dt,
-                A,
-                B,
-                C,
-                D,
-                z=z if not self.rmsnorm else None,
-                dt_bias=dt_bias,
-                dt_softplus=True,
-            )
-            y = rearrange(y, "b h p -> b (h p)")
+        y = rearrange(core_attn_out, "b l h p -> l b (h p)").contiguous()
+        #y = self.cp.post_conv_ssm(y)
 
         if self.rmsnorm:
+            z = rearrange(z, "b l h p -> l b (h p)").contiguous()
+            #z = self.cp.post_conv_ssm(z)
             y = self.norm(y, z)
-
-        # b pd --> b d
         out, out_bias = self.out_proj(y)
-        return out.unsqueeze(0), out_bias, conv_state, ssm_state
+
+        return out, out_bias
 
     def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None):
         """
@@ -847,4 +620,3 @@ def _split_tensor_factory(
     return ShardedTensorFactory(
         orig_sh_ten.key, orig_sh_ten.data, sh_ten_build_fn, sh_ten_merge_fn, orig_sh_ten.replica_id
     )
-
