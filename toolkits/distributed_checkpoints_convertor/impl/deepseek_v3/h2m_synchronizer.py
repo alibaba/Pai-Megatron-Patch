@@ -40,7 +40,7 @@ class HF2MGSynchronizer(_HF2MGSynchronizer):
     def sync_params(self):
         super().sync_params()
         if self._mgmodel.mtp_process:
-            self.set_preprocess_state()
+            self.set_preprocess_state(self._mgmodel, self._hfmodel)
             for mtp_layer_id in range(self.args.mtp_num_layers):
                 hf_mtp_layer_id = self.hf_mtp_offset + mtp_layer_id
                 self.copy(

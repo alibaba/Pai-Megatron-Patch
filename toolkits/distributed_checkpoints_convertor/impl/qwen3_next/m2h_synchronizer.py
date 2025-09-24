@@ -135,7 +135,8 @@ class MG2HFSynchronizer(_MG2HFSynchronizer):
             v_proj_weight
         ) = torch.split(attn_proj_weight, [2*num_querys_per_group*dim, dim, dim], dim=1)
 
-        self.copy(q_proj_weight, hf_attn.q_proj.weight, param_type=ParamType.QKV_W)
+        q_proj_weight = q_proj_weight.reshape(num_query_groups // tp, 2, num_querys_per_group * dim, -1)
+        self.copy(q_proj_weight, hf_attn.q_proj.weight, param_type=ParamType.QGKV_W)
         self.copy(k_proj_weight, hf_attn.k_proj.weight, param_type=ParamType.QKV_W)
         self.copy(v_proj_weight, hf_attn.v_proj.weight, param_type=ParamType.QKV_W)
 

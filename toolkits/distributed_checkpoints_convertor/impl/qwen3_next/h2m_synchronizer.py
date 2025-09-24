@@ -126,7 +126,7 @@ class HF2MGSynchronizer(_HF2MGSynchronizer):
             attn_proj_weight = attn.linear_qgkv.weight
         else:
             attn_proj_weight = torch.cat([
-                self.load_tensor(hf_attn.q_proj.weight).reshape((num_query_groups, 2*num_querys_per_group*dim, -1)),
+                self.load_tensor(hf_attn.q_proj.weight).reshape((2, num_query_groups, num_querys_per_group*dim, -1)).transpose(0, 1).flatten(1, 2),
                 self.load_tensor(hf_attn.k_proj.weight).reshape((num_query_groups, dim, -1)),
                 self.load_tensor(hf_attn.v_proj.weight).reshape((num_query_groups, dim, -1)),
             ], dim=1)

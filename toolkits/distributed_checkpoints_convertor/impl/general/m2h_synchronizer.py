@@ -653,6 +653,13 @@ class MG2HFSynchronizer(BaseSynchronizer):
                 return res.flatten()
             return res.flatten(0, 1)
 
+        def merge_qgkv(is_bias, tensor_dict):
+            res = merge_along_axis(0, tensor_dict)
+            if is_bias:
+                assert res.shape[-1] == 1
+                return res.transpose(0, 1).flatten()
+            return res.transpose(0, 1).flatten(0, 2)
+
         merge_func_mapping = {
             ParamType.MOE_COLUMN: partial(merge_along_axis, 0, is_expert=True),
             ParamType.MOE_ROW: partial(merge_along_axis, 1, is_expert=True),
@@ -661,5 +668,6 @@ class MG2HFSynchronizer(BaseSynchronizer):
             ParamType.QKV_W: partial(merge_qkv, False),
             ParamType.QKV_B: partial(merge_qkv, True),
             ParamType.UNIQUE: no_merge_func,
+            ParamType.QGKV_W: partial(merge_qgkv, False)
         }
         return merge_func_mapping[merge_type](tensor_dict)
