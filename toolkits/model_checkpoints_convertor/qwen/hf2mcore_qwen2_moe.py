@@ -460,7 +460,7 @@ def convert_checkpoint_from_transformers_to_megatron(hfmodel: Qwen2MoeForCausalL
     elif args.bf16:
         mgmodel = mgmodel.bfloat16()
 
-    head_dim = hidden_size // args.num_attention_heads if args.kv_channels is None else args.kv_channels
+    head_dim = args.hidden_size // args.num_attention_heads if args.kv_channels is None else args.kv_channels
     group_per_split = args.num_query_groups // args.target_tensor_model_parallel_size
 
     with torch.no_grad():
