@@ -1,3 +1,16 @@
+# Copyright (c) 2025 Alibaba PAI Team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import os
 import shutil
 import torch
@@ -84,6 +97,7 @@ class HF2MGSynchronizer(BaseSynchronizer):
             ParamType.MOE_ROW: lambda x: torch.chunk(self.load_tensor(x), tp_size, dim=1)[tp_rank],
             # the data of following type is loaded by caller
             ParamType.MOE_GATE_UP: lambda x: torch.chunk(x, tp_size, dim=1)[tp_rank].flatten(0, 1),
+            ParamType.MERGED_LINEAR: lambda lst: torch.cat([torch.chunk(x, tp_size, dim=0)[tp_rank].flatten(0, 1) for x in lst], dim=0)
         }
         if self.dryrun:
             return dst_tensor.data.copy_(dst_tensor.clone())
@@ -97,12 +111,18 @@ class HF2MGSynchronizer(BaseSynchronizer):
             param_type=ParamType.COLUMN
         )
 
-    def set_postprocess_state(self, mg_model, hf_model):
+    def set_postprocess_state(self, mg_model, hf_model, is_mamba: bool=False):
         '''Set output layer & norm params.'''
-        self.copy(
-            hf_model.model.norm.weight, 
-            mg_model.decoder.final_layernorm.weight, 
-        )
+        if is_mamba:
+            self.copy(
+                hf_model.model.norm.weight, 
+                mg_model.decoder.final_norm.weight, 
+            )
+        else:
+            self.copy(
+                hf_model.model.norm.weight, 
+                mg_model.decoder.final_layernorm.weight, 
+            )
         if mg_model.share_embeddings_and_output_weights:
             output_layer_weight = mg_model.shared_embedding_or_output_weight() 
         else:
@@ -266,7 +286,12 @@ class HF2MGSynchronizer(BaseSynchronizer):
         if moe.shared_experts is not None:
             if moe.shared_experts.use_shared_expert_gate:
                 self.copy(hf_moe.shared_expert_gate.weight, moe.shared_experts.gate_weight)
-            self.set_mlp_state(moe.shared_experts, hf_moe.shared_experts)
+            
+            try:
+                hf_shared_expert = hf_moe.shared_experts
+            except AttributeError:
+                hf_shared_expert = hf_moe.shared_expert
+            self.set_mlp_state(moe.shared_experts, hf_shared_expert)
 
     def set_layer_state(self, layer, hf_layer):
         '''Set transformer layer params.'''

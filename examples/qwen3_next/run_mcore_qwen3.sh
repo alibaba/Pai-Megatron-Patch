@@ -85,7 +85,7 @@ if [ $MODEL_SIZE = A3B ]; then
     INTERMEDIATE_SIZE=5120
     MOE_INTERMEDIATE_SIZE=512
     MAX_POSITION_EMBEDDINGS=262144
-    EXTRA_VOCAB_SIZE=421 # 293
+    EXTRA_VOCAB_SIZE=293 # 293
     NUM_KEY_VALUE_HEADS=2 # ? DeltaNet with GQA?
     ROPE_THETA=10000000
     NUM_EXPERTS=512
@@ -365,7 +365,7 @@ megatron_options="  \
         --transformer-impl transformer_engine \
         --cross-entropy-loss-fusion \
         --qk-layernorm \
-        --kv-channels 128 \
+        --kv-channels 256 \
         --rotary-percent 0.25
 
         "

@@ -1,3 +1,16 @@
+# Copyright (c) 2025 Alibaba PAI Team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import torch
 
 from transformers import AutoConfig
@@ -27,7 +40,7 @@ class HF2MGSynchronizer(_HF2MGSynchronizer):
     def sync_params(self):
         super().sync_params()
         if self._mgmodel.mtp_process:
-            self.set_preprocess_state()
+            self.set_preprocess_state(self._mgmodel, self._hfmodel)
             for mtp_layer_id in range(self.args.mtp_num_layers):
                 hf_mtp_layer_id = self.hf_mtp_offset + mtp_layer_id
                 self.copy(
