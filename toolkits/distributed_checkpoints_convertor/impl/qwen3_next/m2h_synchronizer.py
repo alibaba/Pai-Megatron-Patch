@@ -23,6 +23,7 @@ class MG2HFSynchronizer(_MG2HFSynchronizer):
     def __init__(self, load_dir, model_provider_func=None):
         super().__init__(load_dir, model_provider_func)
         self.layout = self.get_hybrid_layout()
+        assert self.tp_size == 1, "Currently MCore2HF conversion for Qwen3-Next is only available with TP 1."
 
     def get_hybrid_layout(self) -> str:
         assert self.args.hybrid_override_pattern is not None
@@ -105,10 +106,11 @@ class MG2HFSynchronizer(_MG2HFSynchronizer):
         self.copy(mixer.dt_bias, hf_mixer.dt_bias, param_type=ParamType.COLUMN)
         self.copy(mixer.A_log, hf_mixer.A_log, param_type=ParamType.COLUMN)
 
+        # TODO: support TP > 1 if needed
         split_size_list = [
-            Nv * Dv // self.tp_size, 
-            Nk * Dk // self.tp_size, 
-            Nk * Dk // self.tp_size, 
+            Nv * Dv, 
+            Nk * Dk, 
+            Nk * Dk, 
         ]
         conv_v, conv_q, conv_k = torch.split(
             mixer.conv1d.weight, 
@@ -116,12 +118,12 @@ class MG2HFSynchronizer(_MG2HFSynchronizer):
             dim=0
         )
         conv1d_weight = torch.cat([
-            conv_q.reshape(Nk // self.tp_size, Dk, -1), 
-            conv_k.reshape(Nk // self.tp_size, Dk, -1), 
-            conv_v.reshape(Nk // self.tp_size, Dv * Nv // Nk, -1), 
-        ], dim=1)
-
-        self.copy(conv1d_weight, hf_mixer.conv1d.weight, param_type=ParamType.QKV_W)
+            conv_q, 
+            conv_k, 
+            conv_v, 
+        ], dim=0)
+        self.copy(conv1d_weight, hf_mixer.conv1d.weight, param_type=ParamType.UNIQUE)
+        
         self.copy(mixer.norm.weight, hf_mixer.norm.weight, param_type=ParamType.UNIQUE)
         self.copy(mixer.out_proj.weight, hf_mixer.out_proj.weight, param_type=ParamType.ROW)
 
