@@ -23,7 +23,6 @@ class MG2HFSynchronizer(_MG2HFSynchronizer):
     def __init__(self, load_dir, model_provider_func=None):
         super().__init__(load_dir, model_provider_func)
         self.layout = self.get_hybrid_layout()
-        assert self.tp_size == 1, "MCore2HF conversion of DeltaNet when TP > 1 is not implemented!"
 
     def get_hybrid_layout(self) -> str:
         assert self.args.hybrid_override_pattern is not None
@@ -57,7 +56,7 @@ class MG2HFSynchronizer(_MG2HFSynchronizer):
             if self.layout[global_mg_layer_id] == 'M':
                 # Mamba layer
                 self.set_mamba_layer_state(layer.mixer, hf_layer.linear_attn)
-                self.copy(layer.norm.weight, hf_layer.input_layernorm.weight)
+                self.copy(layer.mixer.in_proj.layer_norm_weight, hf_layer.input_layernorm.weight)
             elif self.layout[global_mg_layer_id] == '-':
                 # transformer_layer of MLP
                 self.set_moe_layer_state(layer.mlp, hf_layer.mlp)
@@ -70,29 +69,59 @@ class MG2HFSynchronizer(_MG2HFSynchronizer):
                 raise ValueError(f"Unrecognized layer type {self.layout[global_mg_layer_id]} in {self.layout}")
 
     def set_mamba_layer_state(self, mixer, hf_mixer):
-        # NOTE: qkvzba is hard to implement when TP > 1, we write a simple version here.
+        Nk, Nv, Dk, Dv = (
+            hf_mixer.num_k_heads,
+            hf_mixer.num_v_heads,
+            hf_mixer.head_k_dim,
+            hf_mixer.head_v_dim
+        )
         split_size_list = [
-            hf_mixer.value_dim, 
-            hf_mixer.value_dim,
-            hf_mixer.key_dim, 
-            hf_mixer.key_dim, 
-            hf_mixer.num_v_heads,
-            hf_mixer.num_v_heads,
+            Dv * Nv // self.tp_size, 
+            Dv * Nv // self.tp_size, 
+            Dk * Nk // self.tp_size, 
+            Dk * Nk // self.tp_size, 
+            Nv // self.tp_size, 
+            Nv // self.tp_size
         ]
-        z, v, k, q, b, a = torch.split(
+        z, v, q, k, b, a = torch.split(
             mixer.in_proj.weight,
             split_size_list,
             dim=0
         )
-        in_proj_qkvz_weight = torch.cat([q, k, v, z], dim=0)
-        in_proj_ba_weight = torch.cat([b, a], dim=0)
-        self.copy(in_proj_qkvz_weight, hf_mixer.in_proj_qkvz.weight, param_type=ParamType.UNIQUE)
-        self.copy(in_proj_ba_weight, hf_mixer.in_proj_ba.weight, param_type=ParamType.UNIQUE)
+        in_proj_qkvz_weight = torch.cat([
+            q.reshape(Nk // self.tp_size, Dk, -1), 
+            k.reshape(Nk // self.tp_size, Dk, -1), 
+            v.reshape(Nk // self.tp_size, Dv * Nv // Nk, -1), 
+            z.reshape(Nk // self.tp_size, Dv * Nv // Nk, -1), 
+        ], dim=1)
+        self.copy(in_proj_qkvz_weight, hf_mixer.in_proj_qkvz.weight, param_type=ParamType.QKV_W)
 
+        in_proj_ba_weight = torch.cat([
+            b.reshape(Nk // self.tp_size, Nv // Nk, -1), 
+            a.reshape(Nk // self.tp_size, Nv // Nk, -1), 
+        ], dim=1)
+        self.copy(in_proj_ba_weight, hf_mixer.in_proj_ba.weight, param_type=ParamType.QKV_W)
 
         self.copy(mixer.dt_bias, hf_mixer.dt_bias, param_type=ParamType.COLUMN)
         self.copy(mixer.A_log, hf_mixer.A_log, param_type=ParamType.COLUMN)
-        self.copy(mixer.conv1d.weight, hf_mixer.conv1d.weight, param_type=ParamType.COLUMN)
+
+        split_size_list = [
+            Nv * Dv // self.tp_size, 
+            Nk * Dk // self.tp_size, 
+            Nk * Dk // self.tp_size, 
+        ]
+        conv_v, conv_q, conv_k = torch.split(
+            mixer.conv1d.weight, 
+            split_size_or_sections=split_size_list, 
+            dim=0
+        )
+        conv1d_weight = torch.cat([
+            conv_q.reshape(Nk // self.tp_size, Dk, -1), 
+            conv_k.reshape(Nk // self.tp_size, Dk, -1), 
+            conv_v.reshape(Nk // self.tp_size, Dv * Nv // Nk, -1), 
+        ], dim=1)
+
+        self.copy(conv1d_weight, hf_mixer.conv1d.weight, param_type=ParamType.QKV_W)
         self.copy(mixer.norm.weight, hf_mixer.norm.weight, param_type=ParamType.UNIQUE)
         self.copy(mixer.out_proj.weight, hf_mixer.out_proj.weight, param_type=ParamType.ROW)
 
@@ -135,8 +164,8 @@ class MG2HFSynchronizer(_MG2HFSynchronizer):
             v_proj_weight
         ) = torch.split(attn_proj_weight, [2*num_querys_per_group*dim, dim, dim], dim=1)
 
-        q_proj_weight = q_proj_weight.reshape(num_query_groups // tp, 2, num_querys_per_group * dim, -1)
-        self.copy(q_proj_weight, hf_attn.q_proj.weight, param_type=ParamType.QGKV_W)
+        q_proj_weight = q_proj_weight.reshape(num_query_groups // tp, 2, num_querys_per_group, dim, -1).transpose(1, 2).flatten(1, 3)
+        self.copy(q_proj_weight, hf_attn.q_proj.weight, param_type=ParamType.QKV_W)
         self.copy(k_proj_weight, hf_attn.k_proj.weight, param_type=ParamType.QKV_W)
         self.copy(v_proj_weight, hf_attn.v_proj.weight, param_type=ParamType.QKV_W)
 

@@ -97,7 +97,7 @@ class HF2MGSynchronizer(BaseSynchronizer):
             ParamType.MOE_ROW: lambda x: torch.chunk(self.load_tensor(x), tp_size, dim=1)[tp_rank],
             # the data of following type is loaded by caller
             ParamType.MOE_GATE_UP: lambda x: torch.chunk(x, tp_size, dim=1)[tp_rank].flatten(0, 1),
-            ParamType.MERGED_LINEAR: lambda lst: torch.cat([torch.chunk(x, tp_size, dim=0)[tp_rank] for x in lst], dim=0)
+            ParamType.MERGED_LINEAR: lambda lst: torch.cat([torch.chunk(x, tp_size, dim=0)[tp_rank].flatten(0, 1) for x in lst], dim=0)
         }
         if self.dryrun:
             return dst_tensor.data.copy_(dst_tensor.clone())
