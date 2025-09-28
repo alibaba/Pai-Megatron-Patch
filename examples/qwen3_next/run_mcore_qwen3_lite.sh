@@ -13,9 +13,9 @@ GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU:-$(python -c "import torch; pr
 [ -z "$MASTER_ADDR" ] && export MASTER_ADDR=localhost
 [ -z "$MASTER_PORT" ] && export MASTER_PORT=${MASTER_PORT:-$(shuf -n 1 -i 10000-65535)}
 
-TP=1
-PP=8
-EP=4
+TP=2
+PP=4
+EP=8
 ETP=1
 CP=1
 MBS=1
@@ -139,7 +139,7 @@ INFRA_ARGS=(
     --expert-tensor-parallel-size ${ETP}
     --use-distributed-optimizer
     --sequence-parallel
-    --attention-backend flash
+    --attention-backend auto
     --cross-entropy-loss-fusion
     --cross-entropy-fusion-impl te
     --moe-token-dispatcher-type alltoall
