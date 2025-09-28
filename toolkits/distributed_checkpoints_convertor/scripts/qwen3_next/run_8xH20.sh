@@ -122,7 +122,7 @@ if [ $MODEL_SIZE = A3B ]; then
         --num-query-groups 2
         --moe-shared-expert-intermediate-size 512 
     )
-    if [ -z  ${MODEL_PARALLEL_ARGS} ]; then
+    if [ -z  "$MODEL_PARALLEL_ARGS" ]; then
         MODEL_PARALLEL_ARGS=(
             --tensor-model-parallel-size 1
             --pipeline-model-parallel-size 1

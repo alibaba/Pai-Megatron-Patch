@@ -135,7 +135,7 @@ TRAINING_ARGS=(
     --lr-decay-iters 430000 
 )
 
-if [ -z  ${MODEL_PARALLEL_ARGS} ]; then
+if [ -z  "$MODEL_PARALLEL_ARGS" ]; then
     MODEL_PARALLEL_ARGS=(
         --tensor-model-parallel-size 1
         --pipeline-model-parallel-size 1

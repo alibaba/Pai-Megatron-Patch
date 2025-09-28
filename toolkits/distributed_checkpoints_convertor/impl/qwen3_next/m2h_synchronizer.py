@@ -48,7 +48,12 @@ class MG2HFSynchronizer(_MG2HFSynchronizer):
 
         for mg_layer_id, global_mg_layer_id in self._build_pipeline_parallel_mapping().items():
             hf_layer_id  = global_mg_layer_id // 2
-            if self.tp_rank == 0 and self.ep_rank == 0 and self.etp_rank == 0:
+            if (
+                self.tp_rank == 0 and 
+                self.ep_rank == 0 and 
+                self.etp_rank == 0 and
+                global_mg_layer_id % 2 == 0
+            ):
                 logging.info(f"Converting layer {hf_layer_id}")
 
             layer = mg_model.decoder.layers[mg_layer_id]
