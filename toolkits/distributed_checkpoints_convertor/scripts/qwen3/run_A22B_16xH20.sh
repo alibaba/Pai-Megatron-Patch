@@ -116,7 +116,7 @@ if [ $MODEL_SIZE = A22B ]; then
         --num-experts 128
         --num-query-groups 4
     )
-    if [ -z  ${MODEL_PARALLEL_ARGS} ]; then
+    if [ -z  "$MODEL_PARALLEL_ARGS" ]; then
         MODEL_PARALLEL_ARGS=(
             --tensor-model-parallel-size 1
             --pipeline-model-parallel-size 2

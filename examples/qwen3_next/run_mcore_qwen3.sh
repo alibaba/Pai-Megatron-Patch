@@ -7,7 +7,6 @@ export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatro
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true # for PyTorch >= 2.6
 
-# export CUDA_LAUNCH_BLOCKING=1
 
 if [ $ENV = dsw ]; then
     MASTER_ADDR=localhost
@@ -15,7 +14,6 @@ if [ $ENV = dsw ]; then
     NNODES=1
     NODE_RANK=0
     GPUS_PER_NODE=`python -c "import torch; print(torch.cuda.device_count())"`
-    #GPUS_PER_NODE=2
 elif [ $ENV = dlc ]; then
     NNODES=${WORLD_SIZE}
     NODE_RANK=${RANK}
@@ -80,13 +78,12 @@ fi
 if [ $MODEL_SIZE = A3B ]; then
     HIDDEN_SIZE=2048
     NUM_ATTENTION_HEADS=16
-    # NUM_LAYERS=96 # 48 * 2, each layer in huggingface equals to one attention layer + one mlp layer
     NUM_LAYERS=96
     INTERMEDIATE_SIZE=5120
     MOE_INTERMEDIATE_SIZE=512
     MAX_POSITION_EMBEDDINGS=262144
-    EXTRA_VOCAB_SIZE=421 # 293
-    NUM_KEY_VALUE_HEADS=2 # ? DeltaNet with GQA?
+    EXTRA_VOCAB_SIZE=293
+    NUM_KEY_VALUE_HEADS=2
     ROPE_THETA=10000000
     NUM_EXPERTS=512
     ROUTER_TOPK=10
@@ -365,16 +362,10 @@ megatron_options="  \
         --transformer-impl transformer_engine \
         --cross-entropy-loss-fusion \
         --qk-layernorm \
-        --kv-channels 128 \
-        --rotary-percent 0.25
-
+        --kv-channels 256 \
+        --rotary-percent 0.25 \
+        --apply-layernorm-1p
         "
-
-#        --add-qkv-bias \ # no qkv bias
-#        --no-rope-fusion \
-#        --no-bias-swiglu-fusion \
-#       --decoder-first-pipeline-num-layers 10
-#         --te-rng-tracker \         --external-cuda-graph \        --cuda-graph-scope attn
 
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen3_next.py

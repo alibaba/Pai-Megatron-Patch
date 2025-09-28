@@ -74,36 +74,6 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class ExtendedRMSNorm(RMSNormGated):
-    """
-    RMSNormGated with sharded state dict.
-    """
-
-    def sharded_state_dict(self, prefix="", sharded_offsets=(), metadata=None):
-        """Sharding along axis 0, bias not sharded"""
-        state_dict = self.state_dict(prefix="", keep_vars=True)
-        return make_sharded_tensors_for_checkpoint(
-            state_dict, prefix, {"weight": 0}, sharded_offsets
-        )
-
-class Qwen3NextRMSNormGated(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6, **kwargs):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states, gate=None):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        # Norm before gate
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        hidden_states = self.weight * hidden_states.to(input_dtype)
-        hidden_states = hidden_states * F.silu(gate.to(torch.float32))
-
-        return hidden_states.to(input_dtype)
-
-
 @dataclass
 class MambaMixerSubmodules:
     """
@@ -156,14 +126,14 @@ class GatedDeltaNetMixer(MegatronModule):
         A_init_range=(1, 16),
         D_has_hdim=False,
         rmsnorm=True,
-        norm_before_gate=False,
+        norm_before_gate=True,
         dt_min=0.001,
         dt_max=0.1,
         dt_init="random",
         dt_scale=1.0,
         dt_init_floor=1e-4,
         bias=False,
-        conv_bias=True,
+        conv_bias=False,
         # Fused kernel and sharding options
         chunk_size=128,
         layer_number=None,
@@ -244,7 +214,8 @@ class GatedDeltaNetMixer(MegatronModule):
                 dtype=config.params_dtype,
             )
             setattr(self.conv1d.weight, "tensor_model_parallel", True)
-            setattr(self.conv1d.bias, "tensor_model_parallel", True)
+            if conv_bias:
+                setattr(self.conv1d.bias, "tensor_model_parallel", True)
 
             if self.conv_init is not None:
                 nn.init.uniform_(self.conv1d.weight, -self.conv_init, self.conv_init)
@@ -271,22 +242,14 @@ class GatedDeltaNetMixer(MegatronModule):
             setattr(self.A_log, "tensor_model_parallel", True)
 
         # D "skip" parameter
-        self.D = nn.Parameter(
-            torch.ones(
-                self.d_inner_local_tp if self.D_has_hdim else self.nheads_local_tp,
-                device=torch.cuda.current_device(),
-            )
-        )  # Keep in fp32
-        self.D._no_weight_decay = True
-        setattr(self.D, "tensor_model_parallel", True)
+        self.D = None
+
         if self.rmsnorm:
             assert RMSNormGated is not None
-            #self.norm = Qwen3NextRMSNormGated(self.head_v_dim, eps=1e-6)
-            self.norm = ExtendedRMSNorm(
-                self.d_inner_local_tp,
+            self.norm = RMSNormGated(
+                self.config.head_v_dim,
                 eps=self.config.layernorm_epsilon,
-                group_size=self.d_inner_local_tp // self.ngroups_local_tp,
-                norm_before_gate=self.norm_before_gate,
+                norm_before_gate=self.norm_before_gate, # True
                 device=torch.cuda.current_device(),
                 dtype=config.params_dtype,
             )
@@ -407,14 +370,14 @@ class GatedDeltaNetMixer(MegatronModule):
             output_final_state=False,
             use_qk_l2norm_in_kernel=True,
         )
-        
+
+        if self.rmsnorm:
+            #z = self.cp.post_conv_ssm(z)
+            core_attn_out = self.norm(core_attn_out, z)
+
         y = rearrange(core_attn_out, "b l h p -> l b (h p)").contiguous()
         #y = self.cp.post_conv_ssm(y)
 
-        if self.rmsnorm:
-            z = rearrange(z, "b l h p -> l b (h p)").contiguous()
-            #z = self.cp.post_conv_ssm(z)
-            y = self.norm(y, z)
         out, out_bias = self.out_proj(y)
 
         return out, out_bias
@@ -517,7 +480,7 @@ class GatedDeltaNetMixer(MegatronModule):
         in_proj_dim = (
             self.d_inner_local_tp * 2
             + 2 * self.ngroups_local_tp * self.d_state
-            + self.nheads_local_tp
+            + self.nheads_local_tp * 2
         )
         assert sharded_state_dict[f"{prefix}in_proj.weight"].data.size(0) == in_proj_dim, (
             in_proj_dim,
@@ -532,8 +495,9 @@ class GatedDeltaNetMixer(MegatronModule):
                 self.ngroups_local_tp * self.d_state,
                 self.ngroups_local_tp * self.d_state,
                 self.nheads_local_tp,
+                self.nheads_local_tp,
             ],
-            ["z", "x", "B", "C", "dt"],
+            ["z", "V", "Q", "K", "b", "a"],
             0,
         )
 
@@ -542,12 +506,9 @@ class GatedDeltaNetMixer(MegatronModule):
             conv_dim,
             sharded_state_dict[f"{prefix}conv1d.weight"],
         )
-        assert sharded_state_dict[f"{prefix}conv1d.bias"].data.size(0) == conv_dim, (
-            conv_dim,
-            sharded_state_dict[f"{prefix}conv1d.bias"],
-        )
 
-        for conv_layer_name in ["conv1d.weight", "conv1d.bias"]:
+
+        for conv_layer_name in ["conv1d.weight"]:
             sharded_state_dict[f"{prefix}{conv_layer_name}"] = _split_tensor_factory(
                 sharded_state_dict[f"{prefix}{conv_layer_name}"],
                 [
@@ -555,7 +516,7 @@ class GatedDeltaNetMixer(MegatronModule):
                     self.ngroups_local_tp * self.d_state,
                     self.ngroups_local_tp * self.d_state,
                 ],
-                ["x", "B", "C"],
+                ["V", "Q", "K"],
                 0,
             )
 

@@ -110,7 +110,7 @@ if [ $MODEL_SIZE = 3B ]; then
         --padded-vocab-size 151936
         --norm-epsilon 1e-6
     )
-    if [ -z  ${MODEL_PARALLEL_ARGS} ]; then
+    if [ -z  "$MODEL_PARALLEL_ARGS" ]; then
         MODEL_PARALLEL_ARGS=(
             --tensor-model-parallel-size 1
             --pipeline-model-parallel-size 4
@@ -128,7 +128,7 @@ elif [ $MODEL_SIZE = 7B ]; then
         --padded-vocab-size 152064
         --norm-epsilon 1e-6
     )
-    if [ -z  ${MODEL_PARALLEL_ARGS} ]; then
+    if [ -z  "$MODEL_PARALLEL_ARGS" ]; then
         MODEL_PARALLEL_ARGS=(
             --tensor-model-parallel-size 1
             --pipeline-model-parallel-size 4
@@ -146,7 +146,7 @@ elif [ $MODEL_SIZE = 32B ]; then
         --padded-vocab-size 152064
         --norm-epsilon 1e-6
     )
-    if [ -z  ${MODEL_PARALLEL_ARGS} ]; then
+    if [ -z  "$MODEL_PARALLEL_ARGS" ]; then
         MODEL_PARALLEL_ARGS=(
             --tensor-model-parallel-size 1
             --pipeline-model-parallel-size 8
@@ -164,7 +164,7 @@ elif [ $MODEL_SIZE = 72B ]; then
         --padded-vocab-size 152064
         --norm-epsilon 1e-5
     )
-    if [ -z  ${MODEL_PARALLEL_ARGS} ]; then
+    if [ -z  "$MODEL_PARALLEL_ARGS" ]; then
         MODEL_PARALLEL_ARGS=(
             --tensor-model-parallel-size 1
             --pipeline-model-parallel-size 8

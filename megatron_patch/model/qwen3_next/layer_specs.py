@@ -3,13 +3,13 @@ from typing import Optional
 from megatron.core.extensions.transformer_engine import (
     TEDotProductAttention,
     TELayerNormColumnParallelLinear,
-    TEColumnParallelLinear,
     TERowParallelLinear,
+    TENorm
 )
 from megatron.core.fusions.fused_bias_dropout import get_bias_dropout_add
 from megatron.core.ssm.mamba_block import MambaStack, MambaStackSubmodules
 from megatron.core.ssm.mamba_layer import MambaLayer, MambaLayerSubmodules
-from megatron.core.ssm.mamba_mixer import MambaMixer, MambaMixerSubmodules
+from megatron.core.ssm.mamba_mixer import MambaMixerSubmodules
 from megatron.core.transformer.attention import SelfAttentionSubmodules
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.mlp import MLPSubmodules
@@ -99,7 +99,7 @@ def get_qwen3_next_layer_spec(args):
                     mixer=ModuleSpec(
                         module=GatedDeltaNetMixer,
                         submodules=MambaMixerSubmodules(
-                            in_proj=TEColumnParallelLinear, out_proj=TERowParallelLinear
+                            in_proj=TELayerNormColumnParallelLinear, out_proj=TERowParallelLinear
                         ),
                     ),
                     mamba_bda=get_bias_dropout_add,
@@ -118,6 +118,8 @@ def get_qwen3_next_layer_spec(args):
                             linear_qkv=TELayerNormColumnParallelLinear,
                             core_attention=TEDotProductAttention,
                             linear_proj=TERowParallelLinear,
+                            q_layernorm=TENorm,
+                            k_layernorm=TENorm
                         ),
                     ),
                     self_attn_bda=get_bias_dropout_add,
@@ -129,6 +131,7 @@ def get_qwen3_next_layer_spec(args):
             mlp_layer = ModuleSpec(
                 module=TransformerLayer,
                 submodules=TransformerLayerSubmodules(
+                    pre_mlp_layernorm=TENorm,
                     mlp=get_moe_module_spec(
                         num_experts=args.num_experts,
                         moe_grouped_gemm=args.moe_grouped_gemm,

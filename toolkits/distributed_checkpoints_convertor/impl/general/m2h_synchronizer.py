@@ -1,3 +1,16 @@
+# Copyright (c) 2025 Alibaba PAI Team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import os
 import torch
 import json
@@ -69,9 +82,18 @@ class MG2HFSynchronizer(BaseSynchronizer):
             param_type=ParamType.COLUMN
         )
 
-    def set_postprocess_state(self, mg_model, hf_model):
+    def set_postprocess_state(self, mg_model, hf_model, is_mamba: bool=False):
         '''Set output layer & norm params.'''
-        self.copy(mg_model.decoder.final_layernorm.weight, hf_model.model.norm.weight)
+        if is_mamba:
+            self.copy(
+                mg_model.decoder.final_norm.weight, 
+                hf_model.model.norm.weight, 
+            )
+        else:
+            self.copy(
+                mg_model.decoder.final_layernorm.weight, 
+                hf_model.model.norm.weight, 
+            )
         if mg_model.share_embeddings_and_output_weights:
             output_layer_weight = mg_model.shared_embedding_or_output_weight() 
         else:
@@ -272,19 +294,24 @@ class MG2HFSynchronizer(BaseSynchronizer):
 
             hidden_size = moe.shared_experts.linear_fc1.weight.shape[-1]
             gate_proj_weight, up_proj_weight = moe.shared_experts.linear_fc1.weight.reshape(2, -1, hidden_size)
+
+            try:
+                hf_shared_expert = hf_moe.shared_experts
+            except AttributeError:
+                hf_shared_expert = hf_moe.shared_expert
             self.copy(
                 gate_proj_weight, 
-                hf_moe.shared_experts.gate_proj.weight,
+                hf_shared_expert.gate_proj.weight,
                 param_type=ParamType.COLUMN
             )
             self.copy(
                 up_proj_weight, 
-                hf_moe.shared_experts.up_proj.weight,
+                hf_shared_expert.up_proj.weight,
                 param_type=ParamType.COLUMN
             )
             self.copy(
                 moe.shared_experts.linear_fc2.weight,
-                hf_moe.shared_experts.down_proj.weight,
+                hf_shared_expert.down_proj.weight,
                 param_type=ParamType.ROW
             )
 
@@ -626,6 +653,13 @@ class MG2HFSynchronizer(BaseSynchronizer):
                 return res.flatten()
             return res.flatten(0, 1)
 
+        def merge_qgkv(is_bias, tensor_dict):
+            res = merge_along_axis(0, tensor_dict)
+            if is_bias:
+                assert res.shape[-1] == 1
+                return res.transpose(0, 1).flatten()
+            return res.transpose(0, 1).flatten(0, 2)
+
         merge_func_mapping = {
             ParamType.MOE_COLUMN: partial(merge_along_axis, 0, is_expert=True),
             ParamType.MOE_ROW: partial(merge_along_axis, 1, is_expert=True),
@@ -634,5 +668,6 @@ class MG2HFSynchronizer(BaseSynchronizer):
             ParamType.QKV_W: partial(merge_qkv, False),
             ParamType.QKV_B: partial(merge_qkv, True),
             ParamType.UNIQUE: no_merge_func,
+            ParamType.QGKV_W: partial(merge_qgkv, False)
         }
         return merge_func_mapping[merge_type](tensor_dict)

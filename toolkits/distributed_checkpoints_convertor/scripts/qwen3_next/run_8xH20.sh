@@ -3,15 +3,16 @@ set -e
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 CONVERTOR_DIR=$( dirname $( dirname ${CURRENT_DIR}))
 MEGATRON_PATCH_PATH=$( dirname $( dirname ${CONVERTOR_DIR}))
-export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250624:${CONVERTOR_DIR}/impl:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250908:${CONVERTOR_DIR}/impl:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true # for PyTorch >= 2.6
 
-NUM_NODES=${WORLD_SIZE}
-NODE_RANK=${RANK}
+
+NUM_NODES=${WORLD_SIZE:-1}
+NODE_RANK=${RANK:-0}
 GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}
-MASTER_ADDR=${MASTER_ADDR}
-MASTER_PORT=${MASTER_PORT}
+MASTER_ADDR=${MASTER_ADDR:-localhost}
+MASTER_PORT=${MASTER_PORT:-6000}
 
 MODEL_SIZE=$1 # NOTE: not used
 LOAD_DIR=$2
@@ -29,11 +30,17 @@ if [ ${MG2HF} = true ]; then
         --hf-dir ${HF_DIR}
         --mcore2hf
     )
+    mkdir -p ${SAVE_DIR}
+    find -L ${HF_DIR} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVE_DIR}
+    find -L ${HF_DIR} -maxdepth 1 -type f -name "merges.txt" -print0 | xargs -0 cp -t ${SAVE_DIR}
 else
     OTHER_ARGS+=(
         --tokenizer-type HuggingFaceTokenizer
         --tokenizer-model ${LOAD_DIR}
     )
+    mkdir -p ${SAVE_DIR}
+    find -L ${LOAD_DIR} -maxdepth 1 -type f -name "*.json" -print0 | xargs -0 cp -t ${SAVE_DIR}
+    find -L ${LOAD_DIR} -maxdepth 1 -type f -name "merges.txt" -print0 | xargs -0 cp -t ${SAVE_DIR}
 fi
 
 if [ ${USE_CUDA} = true ]; then
@@ -81,40 +88,48 @@ DISTRIBUTED_ARGS=(
 )
 
 GPT_MODEL_ARGS=(
-    --num-layers 61
-    --hidden-size 7168
-    --ffn-hidden-size 18432
-    --moe-ffn-hidden-size 2048
     --normalization RMSNorm
     --swiglu
     --disable-bias-linear
-    --num-attention-heads 128
-
     --seq-length 1
-    --max-position-embeddings 163840
+    --max-position-embeddings 40960
     --attention-backend auto # Can use (flash/fused/unfused/local)
     --position-embedding-type rope
-
-    --untie-embeddings-and-output-weights
-
-    --moe-grouped-gemm
-    --moe-router-score-function sigmoid
-    --moe-token-dispatcher-type alltoall
-    --moe-router-topk 2
-    --moe-router-group-topk 4
-    --moe-router-num-groups 8
-    --moe-router-enable-expert-bias
-    --moe-layer-freq "'([0]*3+[1]*58)'"
-    --moe-shared-expert-intermediate-size 2048 
-    --num-experts 256
-    --q-lora-rank 1536 
-    --kv-lora-rank 512 
-    --v-head-dim 128 
-    --multi-latent-attention
-    --no-rope-fusion
+    --kv-channels 256
     --qk-layernorm
-    --mtp-num-layers 1 
+    --group-query-attention
 )
+
+if [ $MODEL_SIZE = A3B ]; then
+    GPT_MODEL_ARGS+=(
+        --num-layers 96
+        --hidden-size 2048
+        --ffn-hidden-size 5120
+        --moe-ffn-hidden-size 512
+        --num-attention-heads 16
+        --hybrid-attention-ratio 0.125 
+        --hybrid-mlp-ratio 0.5 
+        --hybrid-override-pattern M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*- 
+        --is-hybrid-model
+        --untie-embeddings-and-output-weights
+        --rotary-base 10000000
+        --rotary-percent 0.25
+        --moe-grouped-gemm
+        --moe-router-score-function softmax
+        --moe-token-dispatcher-type alltoall
+        --moe-router-topk 10
+        --num-experts 512
+        --num-query-groups 2
+        --moe-shared-expert-intermediate-size 512 
+    )
+    if [ -z  "$MODEL_PARALLEL_ARGS" ]; then
+        MODEL_PARALLEL_ARGS=(
+            --tensor-model-parallel-size 1
+            --pipeline-model-parallel-size 1
+            --expert-model-parallel-size 8
+        )
+    fi
+fi
 
 TRAINING_ARGS=(
     --micro-batch-size 1 
@@ -133,16 +148,6 @@ TRAINING_ARGS=(
     --lr-decay-iters 430000 
 )
 
-if [ -z  "$MODEL_PARALLEL_ARGS" ]; then
-    MODEL_PARALLEL_ARGS=(
-        --tensor-model-parallel-size 1
-        --pipeline-model-parallel-size 8
-        --expert-model-parallel-size 4
-        --decoder-first-pipeline-num-layers 7
-        --decoder-last-pipeline-num-layers 6
-    )
-fi
-
 EVAL_AND_LOGGING_ARGS=(
     --log-interval 100
     --save-interval 10000 
@@ -155,12 +160,14 @@ CONVERT_ARGS=(
     --load-dir ${LOAD_DIR}
     --save-dir ${SAVE_DIR}
     
-    --padded-vocab-size 129280
+    --padded-vocab-size 151936
     --no-load-optim
     --no-load-rng
-    --synchronizer deepseek_v3
+    --logging-level 1
 
-    --logging-level 20
+    --synchronizer qwen3_next
+    --pretrain-script qwen3_next.model_provider
+    --debug
 )
 
 cmd="torchrun ${DISTRIBUTED_ARGS[@]} impl/convert.py \

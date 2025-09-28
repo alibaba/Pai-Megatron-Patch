@@ -14,13 +14,14 @@ GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU:-$(python -c "import torch; pr
 [ -z "$MASTER_PORT" ] && export MASTER_PORT=${MASTER_PORT:-$(shuf -n 1 -i 10000-65535)}
 
 TP=2
-PP=1
-EP=2
+PP=4
+EP=8
 ETP=1
 CP=1
 MBS=1
-GBS=8
+GBS=16
 SEQ_LEN=2048
+SFT=false
 DATA_PATH=/mnt/data/datasets/mmap_qwen3_datasets_text_document
 PRETRAIN_CHECKPOINT_PATH=/mnt/data/ckpts/huggingface/Qwen3-Next-80B-A3B-Instruct
 TENSORBOARD_DIR=/mnt/data/jerry.lp/tensorboard/test_qwen3_next_pretrain
@@ -37,46 +38,6 @@ DISTRIBUTED_ARGS=(
     --nproc_per_node $GPUS_PER_NODE 
     --master_addr $MASTER_ADDR 
     --master_port $MASTER_PORT
-)
-
-MODEL_ARGS_SMALL=(
-    --transformer-impl transformer_engine
-    --attention-dropout 0.0
-    --hidden-dropout 0.0
-    --num-layers 8
-    --hidden-size 2048
-    --ffn-hidden-size 5120
-    --moe-ffn-hidden-size 512
-    --num-attention-heads 16
-    --group-query-attention
-    --num-query-groups 2
-    --hybrid-attention-ratio 0.125 
-    --hybrid-mlp-ratio 0.5 
-    --hybrid-override-pattern M-M-M-*-
-    --is-hybrid-model 
-    --normalization RMSNorm
-    --qk-layernorm 
-    --norm-epsilon 1e-6
-    --swiglu
-    --disable-bias-linear
-    --use-rotary-position-embeddings
-    --rotary-base 10000000
-    --rotary-percent 0.25
-    --seq-length ${SEQ_LEN}
-    --max-position-embeddings ${SEQ_LEN}
-    --position-embedding-type rope
-    --untie-embeddings-and-output-weights
-    --moe-router-load-balancing-type aux_loss
-    --moe-grouped-gemm
-    --moe-permute-fusion
-    --moe-router-dtype fp32
-    --moe-aux-loss-coeff 0.001
-    --moe-router-score-function softmax
-    --moe-router-topk 10
-    --moe-shared-expert-intermediate-size 512 
-    --num-experts 512
-    --extra-vocab-size 421 
-    --patch-tokenizer-type Qwen3Tokenizer
 )
 
 MODEL_ARGS=(
@@ -115,8 +76,10 @@ MODEL_ARGS=(
     --moe-router-topk 10
     --moe-shared-expert-intermediate-size 512 
     --num-experts 512
-    --extra-vocab-size 421 
+    --extra-vocab-size 293
     --patch-tokenizer-type Qwen3Tokenizer
+    --kv-channels 256
+    --apply-layernorm-1p
 )
 
 TRAINING_ARGS=(
@@ -159,6 +122,14 @@ TRAINING_ARGS=(
     --log-interval 1
 )
 
+if [ ${SFT} = true ]; then
+    TRAINING_ARGS+=(
+        --eod-mask-loss
+        --calculate-per-token-loss
+        --train-mode finetune
+    )
+fi
+
 INFRA_ARGS=(
     --enable-experimental
     --tensor-model-parallel-size ${TP}
@@ -169,12 +140,9 @@ INFRA_ARGS=(
     --use-distributed-optimizer
     --sequence-parallel
     --attention-backend auto
-    --recompute-granularity selective
     --cross-entropy-loss-fusion
     --cross-entropy-fusion-impl te
     --moe-token-dispatcher-type alltoall
-
-
 )
 
 cmd="torchrun ${DISTRIBUTED_ARGS[@]} pretrain_qwen3_next.py \
