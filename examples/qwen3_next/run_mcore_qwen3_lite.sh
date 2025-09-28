@@ -24,7 +24,7 @@ SEQ_LEN=2048
 SFT=false
 DATA_PATH=/mnt/data/datasets/mmap_qwen3_datasets_text_document
 PRETRAIN_CHECKPOINT_PATH=/mnt/data/ckpts/huggingface/Qwen3-Next-80B-A3B-Instruct
-TENSORBOARD_DIR=/mnt/data/jerry.lp/tensorboard/test_qwen3_next_pretrain
+TENSORBOARD_DIR=/mnt/data/tensorboard/test_qwen3_next_pretrain
 mkdir -p ${TENSORBOARD_DIR}
 TRAIN_TOKENS=10000000
 WARMUP_TOKENS=10000

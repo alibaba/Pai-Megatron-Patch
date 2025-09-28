@@ -64,13 +64,13 @@ pip install --upgrade nvidia-nccl-cu12
 
 ```bash
 cd /mnt/data
-mkdir qwen-ckpts
-cd qwen-ckpts
+mkdir -p ckpts/huggingface
+cd ckpts/huggingface
 modelscope download --model Qwen/Qwen3-Next-80B-A3B-Instruct --local_dir Qwen3-Next-80B-A3B-Instruct
 
 cd /mnt/data
-mkdir qwen-datasets
-cd qwen-datasets
+mkdir datasets
+cd datasets
 wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/qwen-datasets/mmap_qwen3_datasets_text_document.bin
 wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/qwen-datasets/mmap_qwen3_datasets_text_document.idx
 
@@ -82,12 +82,33 @@ wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models
 ## Qwen3-Next模型训练流程精简版
 您可以直接将精简版的内容复制到DLC的执行命令栏中进行修改以及训练。精简版将参数分为了三大类：MODEL_ARGS，TRAINING_ARGS以及INFRA_ARGS。
 ```bash
-bash run_mcore_qwen3_lite.sh  \
+bash run_mcore_qwen3_lite.sh
 ```
 
 ## Qwen3-Next模型训练流程标准版
 ### 模型格式转换
-TBD
+为了进行权重转换，需要传入的参数列表如下
+```
+MODEL_SIZE=$1               # 模型大小，A3B
+LOAD_DIR=$2                 # 源权重路径
+SAVE_DIR=$3                 # 目标权重路径
+MG2HF=$4                    # 转换方向 可选: true, false
+USE_CUDA=$5                 # 是否使用GPU转换 建议: true
+PR=$6                       # 转换精度 可选: fp32 bf16 fp16
+HF_DIR=$7                   # HF权重路径(mcore2hf时必须提供)
+```
+例如，使用下述脚本将checkpoint转换到MCore格式
+
+```bash
+cd /workspace/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
+bash scripts/qwen3_next/run_8xH20.sh \
+A3B \
+/mnt/data/ckpts/huggingface/Qwen3-Next-80B-A3B-Instruct \
+/mnt/data/ckpts/mcore/Qwen3-Next-80B-A3B-Instruct-to-mcore  \
+false \
+true \
+bf16
+```
 
 ### 预训练及指令微调
 在Qwen3-Next中，我们已将预训练和微调整合到`run_mcore_qwen3.sh`脚本，对于不同的使用场景，二者各参数的意义有所不同。
@@ -152,9 +173,9 @@ false \
 none   \
 false \
 100000  \
-/mnt/data/qwen-datasets/mmap_qwen3_datasets_text_document  \
-/mnt//data/qwen-datasets/mmap_qwen3_datasets_text_document  \
-/mnt/data/qwen-ckpts/Qwen3-Next-80B-A3B-Instruct  \
+/mnt/data/datasets/mmap_qwen3_datasets_text_document  \
+/mnt/data/datasets/mmap_qwen3_datasets_text_document  \
+/mnt/data/ckpts/mcore/Qwen3-Next-80B-A3B-Instruct-to-mcore  \
 1000000000  \
 10000   \
 /workspace/output_mcore_qwen3_next_continue_pretrain
@@ -162,7 +183,7 @@ false \
 
 #### 指令微调示例
 制作idxmap用于微调的数据集可以参考[链接](https://github.com/alibaba/Pai-Megatron-Patch/tree/main/toolkits/sft_data_preprocessing)。
-当准备好微调数据集后，将SFT开关设置为`true`即可进行指令微调。
+当准备好微调数据集后，将SFT开关设置为`true`即可进行指令微调。注意准备的SFT数据集序列长度必须与实际训练保持一致
 
 ```bash
 cd /workspace/Pai-Megatron-Patch/examples/qwen3_next
@@ -188,9 +209,9 @@ true \
 none   \
 false \
 100000  \
-/mnt/data/qwen-datasets/mmap_qwen3_datasets_text_document  \
-/mnt//data/qwen-datasets/mmap_qwen3_datasets_text_document  \
-/mnt/data/qwen-ckpts/Qwen3-Next-80B-A3B-Instruct  \
+/mnt/data/datasets/mmap_qwen3_datasets_sft_text_document  \
+/mnt/data/datasets/mmap_qwen3_datasets_sft_text_document  \
+/mnt/data/ckpts/mcore/Qwen3-Next-80B-A3B-Instruct-to-mcore  \
 10000  \
 100   \
 /workspace/output_mcore_qwen3_next_finetune
@@ -221,9 +242,9 @@ true \
 none   \
 false \
 100000  \
-/mnt/data/qwen-datasets/alpaca_zh-train-general.json    \
-/mnt/data/qwen-datasets/alpaca_zh-valid-general.json   \
-/mnt/data/qwen-ckpts/Qwen3-Next-80B-A3B-Instruct  \
+/mnt/data/datasets/alpaca_zh-train-general.json    \
+/mnt/data/datasets/alpaca_zh-valid-general.json   \
+/mnt/data/ckpts/mcore/Qwen3-Next-80B-A3B-Instruct-to-mcore  \
 10000  \
 100   \
 /workspace/output_mcore_qwen3_next_finetune
