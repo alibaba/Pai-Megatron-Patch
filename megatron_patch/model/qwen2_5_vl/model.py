@@ -80,6 +80,7 @@ class Qwen2_5VLModel(MegatronModule):
 
         self.pre_process = pre_process
         self.post_process = post_process
+        self.mtp_process = False
         self.add_encoder = add_encoder
         self.add_decoder = add_decoder
         
@@ -278,6 +279,17 @@ class Qwen2_5VLModel(MegatronModule):
         )
         return output
 
+    def compute_language_model_loss(self, labels: torch.Tensor, logits: torch.Tensor) -> torch.Tensor:
+        """Computes the language model loss (Cross entropy across vocabulary)
+
+        Args:
+            labels (Tensor): The labels of dimension [batch size, seq length]
+            logits (Tensor): The final logits returned by the output layer of the transformer model
+
+        Returns:
+            Tensor: Loss tensor of dimensions [batch size, sequence_length]
+        """
+        return self.language_model.compute_language_model_loss(labels, logits)
 
 def _load_state_dict_hook_ignore_param_names(
     param_names: List[str], module: torch.nn.Module, incompatible_keys: namedtuple
