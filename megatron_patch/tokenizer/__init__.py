@@ -36,6 +36,10 @@ _GLOBAL_TOKENIZER = None
 
 def get_tokenizer():
     """Return tokenizer."""
+    global _GLOBAL_TOKENIZER
+    if _GLOBAL_TOKENIZER is None:
+        from megatron.training import get_args
+        build_tokenizer(get_args())
     return _GLOBAL_TOKENIZER
 
 
@@ -173,7 +177,7 @@ def build_tokenizer(args):
     elif args.patch_tokenizer_type == 'Qwen2Tokenizer':
         from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
         class _Qwen2Tokenizer(MegatronTokenizer):
-            def __init__(self, tokenizer_path, extra_vocab_size):
+            def __init__(self, tokenizer_path, extra_vocab_size, padded_vocab_size):
                 super().__init__(tokenizer_path)
                 self.tokenizer = AutoTokenizer.from_pretrained(
                     tokenizer_path,
@@ -181,7 +185,10 @@ def build_tokenizer(args):
                     use_fast=False,
                     trust_remote_code=True
                 )
-                self.extra_vocab_size = extra_vocab_size
+                if padded_vocab_size == 0:
+                    self.extra_vocab_size = extra_vocab_size
+                else:
+                    self.extra_vocab_size = padded_vocab_size - len(self.tokenizer.encoder)
                 self.tokenizer.add_special_tokens(special_tokens_dict=dict(pad_token="<|extra_0|>"))
 
                 if self.tokenizer.chat_template is None:
@@ -239,8 +246,9 @@ def build_tokenizer(args):
             def eos_token_id(self):
                 return self.tokenizer.eos_token_id
 
-        tokenizer = _Qwen2Tokenizer(args.load, args.extra_vocab_size)
-        args.padded_vocab_size = tokenizer.vocab_size
+        tokenizer = _Qwen2Tokenizer(args.load, args.extra_vocab_size, args.padded_vocab_size)
+        if args.padded_vocab_size == 0:
+            args.padded_vocab_size = tokenizer.vocab_size
 
     elif args.patch_tokenizer_type == 'Qwen3Tokenizer':
         try:
@@ -248,7 +256,7 @@ def build_tokenizer(args):
         except ImportError:
             from megatron.core.datasets.megatron_tokenizer import MegatronLegacyTokenizer as MegatronTokenizer
         class _Qwen3Tokenizer(MegatronTokenizer):
-            def __init__(self, tokenizer_path, extra_vocab_size):
+            def __init__(self, tokenizer_path, extra_vocab_size, padded_vocab_size):
                 super().__init__(tokenizer_path)
                 self.tokenizer = AutoTokenizer.from_pretrained(
                     tokenizer_path,
@@ -256,7 +264,10 @@ def build_tokenizer(args):
                     use_fast=False,
                     trust_remote_code=True
                 )
-                self.extra_vocab_size = extra_vocab_size
+                if padded_vocab_size == 0:
+                    self.extra_vocab_size = extra_vocab_size
+                else:
+                    self.extra_vocab_size = padded_vocab_size - len(self.tokenizer.encoder)
 
             def __call__(self, text, return_tensors=None,
                          padding=None, max_length=None, truncation=None, add_special_tokens=None):
@@ -301,13 +312,14 @@ def build_tokenizer(args):
             def eos_token_id(self):
                 return self.tokenizer.eos_token_id
 
-        tokenizer = _Qwen3Tokenizer(args.load, args.extra_vocab_size)
-        args.padded_vocab_size = tokenizer.vocab_size
+        tokenizer = _Qwen3Tokenizer(args.load, args.extra_vocab_size, args.padded_vocab_size)
+        if args.padded_vocab_size == 0:
+            args.padded_vocab_size = tokenizer.vocab_size
 
     elif args.patch_tokenizer_type == 'Qwen2VLTokenizer':
         from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
         class _Qwen2VLTokenizer(MegatronTokenizer):
-            def __init__(self, tokenizer_path, extra_vocab_size):
+            def __init__(self, tokenizer_path, extra_vocab_size, padded_vocab_size):
                 super().__init__(tokenizer_path)
                 self.tokenizer = AutoTokenizer.from_pretrained(
                     tokenizer_path,
@@ -315,7 +327,10 @@ def build_tokenizer(args):
                     use_fast=False,
                     trust_remote_code=True
                 )
-                self.extra_vocab_size = extra_vocab_size
+                if padded_vocab_size == 0:
+                    self.extra_vocab_size = extra_vocab_size
+                else:
+                    self.extra_vocab_size = padded_vocab_size - len(self.tokenizer.encoder)
                 self.special_tokens_map = {k: v for k, v in
                                            zip(self.tokenizer.all_special_tokens, self.tokenizer.all_special_ids)}
                 self.image_token = '<|image_pad|>'
@@ -395,21 +410,25 @@ def build_tokenizer(args):
             def encode(self, x):
                 return self.tokenizer.encode(x)
 
-        tokenizer = _Qwen2VLTokenizer(args.load, args.extra_vocab_size)
-        args.padded_vocab_size = tokenizer.vocab_size
+        tokenizer = _Qwen2VLTokenizer(args.load, args.extra_vocab_size, args.padded_vocab_size)
+        if args.padded_vocab_size == 0:
+            args.padded_vocab_size = tokenizer.vocab_size
 
 
     elif args.patch_tokenizer_type == 'DeepSeekV2Tokenizer':
         from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
         class _DeepSeekV2Tokenizer(MegatronTokenizer):
-            def __init__(self, tokenizer_path, extra_vocab_size):
+            def __init__(self, tokenizer_path, extra_vocab_size, padded_vocab_size):
                 super().__init__(tokenizer_path)
                 self.tokenizer = AutoTokenizer.from_pretrained(
                     tokenizer_path,
                     padding_side="right",
                     trust_remote_code=True
                 )
-                self.extra_vocab_size = extra_vocab_size
+                if padded_vocab_size == 0:
+                    self.extra_vocab_size = extra_vocab_size
+                else:
+                    self.extra_vocab_size = padded_vocab_size - len(self.tokenizer.encoder)
 
                 if self.tokenizer.chat_template is None:
                     self.tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{{ bos_token }}{% for message in messages %}{% if message['role'] == 'user' %}{{ 'User: ' + message['content'] + '\n\n' }}{% elif message['role'] == 'assistant' %}{{ 'Assistant: ' + message['content'] + eos_token }}{% elif message['role'] == 'system' %}{{ message['content'] + '\n\n' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}"
@@ -466,8 +485,9 @@ def build_tokenizer(args):
             def eos_token_id(self):
                 return self.tokenizer.eos_token_id
 
-        tokenizer = _DeepSeekV2Tokenizer(args.load, args.extra_vocab_size)
-        args.padded_vocab_size = tokenizer.vocab_size
+        tokenizer = _DeepSeekV2Tokenizer(args.load, args.extra_vocab_size, args.padded_vocab_size)
+        if args.padded_vocab_size == 0:
+            args.padded_vocab_size = tokenizer.vocab_size
 
     elif args.patch_tokenizer_type == 'QwenVLTokenizer':
         from .tokenization_qwen_vl import QWenTokenizer
