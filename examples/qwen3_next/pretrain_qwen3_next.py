@@ -16,7 +16,7 @@ import torch
 import torch._dynamo
 
 from megatron.core.enums import ModelType
-from model_provider import model_provider # Megatron-LM-250908/model_provider.py
+from model_provider import model_provider as base_model_provider # Megatron-LM-250908/model_provider.py
 
 from megatron.training.arguments import core_transformer_config_from_args
 from megatron_patch.arguments import get_patch_args
@@ -67,6 +67,7 @@ def mamba_builder(args, pre_process, post_process, vp_stage=None, config=None):
 
     return model
 
+model_provider = partial(base_model_provider, mamba_builder)
 
 
 if __name__ == "__main__":
@@ -75,7 +76,7 @@ if __name__ == "__main__":
 
     pretrain(
         train_valid_test_datasets_provider,
-        partial(model_provider, mamba_builder),
+        model_provider,
         ModelType.encoder_or_decoder,
         forward_step,
         extra_args_provider=get_patch_args,

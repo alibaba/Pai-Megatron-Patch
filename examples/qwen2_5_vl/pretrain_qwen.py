@@ -41,7 +41,7 @@ from megatron_patch.model.qwen2_5_vl.layer_specs import (
 )
 from megatron_patch.model.qwen2_5_vl.model import Qwen2_5VLModel
 
-from megatron_patch.tokenizer import build_tokenizer, get_tokenizer
+from megatron_patch.tokenizer import get_tokenizer
 from megatron_patch.tensor_parallel import broadcast_data
 
 torch._dynamo.config.suppress_errors = True
@@ -68,7 +68,6 @@ def model_provider(
     pre_process=True, post_process=True, add_encoder=True, add_decoder=True, vp_stage: Optional[int] = None
 ) -> Union[Qwen2_5VLModel]:
     args = get_args()
-    build_tokenizer(args)
     print_rank_0("start building qwen2-vl model ...")
 
     # Config of vit, llm and projector
@@ -123,8 +122,8 @@ def model_provider(
     )
 
     model.freeze(
-        freeze_language_model=args.freeze_LM, 
-        freeze_vision_model=args.freeze_ViT, 
+        freeze_language_model=getattr(args, 'freeze_LM', False), 
+        freeze_vision_model=getattr(args, 'freeze_ViT', False), 
         freeze_vision_projection=False
     )
 
