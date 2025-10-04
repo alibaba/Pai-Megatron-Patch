@@ -18,11 +18,10 @@ done
 export CUSTOM_PORTS=$ports
 export num_device=$(($WORLD_SIZE * $GPUS_PER_NODE))
 
-CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+CURRENT_DIR=$(pwd)
 MEGATRON_PATCH_PATH=$( dirname $( dirname ${CURRENT_DIR}))
 CHATLEARN_ROOT_PATH=${MEGATRON_PATCH_PATH}/backends/rl/ChatLearn
-CHATLEARN_KERNEL_PATH=${MEGATRON_PATCH_PATH}/backends/rl/ChatLearn/chatlearn
-export PYTHONPATH=${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250624:${CHATLEARN_ROOT_PATH}:${CHATLEARN_KERNEL_PATH}:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250624:${CHATLEARN_ROOT_PATH}:$PYTHONPATH
 
 export RAY_CGRAPH_get_timeout=200
 export CUDA_DEVICE_MAX_CONNECTIONS=1
@@ -34,7 +33,7 @@ export VLLM_USE_RAY_COMPILED_DAG=1
 hf_ckpt_path=/mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct
 mcore_ckpt_path=/mnt/data/ckpts/mcore/Moonlight-16B-A3B-Instruct-to-mcore
 exp_name="test_moonlight_16b"
-export output_dir=${MEGATRON_PATCH_PATH}/output/${exp_name}
+export output_dir=${CURRENT_DIR}/chatlearn_outputs/${exp_name}
 mkdir -p $output_dir/
 export log_dir=${output_dir}/logs
 mkdir -p $log_dir

@@ -396,7 +396,7 @@ def hf_to_mcore_config_moonlight(
         moe_router_topk_scaling_factor=hf_config.routed_scaling_factor,
         moe_layer_freq=moe_layer_freq,
         # mcore 0.12 moe
-        moe_router_dtype="fp64",
+        moe_router_dtype="fp32",
         disable_bf16_reduced_precision_matmul=True,
         # Other optimizations
         # deallocate_pipeline_outputs=True,
