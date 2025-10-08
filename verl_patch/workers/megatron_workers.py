@@ -30,7 +30,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from verl import DataProto
 from verl.single_controller.base.decorator import Dispatch, register
-from verl.single_controller.base.megatron.worker import MegatronWorker
+
 from verl.utils import hf_tokenizer
 from verl.utils.checkpoint.megatron_checkpoint_manager import MegatronCheckpointManager
 from verl.utils.config import omega_conf_to_dataclass
@@ -58,6 +58,7 @@ from verl.workers.critic.megatron_critic import MegatronPPOCritic
 from verl.workers.reward_model.megatron.reward_model import MegatronRewardModel
 
 from verl_patch.utils.model import load_mcore_dist_weights
+from verl_patch.workers.worker import MegatronWorker
 
 logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))

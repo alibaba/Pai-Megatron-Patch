@@ -31,8 +31,7 @@ from .config_converter import (
     hf_to_mcore_config_mixtral,
     hf_to_mcore_config_qwen2_5_vl,
     hf_to_mcore_config_qwen2moe,
-    hf_to_mcore_config_qwen3moe,
-    hf_to_mcore_config_moonlight,
+    hf_to_mcore_config_qwen3moe
 )
 from .model_forward import (
     gptmodel_forward,
@@ -46,7 +45,6 @@ from .model_initializer import (
     Qwen2MoEModel,
     Qwen3MoEModel,
     Qwen25VLModel,
-    MoonlightModel,
 )
 from .weight_converter import (
     McoreToHFWeightConverterDense,
@@ -55,7 +53,6 @@ from .weight_converter import (
     McoreToHFWeightConverterQwen2_5_VL,
     McoreToHFWeightConverterQwen2Moe,
     McoreToHFWeightConverterQwen3Moe,
-    McoreToHFWeightConverterMoonlight,
 )
 
 
@@ -69,7 +66,6 @@ class SupportedModel(Enum):
     LLAMA4 = "Llama4ForConditionalGeneration"  # not tested
     QWEN3 = "Qwen3ForCausalLM"  # tested
     QWEN3_MOE = "Qwen3MoeForCausalLM"  # not tested
-    MOONLIGHT = "DeepseekV3ForCausalLM"
 
 
 # Registry for model configuration converters
@@ -84,7 +80,6 @@ MODEL_CONFIG_CONVERTER_REGISTRY: Dict[SupportedModel, Callable[[PretrainedConfig
     SupportedModel.QWEN3: hf_to_mcore_config_dense,
     SupportedModel.QWEN3_MOE: hf_to_mcore_config_qwen3moe,
     SupportedModel.QWEN2_5_VL: hf_to_mcore_config_qwen2_5_vl,
-    SupportedModel.MOONLIGHT: hf_to_mcore_config_moonlight,
 }
 
 # Registry for model initializers
@@ -99,7 +94,6 @@ MODEL_INITIALIZER_REGISTRY: Dict[SupportedModel, Type[BaseModelInitializer]] = {
     SupportedModel.QWEN3: DenseModel,
     SupportedModel.QWEN3_MOE: Qwen3MoEModel,
     SupportedModel.QWEN2_5_VL: Qwen25VLModel,
-    SupportedModel.MOONLIGHT: MoonlightModel,
 }
 
 # Registry for model forward functions
@@ -114,7 +108,6 @@ MODEL_FORWARD_REGISTRY: Dict[SupportedModel, Callable] = {
     SupportedModel.QWEN3: gptmodel_forward,
     SupportedModel.QWEN3_MOE: gptmodel_forward,
     SupportedModel.QWEN2_5_VL: gptmodel_forward_qwen2_5_vl,
-    SupportedModel.MOONLIGHT: gptmodel_forward,
 }
 
 # Registry for model weight converters
@@ -127,7 +120,6 @@ MODEL_WEIGHT_CONVERTER_REGISTRY: Dict[SupportedModel, Type] = {
     SupportedModel.QWEN3: McoreToHFWeightConverterDense,
     SupportedModel.QWEN3_MOE: McoreToHFWeightConverterQwen3Moe,
     SupportedModel.QWEN2_5_VL: McoreToHFWeightConverterQwen2_5_VL,
-    SupportedModel.MOONLIGHT: McoreToHFWeightConverterMoonlight,
 }
 
 
