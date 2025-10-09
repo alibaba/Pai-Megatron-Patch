@@ -83,7 +83,7 @@ def model_provider(
     vision_config = get_vision_model_config(args, deepcopy(config))
     vision_config.pipeline_model_parallel_size = 1
     vision_config.num_layers_in_first_pipeline_stage = None
-    vision_projector_config = get_vision_projection_config(deepcopy(config), vision_config.hidden_size, args.spatial_merge_size)
+    vision_projector_config = get_vision_projection_config(deepcopy(config), vision_config.hidden_size, vision_config.spatial_merge_size)
     
     print_rank_0("building Qwen2-5-VL model in TE...")
     # Layer Specs of vit, llm and projector
