@@ -86,7 +86,7 @@ NUM_ATTN_HEADS=16 # num_attention_heads
 INTERMEDIATE_SIZE=11008 # intermediate_size
 NUM_KEY_VALUE_HEADS=2 # num_key_value_heads
 MAX_POSITION_EMBEDDINGS=128000 # max_position_embeddings
-EXTRA_VOCAB_SIZE=293 # 151643 + 293 = 151936
+VOCAB_SIZE=151936
 RMS_NORM_EPS=1e-6 # rms_norm_eps
 
 
@@ -106,7 +106,7 @@ NUM_ATTN_HEADS=28
 INTERMEDIATE_SIZE=18944
 NUM_KEY_VALUE_HEADS=4
 MAX_POSITION_EMBEDDINGS=128000
-EXTRA_VOCAB_SIZE=421  # 151643 + 421 = 152064
+VOCAB_SIZE=152064
 RMS_NORM_EPS=1e-6
 
 gqa_options=" \
@@ -126,7 +126,7 @@ NUM_ATTN_HEADS=40
 INTERMEDIATE_SIZE=27648
 NUM_KEY_VALUE_HEADS=8
 MAX_POSITION_EMBEDDINGS=128000
-EXTRA_VOCAB_SIZE=421  # 151643 + 421 = 152064
+VOCAB_SIZE=152064
 RMS_NORM_EPS=1e-6
 
 gqa_options=" \
@@ -146,7 +146,7 @@ NUM_ATTN_HEADS=64
 INTERMEDIATE_SIZE=29568
 NUM_KEY_VALUE_HEADS=8
 MAX_POSITION_EMBEDDINGS=128000
-EXTRA_VOCAB_SIZE=421
+VOCAB_SIZE=152064
 RMS_NORM_EPS=1e-5
 
 gqa_options=" \
@@ -315,7 +315,7 @@ megatron_options="  \
         --no-load-optim \
         --no-load-rng \
         --num-workers 8 \
-        --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
+        --padded-vocab-size ${VOCAB_SIZE} \
         --patch-tokenizer-type Qwen2VLTokenizer \
         --swiglu \
         --normalization RMSNorm \

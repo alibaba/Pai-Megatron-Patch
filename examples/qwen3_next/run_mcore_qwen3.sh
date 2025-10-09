@@ -3,9 +3,10 @@ set -e
 ENV=$1
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 MEGATRON_PATCH_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250624:$PYTHONPATH
+export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250908:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true # for PyTorch >= 2.6
+
 
 if [ $ENV = dsw ]; then
     MASTER_ADDR=localhost
@@ -74,156 +75,18 @@ elif [ $FL = false ]; then
     "
 fi
 
-if [ $MODEL_SIZE = 0.6B ]; then
-    NUM_LAYERS=28
-    HIDDEN_SIZE=1024
-    NUM_ATTENTION_HEADS=16
-    INTERMEDIATE_SIZE=3072
-    NUM_KEY_VALUE_HEADS=8
-    MAX_POSITION_EMBEDDINGS=40960
-    VOCAB_SIZE=151936
-    ROPE_THETA=1000000
-    RMS_NORM_EPS=1e-6
-    gqa_options=" \
-                --group-query-attention \
-                --num-query-groups ${NUM_KEY_VALUE_HEADS}"
-    
-    tie_option=""
-    moe_options=""
-elif [ $MODEL_SIZE = 1.7B ]; then
-    NUM_LAYERS=28
+if [ $MODEL_SIZE = A3B ]; then
     HIDDEN_SIZE=2048
     NUM_ATTENTION_HEADS=16
-    INTERMEDIATE_SIZE=6144
-    NUM_KEY_VALUE_HEADS=8
-    MAX_POSITION_EMBEDDINGS=40960
-    VOCAB_SIZE=151936
-    ROPE_THETA=1000000
-    RMS_NORM_EPS=1e-6
-    gqa_options=" \
-                --group-query-attention \
-                --num-query-groups ${NUM_KEY_VALUE_HEADS}"
-    
-    tie_option=""
-    moe_options=""
-elif [ $MODEL_SIZE = 4B ]; then
-    NUM_LAYERS=36
-    HIDDEN_SIZE=2560
-    NUM_ATTENTION_HEADS=32
-    INTERMEDIATE_SIZE=9728
-    NUM_KEY_VALUE_HEADS=8
-    MAX_POSITION_EMBEDDINGS=40960
-    VOCAB_SIZE=151936
-    ROPE_THETA=1000000
-    RMS_NORM_EPS=1e-6
-    gqa_options=" \
-                --group-query-attention \
-                --num-query-groups ${NUM_KEY_VALUE_HEADS}"
-    
-    tie_option=""
-    moe_options=""
-elif [ $MODEL_SIZE = 8B ]; then
-    NUM_LAYERS=36
-    HIDDEN_SIZE=4096
-    NUM_ATTENTION_HEADS=32
-    INTERMEDIATE_SIZE=12288
-    NUM_KEY_VALUE_HEADS=8
-    MAX_POSITION_EMBEDDINGS=40960
-    VOCAB_SIZE=151936
-    ROPE_THETA=1000000
-    RMS_NORM_EPS=1e-6
-    gqa_options=" \
-                --group-query-attention \
-                --num-query-groups ${NUM_KEY_VALUE_HEADS}"
-    
-    tie_option=" \
-            --untie-embeddings-and-output-weights \
-            "
-    moe_options=""
-elif [ $MODEL_SIZE = 14B ]; then 
-    NUM_LAYERS=40
-    HIDDEN_SIZE=5120
-    NUM_ATTENTION_HEADS=40
-    INTERMEDIATE_SIZE=17408
-    NUM_KEY_VALUE_HEADS=8
-    MAX_POSITION_EMBEDDINGS=40960
-    VOCAB_SIZE=151936
-    ROPE_THETA=1000000
-    RMS_NORM_EPS=1e-6
-    gqa_options=" \
-                --group-query-attention \
-                --num-query-groups ${NUM_KEY_VALUE_HEADS}"
-    
-    tie_option=" \
-            --untie-embeddings-and-output-weights \
-            "
-
-    moe_options=""
-elif [ $MODEL_SIZE = 32B ]; then
-    NUM_LAYERS=64
-    HIDDEN_SIZE=5120
-    NUM_ATTENTION_HEADS=64
-    INTERMEDIATE_SIZE=25600
-    NUM_KEY_VALUE_HEADS=8
-    MAX_POSITION_EMBEDDINGS=40960
-    VOCAB_SIZE=151936
-    ROPE_THETA=1000000
-    RMS_NORM_EPS=1e-6
-    gqa_options=" \
-                --group-query-attention \
-                --num-query-groups ${NUM_KEY_VALUE_HEADS}"
-    
-    tie_option=" \
-            --untie-embeddings-and-output-weights \
-            "
-
-    moe_options=""
-elif [ $MODEL_SIZE = A3B ]; then
-    HIDDEN_SIZE=2048
-    NUM_ATTENTION_HEADS=32
-    NUM_LAYERS=48
-    INTERMEDIATE_SIZE=6144
-    MOE_INTERMEDIATE_SIZE=768
-    MAX_POSITION_EMBEDDINGS=40960
-    VOCAB_SIZE=151936
-    NUM_KEY_VALUE_HEADS=4
-    ROPE_THETA=1000000
-    NUM_EXPERTS=128
-    ROUTER_TOPK=8
-    RMS_NORM_EPS=1e-6
-
-    moe_options=" \
-        --moe-grouped-gemm \
-        --moe-token-dispatcher-type alltoall \
-        --moe-router-topk ${ROUTER_TOPK} \
-        --num-experts ${NUM_EXPERTS} \
-        --expert-tensor-parallel-size ${ETP} \
-        --expert-model-parallel-size ${EP} \
-        --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
-        --moe-router-load-balancing-type aux_loss \
-        --moe-aux-loss-coeff 0.001 \
-        --moe-layer-freq '([1]*48)' \
-        "
-
-    tie_option=" \
-            --untie-embeddings-and-output-weights \
-            "
-
-    gqa_options=" \
-                --group-query-attention \
-                --num-query-groups ${NUM_KEY_VALUE_HEADS}"
-elif [ $MODEL_SIZE = A22B ]; then
-    HIDDEN_SIZE=4096
-    NUM_ATTENTION_HEADS=64
-    NUM_LAYERS=94
-    INTERMEDIATE_SIZE=12288
-    MOE_INTERMEDIATE_SIZE=1536
-    MAX_POSITION_EMBEDDINGS=40960
-    VOCAB_SIZE=151936
-    NUM_KEY_VALUE_HEADS=4
-    ROPE_THETA=1000000
-    NUM_EXPERTS=128
-    ROUTER_TOPK=8
+    NUM_LAYERS=96
+    INTERMEDIATE_SIZE=5120
+    MOE_INTERMEDIATE_SIZE=512
+    MAX_POSITION_EMBEDDINGS=262144
+    EXTRA_VOCAB_SIZE=293
+    NUM_KEY_VALUE_HEADS=2
+    ROPE_THETA=10000000
+    NUM_EXPERTS=512
+    ROUTER_TOPK=10
     RMS_NORM_EPS=1e-6
 
 
@@ -237,7 +100,7 @@ elif [ $MODEL_SIZE = A22B ]; then
         --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
         --moe-router-load-balancing-type aux_loss \
         --moe-aux-loss-coeff 0.001 \
-        --moe-layer-freq '([1]*94)' 
+        --moe-shared-expert-intermediate-size 512 \
         "
 
     tie_option=" \
@@ -247,6 +110,17 @@ elif [ $MODEL_SIZE = A22B ]; then
     gqa_options=" \
                 --group-query-attention \
                 --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+    
+    hybrid_model_options=" \
+                --hybrid-attention-ratio 0.125 \
+                --hybrid-mlp-ratio 0.5 \
+                --hybrid-override-pattern M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*- \
+                --is-hybrid-model \
+                --mamba-state-dim 128 \
+                --mamba-head-dim 128 \
+                --mamba-num-groups 16 \
+                --mamba-num-heads 32
+    "
 fi
 
 
@@ -385,7 +259,7 @@ if [ $SFT = true ]; then
     TRAIN_ITERS=${25}
     LR_WARMUP_ITERS=${26}
     LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
-    PREFIX="finetune-mcore-qwen3-moe-megatron-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
+    PREFIX="finetune-mcore-qwen3-next-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
     sft_options=" \
          --eod-mask-loss \
          --calculate-per-token-loss \
@@ -394,7 +268,7 @@ else
     TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
     LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
     LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
-    PREFIX="pretrain-mcore-qwen3-moe-megatron-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
+    PREFIX="pretrain-mcore-qwen3-next-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
     sft_options=" \
         --train-mode pretrain"
 fi
@@ -474,7 +348,7 @@ megatron_options="  \
         --no-load-optim \
         --no-load-rng \
         --num-workers 32 \
-        --padded-vocab-size ${VOCAB_SIZE} \
+        --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type Qwen3Tokenizer \
         --swiglu \
         --normalization RMSNorm \
@@ -488,20 +362,16 @@ megatron_options="  \
         --transformer-impl transformer_engine \
         --cross-entropy-loss-fusion \
         --qk-layernorm \
-        --kv-channels 128 
-
+        --kv-channels 256 \
+        --rotary-percent 0.25 \
+        --apply-layernorm-1p
         "
 
-#        --add-qkv-bias \ # no qkv bias
-#        --no-rope-fusion \
-#        --no-bias-swiglu-fusion \
-#       --decoder-first-pipeline-num-layers 10
-#         --te-rng-tracker \         --external-cuda-graph \        --cuda-graph-scope attn
 
-
-run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
+run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen3_next.py
  ${megatron_options} ${dataset_options} ${pr_options} ${load_option} ${activation_checkpoint_options} \
- ${do_option} ${sp_option} ${moe_options} ${offload_option} ${sft_options} ${vp_option} ${packing_options} ${uneven_split_option} ${attn_backend_option} ${tie_option} ${gqa_options}"
+ ${do_option} ${sp_option} ${moe_options} ${offload_option} ${sft_options} ${vp_option} ${packing_options} \
+ ${uneven_split_option} ${attn_backend_option} ${tie_option} ${gqa_options} ${hybrid_model_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}

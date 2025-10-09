@@ -20,15 +20,6 @@ import inspect
 
 from megatron.core.enums import ModelType
 from megatron.core.models.gpt import GPTModel
-from megatron_patch.tokenizer import build_tokenizer
-"""
-from megatron_patch.model.qwen3_moe.gpt_layer_specs import (
-    get_gpt_decoder_block_spec,
-    get_gpt_layer_local_spec,
-    get_gpt_layer_with_transformer_engine_spec,
-    get_gpt_mtp_block_spec,
-)
-"""
 from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_decoder_block_spec,
     get_gpt_layer_local_spec,
@@ -59,7 +50,6 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel]:
         Union[GPTModel]: The returned model
     """
     args = get_args()
-    build_tokenizer(args)
     use_te = args.transformer_impl == "transformer_engine"
 
     if args.record_memory_history:

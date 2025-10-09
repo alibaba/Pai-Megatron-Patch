@@ -1,4 +1,16 @@
-
+# Copyright (c) 2025 Alibaba PAI Team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import torch
 import logging
 
@@ -26,6 +38,9 @@ class ParamType(Enum):
     MOE_COLUMN = 7
     MOE_ROW = 8
     MOE_GATE_UP = 9
+    # generalized gate_up with multi linear with different output size
+    MERGED_LINEAR = 10
+    QGKV_W = 11
 
 class BaseSynchronizer(ABC):
     def __init__(

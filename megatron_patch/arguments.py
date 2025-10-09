@@ -132,6 +132,8 @@ def get_patch_args(parser):
         "--extra-vocab-size", type=int, default=0, help="--extra-vocab-size"
     )
 
+    patch_if_not_exist(group, '--padded-vocab-size', type=int, default=None)
+
     group.add_argument(
         "--keep-last",
         action="store_true",
