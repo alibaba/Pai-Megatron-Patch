@@ -1,25 +1,9 @@
 #!/bin/bash
 
 ray stop
-CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
-VERL_PATCH_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=${VERL_PATCH_PATH}:${VERL_PATCH_PATH}/backends/megatron/Megatron-LM-250624:${VERL_PATCH_PATH}/backends/rl/verl:$PYTHONPATH
-export HYDRA_FULL_ERROR=1
-gsm8k_train_path=/mnt/data/datasets/gsm8k/train.parquet
-gsm8k_test_path=/mnt/data/datasets/gsm8k/test.parquet
+rm -rf /tmp/ray/*
 
-train_files="['$gsm8k_train_path']"
-test_files="['$gsm8k_test_path']"
-
-
-MODEL_PATH=/mnt/data/ckpts/huggingface/DeepSeek-V3-0324
-MCORE_MODEL_PATH=/mnt/data/ckpts/mcore/DeepSeek-R1-BF16-to-mcore
-
-
-# If you are using vllm<=0.6.3, you might need to set the following environment variable to avoid bugs:
-# export VLLM_ATTENTION_BACKEND=XFORMERS
-export CUDA_DEVICE_MAX_CONNECTIONS=1 # For megatron communication/computation overlapping
-
+export CUDA_DEVICE_MAX_CONNECTIONS=1
 export GPUS_PER_NODE=${MLP_WORKER_GPU:-${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}}
 export RAY_num_server_call_thread=1
 export NNODES=${MLP_WORKER_NUM:-${WORLD_SIZE:-1}}
@@ -27,9 +11,36 @@ export NODE_RANK=${MLP_WORKER_RACK_RANK_INDEX:-${MLP_ROLE_INDEX:-${RANK:-0}}}
 export MASTER_ADDR=${MLP_WORKER_0_HOST:-${MASTER_ADDR:-127.0.0.1}}
 export MASTER_PORT=${MLP_WORKER_0_PORT:-${MASTER_PORT:-1234}}
 
+CURRENT_DIR=$(pwd)
+MEGATRON_PATCH_PATH=$( dirname $( dirname ${CURRENT_DIR}))
+VERL_ROOT_PATH=${MEGATRON_PATCH_PATH}/backends/rl/verl
+export PYTHONPATH=${MEGATRON_PATCH_PATH}:${MEGATRON_PATCH_PATH}/backends/megatron/Megatron-LM-250624:${VERL_ROOT_PATH}:$PYTHONPATH
 
-project_name='DAPO'
-exp_name='Test_Verl_Mcore_DeepSeek671b_Loss'
+export RAY_CGRAPH_get_timeout=200
+export CUDA_DEVICE_MAX_CONNECTIONS=1
+export RAY_num_server_call_thread=1
+export RAY_DEDUP_LOGS=0
+export VLLM_USE_RAY_SPMD_WORKER=1
+export VLLM_USE_RAY_COMPILED_DAG=1
+
+train_path=/mnt/data/datasets/MATH-lighteval/train.parquet
+test_path=/mnt/data/datasets/MATH-lighteval/test.parquet
+
+train_files="['$train_path']"
+test_files="['$test_path']"
+
+hf_ckpt_path=/mnt/data/ckpts/huggingface/DeepSeek-V3-0324-BF16
+mcore_ckpt_path=/mnt/data/ckpts/mcore/DeepSeek-V3-0324-BF16-to-mcore
+proj_name="jerry_debug"
+exp_name="test_deepseek_verl"
+export output_dir=${CURRENT_DIR}/verl_outputs/${exp_name}
+export WANDB_DIR=${output_dir}
+mkdir -p $output_dir/
+export log_dir=${output_dir}/logs
+mkdir -p $log_dir
+log_file=$log_dir/${exp_name}_rank${NODE_RANK}.log
+
+
 adv_estimator=grpo
 use_kl_in_reward=True
 kl_coef=0.0
@@ -37,8 +48,8 @@ use_kl_loss=True
 kl_loss_coef=0.0
 clip_ratio_low=0.2
 clip_ratio_high=0.28
-max_prompt_length=$((1024 * 2))
-max_response_length=$((1024 * 4))
+max_prompt_length=1536
+max_response_length=2048
 enable_overlong_buffer=True
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=0.1
@@ -135,17 +146,17 @@ python ../qwen3/verl_entrypoint.py --config-path=../qwen3/verl_configs \
     +reward_model.reward_kwargs.overlong_buffer_cfg.log=False \
     +reward_model.reward_kwargs.max_resp_len=${max_response_length} \
     trainer.logger=['console'] \
-    trainer.project_name="${project_name}" \
-    trainer.experiment_name="${exp_name}" \
+    trainer.project_name=${proj_name} \
+    trainer.experiment_name=${exp_name} \
     trainer.n_gpus_per_node=${GPUS_PER_NODE} \
     trainer.nnodes=${NNODES} \
     trainer.val_before_train=False \
-    trainer.test_freq=50000000 \
+    trainer.test_freq=5 \
     trainer.save_freq=50000000 \
-    trainer.total_epochs=10 \
+    trainer.total_epochs=200 \
     trainer.total_training_steps=1000 \
     trainer.resume_mode=auto \
-    trainer.log_val_generations=10 2>&1 | tee ${NNODES}nodes_verl_debug.log
+    2>&1 | tee ${log_file} ; exit ${PIPESTATUS[0]}
 
 else
 ray start --block --address=${MASTER_ADDR}:6379

@@ -2,39 +2,60 @@
 
 本文档提供使用Verl、Mcore 和 vLLM 框架来对Moonlight模型进行GRPO训练的快速开始指南。
 
-## 环境配置
-1. Docker镜像准备
-我们建议在PAI [DSW](https://help.aliyun.com/zh/pai/user-guide/create-and-manage-dsw-instances/)/[DLC](https://help.aliyun.com/zh/pai/user-guide/create-a-training-task?spm=a2c4g.11186623.help-menu-30347.d_3_3_5_5.2dfb1925l3QjwG)中运行该示例，你需要填写如下镜像地址来启动实例：
+## 开发环境配置
+建议在PAI平台DSW环境中基于nvcr.io/nvidia/pytorch:24.12-py3来构建镜像。
 ```bash
-dsw-registry.cn-shanghai.cr.aliyuncs.com/pai-training-algorithm/chatlearn:torch2.6.0-vllm0.8.5-ubuntu24.04-cuda12.6-py312
+#安装VLLM, Transformers等Chatlearn的依赖包
+pip install modelscope==1.30.0 tensordict==0.10.0 torchdata==0.11.0 codetiming==1.4.0 vllm==0.8.5 transformers==4.56.2 blobfile==3.0.0 numpy==1.26.4 accelerate==1.10.0 wandb==0.19.11 datasets==3.6.0 grpcio==1.71.0 omegaconf==2.3.0  hydra-core==1.3.2 msgspec==0.19.0 mathruler==0.1.0 pylatexenc==2.10 langgraph==0.6.6 ray[default]==2.46.0 -i https://mirrors.aliyun.com/pypi/simple/ 
+
+#由于安装VLLM会重新安装pytorch，因此需要重新安装flash attention以及apex
+pip uninstall -y flash_attn && pip install https://pai-vision-data-hz.oss-cn-zhangjiakou.aliyuncs.com/csrc/flash-attention/torch2.6.0-cu12x/flash_attn-2.4.2-cp312-cp312-linux_x86_64.whl --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ 
+
+pip uninstall -y apex && pip install https://pai-vision-data-hz.oss-cn-zhangjiakou.aliyuncs.com/csrc/apex/torch2.6.0-cuda12x/apex-0.1-cp312-cp312-linux_x86_64.whl --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ 
+
+#升级Transformer Engine
+pip uninstall -y transformer-engine transformer-engine-cu12 transformer-engine-torch
+git clone --recursive https://github.com/NVIDIA/TransformerEngine.git
+cd TransformerEngine
+git submodule update --init --recursive
+git checkout release_v2.7
+export CUDNN_PATH=/usr/local/lib/python3.12/dist-packages/nvidia/cudnn/
+cp /usr/local/lib/python3.12/dist-packages/nvidia/cudnn/include/*  /usr/local/cuda/include/
+python setup.py bdist_wheel  -vvv
+cd dist
+export NVTE_FRAMEWORK=pytorch 
+pip install transformer_engine-2.7.0-cp312-cp312-linux_x86_64.whl --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.cloud.aliyuncs.com
+
+#升级CUDNN，用以解决MLA模型训练时出现的问题
+pip install -U nvidia-cudnn-cu12==9.8.0.87 -i http://mirrors.cloud.aliyuncs.com/pypi/simple --trusted-host mirrors.cloud.aliyuncs.com
+
 ```
 
-可以使用vpc地址来加速镜像拉取速度，需要根据当前region信息来更改镜像地址。比如，启动在上海的DSW实例，可以使用如下镜像`dsw-registry-vpc.cn-shanghai.cr.aliyuncs.com/pai-training-algorithm/chatlearn:torch2.6.0-vllm0.8.5-ubuntu24.04-cuda12.6-py312
-`。
-
-2. 代码准备
-
+## 代码准备
 ```bash
 git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 ```
 
 ## 数据准备
-以[GSM8k](https://modelscope.cn/datasets/AI-ModelScope/gsm8k)数据集作为示例.
+以[MATH-lighteval](https://www.modelscope.cn/datasets/AI-ModelScope/MATH-lighteval)数据集作为示例.
 ```bash
 # 下载数据集
 mkdir -p /mnt/data/datasets
-请按照链接指引准备GSM8K数据集：https://verl.readthedocs.io/en/latest/examples/gsm8k_example.html
+modelscope download --dataset AI-ModelScope/MATH-lighteval --local_dir dataset/MATH-lighteval
+cd ~/Pai-Megatron-Patch/toolkits/verl_data_preprocessing
+python math_lighteval.py --input_dir dataset/MATH-lighteval --local_dir dataset/MATH-lighteval
+
 # 下载模型权重
 modelscope download --model moonshotai/Moonlight-16B-A3B-Instruct --local_dir /mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct
 ```
 
 ## 代码&CKPT修改
 ```bash
-vim ~/Pai-Megatron-Patch/backends/megatron/Megatron-LM-250624/megatron/training/tokenizer/tokenizer.py
-143行修改为：
-self._tokenizer = transformers.AutoTokenizer.from_pretrained(
-    pretrained_model_name_or_path=pretrained_model_name_or_path, trust_remote_code=True, **kwargs
-)
+vim ~/Pai-Megatron-Patch/backends/megatron/Megatron-LM-250908/megatron/core/models/gpt/gpt_layer_specs.py
+145行修改为：
+linear_q_down_proj=backend.linear() -> linear_q_down_proj=backend.column_parallel_linear()
+linear_kv_down_proj=backend.linear() -> linear_kv_down_proj=backend.column_parallel_linear()
+
 vim /mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct/config.json
 将"AutoModel"和"AutoModelForCausalLM"修改为：
 "auto_map": {
@@ -44,6 +65,8 @@ vim /mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct/config.json
 }
 cp ~/Pai-Megatron-Patch/examples/moonlight/modeling_deepseek_pai.py /mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct
 ```
+
+vim
 
 ## 模型转换
 
@@ -64,19 +87,12 @@ true \
 bf16
 ```
 
+## 模型转换
+
 ## 训练
 运行以下命令开始训练：
 
 ```bash
 cd ~/Pai-Megatron-Patch/examples/moonlight
 bash run_mcore_moonlight_verl.sh
-```
-
-## 使用 Wandb 监控
-如需使用 Wandb 记录训练过程，请参考如下配置：
-
-```bash
-export enable_wandb=True
-export wandb_project="Your-Wandb-Project-Name"
-export WANDB_API_KEY="Your-Wandb-api-key"
 ```
