@@ -264,11 +264,11 @@ def hf_to_mcore_config_dpskv3(
     mla_rope_config = {
         "beta_fast": 32,
         "beta_slow": 1,
-        "factor": 1,
+        "factor": 40,
         "mscale": 1.0,
         "mscale_all_dim": 1.0,
         "original_max_position_embeddings": 4096,
-        "type": "rope",
+        "type": "yarn",
     }
     if "rope_scaling" in hf_config and hf_config.rope_scaling is not None:
         mla_rope_config.update(hf_config.rope_scaling)

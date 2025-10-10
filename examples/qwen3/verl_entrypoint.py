@@ -317,5 +317,5 @@ def create_rl_sampler(data_config, dataset):
 
 if __name__ == "__main__":
     import time
-    time.sleep(10)
+    time.sleep(30)
     main()
