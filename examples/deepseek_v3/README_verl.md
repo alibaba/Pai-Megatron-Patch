@@ -96,6 +96,6 @@ bash run_mcore_deepseek_verl.sh
 我们在128卡上测试了DeepSeek在解决了一些训练不稳定的问题后，验证集升的评估指标仍然有提升，而不会出现训练不稳定现象。
 <p align="center">
   <picture>
-    <img alt="ChatLearn" src="../images/verl_dsr1_mathlight.png" width=30%>
+    <img alt="Verl" src="../images/verl_dsr1_mathlight.png" width=30%>
   </picture>
 </p>

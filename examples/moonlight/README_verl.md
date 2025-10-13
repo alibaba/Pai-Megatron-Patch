@@ -96,6 +96,6 @@ bash run_mcore_moonlight_verl.sh
 在解决了一些训练不稳定的问题后，验证集升的评估指标仍然有提升，而不会出现如下图灰色曲线所示的坍塌的现象。
 <p align="center">
   <picture>
-    <img alt="ChatLearn" src="../images/verl_moonlight_mathlight.png" width=30%>
+    <img alt="Verl" src="../images/verl_moonlight_mathlight.png" width=30%>
   </picture>
 </p>
