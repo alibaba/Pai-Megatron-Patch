@@ -79,7 +79,7 @@ def _get_base_transformer_config(
         "batch_p2p_comm": batch_p2p_comm,
         "sequence_parallel": mpu.get_tensor_model_parallel_world_size() > 1,
         # Common settings
-        "variable_seq_lengths": False, # Raw: True
+        "variable_seq_lengths": True,
         "masked_softmax_fusion": True,
         "moe_token_dispatcher_type": "alltoall",
     }
@@ -251,7 +251,6 @@ def hf_to_mcore_config_qwen3moe(
     print(f"Overridden TF init config: {args}")
     return TransformerConfig(**args)
 
-
 def hf_to_mcore_config_dpskv3(
     hf_config: PretrainedConfig, dtype: torch.dtype, **override_transformer_config_kwargs
 ) -> MLATransformerConfig:
@@ -265,26 +264,18 @@ def hf_to_mcore_config_dpskv3(
     mla_rope_config = {
         "beta_fast": 32,
         "beta_slow": 1,
-        "factor": 1,
+        "factor": 40,
         "mscale": 1.0,
         "mscale_all_dim": 1.0,
         "original_max_position_embeddings": 4096,
-        "type": "rope",
+        "type": "yarn",
     }
     if "rope_scaling" in hf_config and hf_config.rope_scaling is not None:
         mla_rope_config.update(hf_config.rope_scaling)
-    moe_layer_freq = [1] * hf_config.num_hidden_layers
-    for i in range(min(hf_config.first_k_dense_replace, hf_config.num_hidden_layers)):
-        moe_layer_freq[i] = 0
 
-    # disable MTP and quantization for now
-    if "num_nextn_predict_layers" in hf_config:
-        assert hf_config.num_nextn_predict_layers == 0, (
-            "MTP is not supported for now, please modify the config.json to set num_nextn_predict_layers to 0"
-        )
-    assert "quantization_config" not in hf_config or not hf_config.quantization_config, (
-        "quantization is not supported for now, please modify the config.json to remove quantization_config"
-    )
+    moe_layer_freq = [0] * hf_config.first_k_dense_replace \
+                + [1] * (hf_config.num_hidden_layers - hf_config.first_k_dense_replace)
+
 
     args: dict = _get_mla_transformer_config(
         hf_config=hf_config,
@@ -298,122 +289,30 @@ def hf_to_mcore_config_dpskv3(
         # Standard MoE parameters
         moe_ffn_hidden_size=hf_config.moe_intermediate_size,
         moe_token_dispatcher_type="alltoall",
-        moe_router_bias_update_rate=0.001,
+        moe_router_bias_update_rate=0.,
         moe_router_enable_expert_bias=True,
         moe_router_topk=hf_config.num_experts_per_tok,
         num_moe_experts=hf_config.n_routed_experts,
         moe_shared_expert_intermediate_size=hf_config.moe_intermediate_size * hf_config.n_shared_experts,
-        moe_aux_loss_coeff=getattr(hf_config, "aux_loss_alpha", 0.001),
-        moe_router_load_balancing_type="seq_aux_loss",
+        moe_aux_loss_coeff=0.,
+        moe_router_load_balancing_type="none",
         moe_shared_expert_overlap=True,
-        moe_router_force_load_balancing=True,
-        # moe_permute_fusion=True, # need TE 2.1+
         moe_grouped_gemm=True,
         moe_router_score_function="sigmoid",
         moe_router_pre_softmax=True,
         moe_router_topk_scaling_factor=hf_config.routed_scaling_factor,
         moe_layer_freq=moe_layer_freq,
-        # mcore 0.12 moe
-        moe_router_dtype="fp64",
-        disable_bf16_reduced_precision_matmul=True,
-        # Other optimizations
-        # deallocate_pipeline_outputs=True,
-        # gradient_accumulation_fusion=True,
-        persist_layer_norm=True,
-        bias_activation_fusion=True,
-        bias_dropout_fusion=True,
+        moe_router_dtype="fp32",
+        moe_permute_fusion=True,
+        moe_router_fusion=True,
+        apply_rope_fusion=False,
+        moe_router_num_groups=hf_config.n_group,
+        moe_router_group_topk=hf_config.topk_group,
+        v_head_dim=hf_config.v_head_dim,
     )
     # override_transformer_config_kwargs as kwargs shall never be none
     args.update(override_transformer_config_kwargs)
     transformer_config: MLATransformerConfig = MLATransformerConfig(**args)
-    print(f"Overridden MLA TF init config: {transformer_config}")
-    # MTP
-    if "num_nextn_predict_layers" in hf_config:
-        transformer_config.mtp_num_layers = hf_config.num_nextn_predict_layers
-        transformer_config.mtp_loss_scaling_factor = 0.1
-
-    return transformer_config
-
-def hf_to_mcore_config_moonlight(
-    hf_config: PretrainedConfig, dtype: torch.dtype, **override_transformer_config_kwargs
-) -> MLATransformerConfig:
-    # DeepseekV3ForCausalLM
-    from megatron.core.transformer.enums import AttnBackend
-
-    #from .patch_v012 import apply_patch
-
-    #apply_patch()
-
-    mla_rope_config = {
-        "beta_fast": 32,
-        "beta_slow": 1,
-        "factor": 1,
-        "mscale": 1.0,
-        "mscale_all_dim": 1.0,
-        "original_max_position_embeddings": 4096,
-        "type": "rope",
-    }
-    if "rope_scaling" in hf_config and hf_config.rope_scaling is not None:
-        mla_rope_config.update(hf_config.rope_scaling)
-    moe_layer_freq = [1] * hf_config.num_hidden_layers
-    for i in range(min(hf_config.first_k_dense_replace, hf_config.num_hidden_layers)):
-        moe_layer_freq[i] = 0
-
-    # disable MTP and quantization for now
-    if "num_nextn_predict_layers" in hf_config:
-        assert hf_config.num_nextn_predict_layers == 0, (
-            "MTP is not supported for now, please modify the config.json to set num_nextn_predict_layers to 0"
-        )
-    assert "quantization_config" not in hf_config or not hf_config.quantization_config, (
-        "quantization is not supported for now, please modify the config.json to remove quantization_config"
-    )
-
-    args: dict = _get_mla_transformer_config(
-        hf_config=hf_config,
-        mla_rope_config=mla_rope_config,
-        dtype=dtype,
-        # Additional parameters
-        use_cpu_initialization=False,
-        add_bias_linear=False,
-        attention_backend=AttnBackend.fused,
-        qk_layernorm=True,
-        # Standard MoE parameters
-        moe_ffn_hidden_size=hf_config.moe_intermediate_size,
-        moe_token_dispatcher_type="alltoall",
-        moe_router_bias_update_rate=0.001,
-        moe_router_enable_expert_bias=True,
-        moe_router_topk=hf_config.num_experts_per_tok,
-        num_moe_experts=hf_config.n_routed_experts,
-        moe_shared_expert_intermediate_size=hf_config.moe_intermediate_size * hf_config.n_shared_experts,
-        moe_aux_loss_coeff=getattr(hf_config, "aux_loss_alpha", 0.001),
-        moe_router_load_balancing_type="seq_aux_loss",
-        moe_shared_expert_overlap=True,
-        moe_router_force_load_balancing=True,
-        # moe_permute_fusion=True, # need TE 2.1+
-        moe_grouped_gemm=True,
-        moe_router_score_function="sigmoid",
-        moe_router_pre_softmax=True,
-        moe_router_topk_scaling_factor=hf_config.routed_scaling_factor,
-        moe_layer_freq=moe_layer_freq,
-        # mcore 0.12 moe
-        moe_router_dtype="fp64",
-        disable_bf16_reduced_precision_matmul=True,
-        # Other optimizations
-        # deallocate_pipeline_outputs=True,
-        # gradient_accumulation_fusion=True,
-        persist_layer_norm=True,
-        bias_activation_fusion=True,
-        bias_dropout_fusion=True,
-    )
-    # override_transformer_config_kwargs as kwargs shall never be none
-    args.update(override_transformer_config_kwargs)
-    transformer_config: MLATransformerConfig = MLATransformerConfig(**args)
-    print(f"Overridden MLA TF init config: {transformer_config}")
-    # MTP
-    if "num_nextn_predict_layers" in hf_config:
-        transformer_config.mtp_num_layers = hf_config.num_nextn_predict_layers
-        transformer_config.mtp_loss_scaling_factor = 0.1
-
     return transformer_config
 
 def hf_to_mcore_config_qwen2_5_vl(

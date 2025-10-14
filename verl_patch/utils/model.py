@@ -39,6 +39,17 @@ from megatron.core import parallel_state as mpu
 from megatron.core.dist_checkpointing.serialization import get_default_load_sharded_strategy
 from megatron.core.dist_checkpointing.serialization import StrictHandling
 
+try:
+    from modelopt.torch.opt.plugins import (
+        save_modelopt_state,
+        save_sharded_modelopt_state,
+        restore_modelopt_state,
+        restore_sharded_modelopt_state,
+    )
+    has_nvidia_modelopt = True
+except Exception:
+    has_nvidia_modelopt = False
+
 
 def load_mcore_dist_weights(ddp_model, load_dir, strict=True,
                     checkpointing_context=None, skip_load_to_model_and_opt=False, is_value_model=False):
@@ -55,12 +66,16 @@ def load_mcore_dist_weights(ddp_model, load_dir, strict=True,
 
     ddp_model = unwrap_model(ddp_model)
     sharded_sd_metadata = dist_checkpointing.load_content_metadata(preloaded_state_dict=state_dict)
+    if has_nvidia_modelopt:
+        restore_modelopt_state(ddp_model, state_dict)
+    else:
+        raise ValueError("ModelOpt is not installed. Please install nvidia-modelopt to load modelopt state.")
     model_sd_kwargs = dict(metadata=sharded_sd_metadata)
     sharded_state_dict = generate_state_dict(ddp_model, model_sd_kwargs)
     state_dict, checkpoint_name, release, ckpt_type = _load_base_checkpoint(
         load_dir, rank0=False, sharded_state_dict=sharded_state_dict, checkpointing_context=checkpointing_context
 )
-
+    
     # Model.
     if not skip_load_to_model_and_opt:
         if len(ddp_model) == 1:
@@ -102,10 +117,7 @@ def _load_base_checkpoint(
         if isfile(tracker_filename):
             iteration, release = read_metadata(tracker_filename)
 
-
-    # Determine the type of the checkpoint on disk.
-    checkpoint_name = get_checkpoint_name(load_dir, iteration, release, return_base_dir=True)
-    ckpt_format = _get_checkpoint_format(checkpoint_name)
+    ckpt_format = "torch_dist"
 
     if not rank0:
         dist_infix = "distributed " if ckpt_format == "torch_dist" else ""
@@ -134,7 +146,7 @@ def _load_global_dist_base_checkpoint(
     checkpoint_name = get_checkpoint_name(load_dir, iteration, release, return_base_dir=True)
     load_strategy = get_default_load_sharded_strategy(checkpoint_name)
 
-    state_dict = dist_checkpointing.load(sharded_state_dict, checkpoint_name, load_strategy, strict=StrictHandling.ASSUME_OK_UNEXPECTED)
+    state_dict = dist_checkpointing.load(sharded_state_dict, checkpoint_name, load_strategy, strict='assume_ok_unexpected')
     return state_dict, checkpoint_name, release, CheckpointType.GLOBAL
 
 

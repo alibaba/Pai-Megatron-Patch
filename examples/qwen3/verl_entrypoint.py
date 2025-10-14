@@ -24,9 +24,10 @@ from omegaconf import OmegaConf
 
 from verl.experimental.dataset.sampler import AbstractSampler
 from verl.trainer.constants_ppo import PPO_RAY_RUNTIME_ENV
-from verl.trainer.ppo.ray_trainer import RayPPOTrainer
 from verl.trainer.ppo.reward import load_reward_manager
 from verl.utils.import_utils import load_extern_type
+
+from verl_patch.trainer.ray_trainer import RayPPOTrainer
 
 
 @hydra.main(config_path="config", config_name="ppo_trainer", version_base=None)
@@ -206,7 +207,7 @@ class TaskRunner:
         train_dataset = create_rl_dataset(config.data.train_files, config.data, tokenizer, processor)
         val_dataset = create_rl_dataset(config.data.val_files, config.data, tokenizer, processor)
         train_sampler = create_rl_sampler(config.data, train_dataset)
-
+        
         # Initialize the PPO trainer.
         trainer = RayPPOTrainer(
             config=config,
@@ -316,5 +317,5 @@ def create_rl_sampler(data_config, dataset):
 
 if __name__ == "__main__":
     import time
-    time.sleep(10)
+    time.sleep(30)
     main()
