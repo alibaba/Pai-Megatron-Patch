@@ -29,6 +29,9 @@ pip install transformer_engine-2.7.0-cp312-cp312-linux_x86_64.whl --no-cache-dir
 #升级CUDNN，用以解决MLA模型训练时出现的问题
 pip install -U nvidia-cudnn-cu12==9.8.0.87 -i http://mirrors.cloud.aliyuncs.com/pypi/simple --trusted-host mirrors.cloud.aliyuncs.com
 
+#我们也提供了预先构建好的镜像协助您快速测试
+dsw-registry.cn-shanghai.cr.aliyuncs.com/pai-training-algorithm/chatlearn:torch2.6.0-vllm0.8.5-te2.7-ubuntu24.04-cuda12.6-py312
+
 ```
 
 ## 代码准备
@@ -36,7 +39,7 @@ pip install -U nvidia-cudnn-cu12==9.8.0.87 -i http://mirrors.cloud.aliyuncs.com/
 git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 ```
 
-## 数据准备
+## 数据&模型准备
 以[MATH-lighteval](https://www.modelscope.cn/datasets/AI-ModelScope/MATH-lighteval)数据集作为示例.
 ```bash
 # 下载数据集
@@ -56,17 +59,11 @@ vim ~/Pai-Megatron-Patch/backends/megatron/Megatron-LM-250908/megatron/core/mode
 linear_q_down_proj=backend.linear() -> linear_q_down_proj=backend.column_parallel_linear()
 linear_kv_down_proj=backend.linear() -> linear_kv_down_proj=backend.column_parallel_linear()
 
-vim /mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct/config.json
-将"AutoModel"和"AutoModelForCausalLM"修改为：
-"auto_map": {
-"AutoConfig": "configuration_deepseek.DeepseekV3Config",
-"AutoModel": "modeling_deepseek_pai.DeepseekV3Model",
-"AutoModelForCausalLM": "modeling_deepseek_pai.DeepseekV3ForCausalLM"
-}
+#Moonlight模型的config.json需要做如下的改进: 将"AutoModel"和"AutoModelForCausalLM"的值分别修改为modeling_deepseek_pai.DeepseekV3Model，modeling_deepseek_pai.DeepseekV3ForCausalLM
 cp ~/Pai-Megatron-Patch/examples/moonlight/modeling_deepseek_pai.py /mnt/data/ckpts/huggingface/Moonlight-16B-A3B-Instruct
+
 ```
 
-vim
 
 ## 模型转换
 
@@ -87,12 +84,18 @@ true \
 bf16
 ```
 
-## 模型转换
+## Moonlight强化学习训练以及训练稳定性指引
 
-## 训练
 运行以下命令开始训练：
 
 ```bash
 cd ~/Pai-Megatron-Patch/examples/moonlight
 bash run_mcore_moonlight_verl.sh
 ```
+
+在解决了一些训练不稳定的问题后，验证集升的评估指标仍然有提升，而不会出现如下图灰色曲线所示的坍塌的现象。
+<p align="center">
+  <picture>
+    <img alt="Verl" src="../images/verl_moonlight_mathlight.png" width=30%>
+  </picture>
+</p>
