@@ -7,6 +7,11 @@ from typing import List, Optional, Union
 import torch
 from torch import Tensor, nn
 
+from megatron.core.tensor_parallel.mappings import (
+    scatter_to_sequence_parallel_region, 
+    gather_from_sequence_parallel_region
+)
+
 from megatron.core import parallel_state, tensor_parallel
 from megatron.core.dist_checkpointing.mapping import ShardedStateDict
 from megatron.core.dist_checkpointing.utils import replace_prefix_for_sharding
@@ -691,6 +696,10 @@ class TransformerBlock(MegatronModule):
     ):
         visual_pos_masks = visual_pos_masks.to(hidden_states.device)
         visual_embeds = visual_embeds.to(hidden_states.device, hidden_states.dtype)
+        if self.config.sequence_parallel:
+            hidden_states = gather_from_sequence_parallel_region(hidden_states)
         local_this = hidden_states[visual_pos_masks, :].clone() + visual_embeds
         hidden_states[visual_pos_masks, :] = local_this
+        if self.config.sequence_parallel:
+            hidden_states = scatter_to_sequence_parallel_region(hidden_states)  
         return hidden_states

@@ -51,24 +51,26 @@ PR=$9
 TP=${10}
 PP=${11}
 CP=${12}
-SP=${13}
-DO=${14}
-FL=${15}
+ETP=${13} 
+EP=${14}
+SP=${15}
+DO=${16}
+FL=${17}
 ### PARALLEL / BOOL OPTION ###
 
 ### OTHERS ###
-AC=${16}
-OPTIMIZER_OFFLOAD=${17}
-SAVE_INTERVAL=${18}
-DATASET_PATH=${19}
-VALID_DATASET_PATH=${20}
-PRETRAIN_CHECKPOINT_PATH=${21}
+AC=${18}
+OPTIMIZER_OFFLOAD=${19}
+SAVE_INTERVAL=${20}
+DATASET_PATH=${21}
+VALID_DATASET_PATH=${22}
+PRETRAIN_CHECKPOINT_PATH=${23}
 
-TRAIN_ITERS=${22}
-LR_WARMUP_ITERS=${23}
+TRAIN_ITERS=${24}
+LR_WARMUP_ITERS=${25}
 ###############################
 
-OUTPUT_BASEPATH=${24}
+OUTPUT_BASEPATH=${26}
 ### OTHERS ###
 if [ $FL = true ]; then
     attn_option=" \
@@ -78,55 +80,19 @@ elif [ $FL = false ]; then
     --attention-backend fused"
 fi
 
-if [ $MODEL_SIZE = 3B ]; then
+if [ $MODEL_SIZE = A3B ]; then
 
-NUM_LAYERS=36 # num_hidden_layers
-HIDDEN_SIZE=2048 # hidden_size
-NUM_ATTN_HEADS=16 # num_attention_heads
-INTERMEDIATE_SIZE=11008 # intermediate_size
-NUM_KEY_VALUE_HEADS=2 # num_key_value_heads
-MAX_POSITION_EMBEDDINGS=128000 # max_position_embeddings
-EXTRA_VOCAB_SIZE=293 # 151643 + 293 = 151936
-RMS_NORM_EPS=1e-6 # rms_norm_eps
-
-
-gqa_options=" \
-		    --group-query-attention \
-		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
-
-
-tie_option="" # tie_word_embeddings
-
-
-elif [ $MODEL_SIZE = 8B ]; then
-
-NUM_LAYERS=36
-HIDDEN_SIZE=4096
-NUM_ATTN_HEADS=32
-INTERMEDIATE_SIZE=12288
-NUM_KEY_VALUE_HEADS=8
-MAX_POSITION_EMBEDDINGS=40960
-EXTRA_VOCAB_SIZE=293
+HIDDEN_SIZE=2048
+NUM_ATTENTION_HEADS=32
+NUM_LAYERS=48
+INTERMEDIATE_SIZE=6144
+MOE_INTERMEDIATE_SIZE=768
+MAX_POSITION_EMBEDDINGS=262144
+VOCAB_SIZE=151936
+NUM_KEY_VALUE_HEADS=4
 ROPE_THETA=1000000
-RMS_NORM_EPS=1e-6
-gqa_options=" \
-            --group-query-attention \
-            --num-query-groups ${NUM_KEY_VALUE_HEADS}"
-
-tie_option=" \
-        --untie-embeddings-and-output-weights \
-        "
-moe_options=""
-
-elif [ $MODEL_SIZE = 32B ]; then
-
-NUM_LAYERS=64
-HIDDEN_SIZE=5120
-NUM_ATTN_HEADS=40
-INTERMEDIATE_SIZE=27648
-NUM_KEY_VALUE_HEADS=8
-MAX_POSITION_EMBEDDINGS=128000
-EXTRA_VOCAB_SIZE=421  # 151643 + 421 = 152064
+NUM_EXPERTS=128
+ROUTER_TOPK=8
 RMS_NORM_EPS=1e-6
 
 gqa_options=" \
@@ -138,26 +104,18 @@ tie_option=" \
         --untie-embeddings-and-output-weights \
         "
 
-elif [ $MODEL_SIZE = 72B ]; then
-
-NUM_LAYERS=80
-HIDDEN_SIZE=8192
-NUM_ATTN_HEADS=64
-INTERMEDIATE_SIZE=29568
-NUM_KEY_VALUE_HEADS=8
-MAX_POSITION_EMBEDDINGS=128000
-EXTRA_VOCAB_SIZE=421
-RMS_NORM_EPS=1e-5
-
-gqa_options=" \
-		    --group-query-attention \
-		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
-
-
-tie_option=" \
-        --untie-embeddings-and-output-weights \
-        "
-
+moe_options=" \
+    --moe-grouped-gemm \
+    --moe-token-dispatcher-type alltoall \
+    --moe-router-topk ${ROUTER_TOPK} \
+    --num-experts ${NUM_EXPERTS} \
+    --expert-tensor-parallel-size ${ETP} \
+    --expert-model-parallel-size ${EP} \
+    --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
+    --moe-router-load-balancing-type aux_loss \
+    --moe-aux-loss-coeff 0.001 \
+    --moe-layer-freq '([1]*48)' \
+    "
 
 fi
 
@@ -295,7 +253,7 @@ megatron_options="  \
         --global-batch-size ${GLOBAL_BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
         --hidden-size ${HIDDEN_SIZE} \
-        --num-attention-heads ${NUM_ATTN_HEADS} \
+        --num-attention-heads ${NUM_ATTENTION_HEADS} \
         --ffn-hidden-size ${INTERMEDIATE_SIZE} \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
@@ -315,7 +273,7 @@ megatron_options="  \
         --no-load-optim \
         --no-load-rng \
         --num-workers 8 \
-        --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
+        --padded-vocab-size ${VOCAB_SIZE} \
         --patch-tokenizer-type Qwen2VLTokenizer \
         --swiglu \
         --normalization RMSNorm \
@@ -323,9 +281,8 @@ megatron_options="  \
         --use-rotary-position-embeddings \
         --position-embedding-type mrope \
         --disable-bias-linear \
-        --add-qkv-bias \
         --rotary-percent 1.0 \
-        --rotary-base 1000000 \
+        --rotary-base ${ROPE_THETA} \
         --rotary-seq-len-interpolation-factor 1 \
         --no-save-optim \
         --disable-vision-class-token \
@@ -333,12 +290,14 @@ megatron_options="  \
         --transformer-impl transformer_engine \
         --ckpt-format torch_dist \
         --mrope-section 16 24 24 \
-        --patch-size 16
+        --patch-size 16 \
+        --qk-layernorm \
+        --kv-channels 128 
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
  ${megatron_options} ${dataset_option} ${pr_options} ${load_options} ${activation_checkpoint_options} \
- ${do_options} ${gqa_options} ${sft_option} ${tie_option} ${packing_options} ${uneven_split_option} ${vp_options} ${comm_overlap_option} ${attn_option}"
+ ${do_options} ${gqa_options} ${moe_options} ${sft_option} ${tie_option} ${packing_options} ${uneven_split_option} ${vp_options} ${comm_overlap_option} ${attn_option}"
 
 echo ${run_cmd}
 eval ${run_cmd}

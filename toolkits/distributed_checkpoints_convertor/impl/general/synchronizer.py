@@ -41,6 +41,7 @@ class ParamType(Enum):
     # generalized gate_up with multi linear with different output size
     MERGED_LINEAR = 10
     QGKV_W = 11
+    MOE_DOWN = 12
 
 class BaseSynchronizer(ABC):
     def __init__(

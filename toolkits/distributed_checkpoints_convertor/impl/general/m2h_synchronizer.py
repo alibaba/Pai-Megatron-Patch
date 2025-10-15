@@ -62,7 +62,7 @@ class MG2HFSynchronizer(BaseSynchronizer):
 
     def _copy_impl(self, src_tensor, dst_tensor, param_type: ParamType=ParamType.UNIQUE):
         param_id = self._hf_params_to_id[dst_tensor]
-        if param_type in [ParamType.MOE_COLUMN, ParamType.MOE_ROW, ParamType.MOE_GATE_UP]:
+        if param_type in [ParamType.MOE_COLUMN, ParamType.MOE_ROW, ParamType.MOE_GATE_UP, ParamType.MOE_DOWN]:
             # NOTE: only register on edp_rank 0
             if self.edp_rank != 0:
                 return
@@ -92,7 +92,7 @@ class MG2HFSynchronizer(BaseSynchronizer):
         else:
             self.copy(
                 mg_model.decoder.final_layernorm.weight, 
-                hf_model.model.norm.weight, 
+                hf_model.norm.weight, 
             )
         if mg_model.share_embeddings_and_output_weights:
             output_layer_weight = mg_model.shared_embedding_or_output_weight() 
@@ -180,6 +180,32 @@ class MG2HFSynchronizer(BaseSynchronizer):
     def set_mlp_state(self, mlp, hf_mlp):
         '''Set MLP params.'''
         hidden_size = mlp.linear_fc1.weight.shape[-1]
+        if not mlp.config.gated_linear_unit:
+            self.copy(
+                mlp.linear_fc1.weight, 
+                hf_mlp.linear_fc1.weight,
+                param_type=ParamType.COLUMN
+            )
+            if mlp.config.add_bias_linear:
+                self.copy(
+                    mlp.linear_fc1.bias, 
+                    hf_mlp.linear_fc1.bias,
+                    param_type=ParamType.COLUMN
+                )
+
+            self.copy(
+                mlp.linear_fc2.weight,
+                hf_mlp.linear_fc2.weight,
+                param_type=ParamType.ROW
+            )
+
+            if mlp.config.add_bias_linear:
+                self.copy(
+                    mlp.linear_fc2.bias,
+                    hf_mlp.linear_fc2.bias
+                )
+            return
+
         gate_proj_weight, up_proj_weight = mlp.linear_fc1.weight.reshape(2, -1, hidden_size)
         self.copy(
             gate_proj_weight, 
@@ -618,6 +644,14 @@ class MG2HFSynchronizer(BaseSynchronizer):
         Returns:
             torch.Tensor: The merged tensor
         """
+
+        def deduplicate_and_sort(tensor_dict, rank_group: int):
+            tensors = dict()
+            for global_rank, data in tensor_dict.items():
+                rank = self._rank_mapping[global_rank][rank_group]
+                tensors[int(rank)] = data
+            return [item[1] for item in sorted(tensors.items())]
+        
         # tensor_dict: Dict[remote_rank, torch.Tensor]
         def merge_along_axis(axis, tensor_dict, is_expert: bool = False):
             global_ranks = torch.tensor(list(tensor_dict.keys()), dtype=torch.long, device=self.device) # (N, )
@@ -631,13 +665,6 @@ class MG2HFSynchronizer(BaseSynchronizer):
                     raise ParamMergeError("Unexpected parameter data from non-zero dp rank")
                 if is_expert and ranks[:, 3].max() != ranks[:, 3].min():
                     raise ParamMergeError("Unexpected expert parameter data from multiple ep ranks")
-
-            def deduplicate_and_sort(tensor_dict, rank_group: int):
-                tensors = dict()
-                for global_rank, data in tensor_dict.items():
-                    rank = self._rank_mapping[global_rank][rank_group]
-                    tensors[int(rank)] = data
-                return [item[1] for item in sorted(tensors.items())]
 
             if is_expert:
                 tensors = deduplicate_and_sort(tensor_dict, 2)
@@ -662,6 +689,34 @@ class MG2HFSynchronizer(BaseSynchronizer):
                 return res.transpose(0, 1).flatten()
             return res.transpose(0, 1).flatten(0, 2)
 
+        def merge_moe_gate_up_tensor(tensor_dict):
+            global_ranks = torch.tensor(list(tensor_dict.keys()), dtype=torch.long, device=self.device) # (N, )
+            ranks = self._rank_mapping.index_select(0, global_ranks) # (N, 6)
+            etp_tensors = {}
+            for etp_rank in range(ranks[:, 2].max().item() + 1):
+                sub_tensor_dict = {}
+                for global_rank, cor_ranks in zip(global_ranks, ranks):
+                    if cor_ranks[2] != etp_rank: # same ETP rank
+                        continue
+                    sub_tensor_dict[global_rank.item()] = tensor_dict[global_rank.item()]
+                etp_tensors[etp_rank] = torch.cat(deduplicate_and_sort(sub_tensor_dict, 3), dim=0)
+            res = torch.cat([item[1] for item in sorted(etp_tensors.items())], dim=2)
+            return res.flatten(1, 2).permute(0, 2, 1).contiguous()
+
+        def merge_moe_down_tensor(tensor_dict):
+            global_ranks = torch.tensor(list(tensor_dict.keys()), dtype=torch.long, device=self.device) # (N, )
+            ranks = self._rank_mapping.index_select(0, global_ranks) # (N, 6)
+            etp_tensors = {}
+            for etp_rank in range(ranks[:, 2].max().item() + 1):
+                sub_tensor_dict = {}
+                for global_rank, cor_ranks in zip(global_ranks, ranks):
+                    if cor_ranks[2] != etp_rank: # same ETP rank
+                        continue
+                    sub_tensor_dict[global_rank.item()] = tensor_dict[global_rank.item()]
+                etp_tensors[etp_rank] = torch.cat(deduplicate_and_sort(sub_tensor_dict, 3), dim=0)
+            res = torch.cat([item[1] for item in sorted(etp_tensors.items())], dim=1)
+            return res.permute(0, 2, 1).contiguous()
+
         merge_func_mapping = {
             ParamType.MOE_COLUMN: partial(merge_along_axis, 0, is_expert=True),
             ParamType.MOE_ROW: partial(merge_along_axis, 1, is_expert=True),
@@ -670,6 +725,8 @@ class MG2HFSynchronizer(BaseSynchronizer):
             ParamType.QKV_W: partial(merge_qkv, False),
             ParamType.QKV_B: partial(merge_qkv, True),
             ParamType.UNIQUE: no_merge_func,
-            ParamType.QGKV_W: partial(merge_qgkv, False)
+            ParamType.QGKV_W: partial(merge_qgkv, False),
+            ParamType.MOE_GATE_UP: merge_moe_gate_up_tensor,
+            ParamType.MOE_DOWN: merge_moe_down_tensor
         }
         return merge_func_mapping[merge_type](tensor_dict)

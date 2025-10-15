@@ -65,6 +65,7 @@ def get_vision_model_config(args, config):
     config.hidden_size = 1152 # hidden_size
     config.hidden_dropout = 0.0
     config.attention_dropout = 0.0
+    config.ffn_hidden_size = 4304
 
     config.gated_linear_unit = False # no gated
     config.kv_channels = config.hidden_size // config.num_attention_heads

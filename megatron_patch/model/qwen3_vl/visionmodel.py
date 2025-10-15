@@ -62,6 +62,7 @@ class Qwen3VisionModel(VisionModule):
             temporal_patch_size=temporal_patch_size,
             in_channels=in_channels,
             embed_dim=embed_dim,
+            bias=True
         )
 
         self.pos_embed = nn.Embedding(transformer_config.num_position_embeddings, transformer_config.hidden_size)

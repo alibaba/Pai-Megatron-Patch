@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from typing import Optional
 from megatron.core.fusions.fused_bias_dropout import get_bias_dropout_add
 
 from megatron.core.extensions.transformer_engine import (
@@ -19,7 +19,9 @@ from megatron.core.extensions.transformer_engine import (
     TELayerNormColumnParallelLinear,
     TENorm,
     TERowParallelLinear,
-    TEColumnParallelLinear
+    TEColumnParallelLinear,
+    TEColumnParallelGroupedLinear,
+    TERowParallelGroupedLinear
 )
 
 from megatron.core.transformer.enums import AttnMaskType
@@ -34,12 +36,17 @@ from megatron.core.transformer.attention import SelfAttentionSubmodules
 from ..qwen2_5_vl.attention_vision import SelfAttention
 from megatron.core.transformer.attention import SelfAttention as Qwen2VLSelfAttention
 
+from megatron.core.transformer.moe.moe_layer import MoELayer, MoESubmodules
+from megatron.core.transformer.mlp import MLPSubmodules
+from megatron.core.transformer.moe.experts import TEGroupedMLP
 # Use this spec to use lower level Transformer Engine modules (required for fp8 training)
 def get_gpt_layer_with_transformer_engine_spec(
+    num_experts: Optional[int] = None,
+    moe_grouped_gemm: Optional[bool] = False,
     qk_layernorm: bool = False
 ) -> ModuleSpec:
     mlp = get_mlp_module_spec(
-        use_te=True, num_experts=None, moe_grouped_gemm=False
+        use_te=True, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm
     )
     return ModuleSpec(
         module=TransformerLayer,
@@ -56,7 +63,7 @@ def get_gpt_layer_with_transformer_engine_spec(
                 ),
             ),
             self_attn_bda=get_bias_dropout_add,
-            pre_mlp_layernorm=IdentityOp,
+            pre_mlp_layernorm=TENorm if num_experts is not None else IdentityOp,
             mlp=mlp,
             mlp_bda=get_bias_dropout_add,
         ),
@@ -100,24 +107,36 @@ def get_qwen3vl_vision_model_spec(
 def get_mlp_module_spec(
     use_te: bool = True, num_experts: int = None, moe_grouped_gemm: bool = False, add_norm: bool = True
 ) -> ModuleSpec:
+    assert use_te, "Only Transformer Engine backend is supported"
     if num_experts is None:
         # Dense MLP w/ or w/o TE modules.
         if add_norm:
             return ModuleSpec(
                 module=MLP,
                 submodules=MLPSubmodules(
-                    linear_fc1=TELayerNormColumnParallelLinear if use_te else ColumnParallelLinear,
-                    linear_fc2=TERowParallelLinear if use_te else RowParallelLinear,
+                    linear_fc1=TELayerNormColumnParallelLinear,
+                    linear_fc2=TERowParallelLinear,
                 ),
             )
         else:
             return ModuleSpec(
                 module=MLP,
                 submodules=MLPSubmodules(
-                    linear_fc1=TEColumnParallelLinear if use_te else ColumnParallelLinear,
-                    linear_fc2=TERowParallelLinear if use_te else RowParallelLinear,
+                    linear_fc1=TEColumnParallelLinear,
+                    linear_fc2=TERowParallelLinear,
                 ),
             )            
     else:
         # Mixture of experts with modules in megatron core.
-        raise NotImplementedError()
+        assert moe_grouped_gemm, "Only TE Group GEMM is supported."
+        return ModuleSpec(
+            module=MoELayer, 
+            submodules=MoESubmodules(
+                experts=ModuleSpec(
+                    module=TEGroupedMLP,
+                    submodules=MLPSubmodules(
+                        linear_fc1=TEColumnParallelGroupedLinear, linear_fc2=TERowParallelGroupedLinear
+                    )
+                ), 
+            )
+        )

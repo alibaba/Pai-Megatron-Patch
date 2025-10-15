@@ -68,7 +68,6 @@ def model_provider(
     pre_process=True, post_process=True, add_encoder=True, add_decoder=True, vp_stage: Optional[int] = None
 ) -> Union[Qwen3VLModel]:
     args = get_args()
-    build_tokenizer(args)
     print_rank_0("start building qwen3-vl model ...")
 
     # Config of vit, llm and projector
@@ -84,11 +83,15 @@ def model_provider(
     vision_config = get_vision_model_config(args, deepcopy(config))
     vision_config.pipeline_model_parallel_size = 1
     vision_config.num_layers_in_first_pipeline_stage = None
-    vision_projector_config = get_vision_projection_config(deepcopy(config), vision_config.hidden_size, args.spatial_merge_size)
+    vision_projector_config = get_vision_projection_config(deepcopy(config), vision_config.hidden_size, vision_config.spatial_merge_size)
     
     print_rank_0("building Qwen3-VL model in TE...")
     # Layer Specs of vit, llm and projector
-    transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.qk_layernorm)
+    transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
+        num_experts=args.num_experts,
+        moe_grouped_gemm=args.moe_grouped_gemm,
+        qk_layernorm=args.qk_layernorm
+    )
     vision_model_spec = get_qwen3vl_vision_model_spec()
     vision_projector_spec = get_mlp_module_spec(add_norm=False).submodules
 
@@ -123,8 +126,8 @@ def model_provider(
     )
 
     model.freeze(
-        freeze_language_model=args.freeze_LM, 
-        freeze_vision_model=args.freeze_ViT, 
+        freeze_language_model=getattr(args, 'freeze_LM', False), 
+        freeze_vision_model=getattr(args, 'freeze_ViT', False), 
         freeze_vision_projection=False
     )
 

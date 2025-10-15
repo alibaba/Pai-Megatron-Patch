@@ -96,6 +96,7 @@ class HF2MGSynchronizer(BaseSynchronizer):
             ParamType.MOE_COLUMN: lambda x: torch.chunk(self.load_tensor(x), tp_size, dim=0)[tp_rank],
             ParamType.MOE_ROW: lambda x: torch.chunk(self.load_tensor(x), tp_size, dim=1)[tp_rank],
             # the data of following type is loaded by caller
+            ParamType.MOE_DOWN: lambda x: torch.chunk(x, tp_size, dim=1)[tp_rank],
             ParamType.MOE_GATE_UP: lambda x: torch.chunk(x, tp_size, dim=1)[tp_rank].flatten(0, 1),
             ParamType.MERGED_LINEAR: lambda lst: torch.cat([torch.chunk(x, tp_size, dim=0)[tp_rank].flatten(0, 1) for x in lst], dim=0)
         }
@@ -120,7 +121,7 @@ class HF2MGSynchronizer(BaseSynchronizer):
             )
         else:
             self.copy(
-                hf_model.model.norm.weight, 
+                hf_model.norm.weight, 
                 mg_model.decoder.final_layernorm.weight, 
             )
         if mg_model.share_embeddings_and_output_weights:
@@ -218,6 +219,34 @@ class HF2MGSynchronizer(BaseSynchronizer):
         The mlp (mcore MLP) should have attributes `linear_fc1` and `linear_fc2`.
         Currently only Gated Linear is supported.
         '''
+        if not mlp.config.gated_linear_unit:
+            assert expert_id == '', "expert w/o gated_linear is not supported"
+            if self.dryrun:
+                return
+
+            self.copy(
+                hf_mlp.linear_fc1.weight, 
+                mlp.linear_fc1.weight, 
+                param_type=ParamType.COLUMN
+            )
+            self.copy(
+                hf_mlp.linear_fc2.weight, 
+                mlp.linear_fc2.weight, 
+                param_type=ParamType.ROW
+            )
+            if mlp.config.add_bias_linear:
+                self.copy(
+                    hf_mlp.linear_fc1.bias, 
+                    mlp.linear_fc1.bias, 
+                    param_type=ParamType.COLUMN
+                )
+                self.copy(
+                    hf_mlp.linear_fc2.bias, 
+                    mlp.linear_fc2.bias, 
+                    param_type=ParamType.UNIQUE
+                )        
+            return
+
         if self.dryrun:
             gate_up_proj_weight = mlp.linear_fc1.weight
             if mlp.config.add_bias_linear:

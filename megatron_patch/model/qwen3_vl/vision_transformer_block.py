@@ -319,7 +319,7 @@ class TransformerBlock(MegatronModule):
                 build_module(
                     self.submodules.layer_norm,
                     config=self.config,
-                    hidden_size=self.config.hidden_size,
+                    hidden_size=self.config.hidden_size * (self.config.spatial_merge_size**2),
                     eps=self.config.layernorm_epsilon,
                 )
                 for _ in range(len(self.config.deepstack_visual_indexes))
@@ -614,9 +614,10 @@ class TransformerBlock(MegatronModule):
                     
                     if l_no in self.deepstack_visual_indexes:
                         idx = self.deepstack_visual_indexes.index(l_no)
-                        deepstack_feature = self.deepstack_merger_list[idx](
+                        merger = self.deepstack_merger_list[idx]
+                        deepstack_feature = merger(
                             self.deepstack_norm_list[idx](
-                                hidden_states.view(-1, self.config.hidden_size)
+                                hidden_states.view(-1, merger.config.ffn_hidden_size)
                             )
                         )
                         deepstack_feature_lists.append(deepstack_feature)
@@ -704,11 +705,19 @@ class TransformerBlock(MegatronModule):
         # Add modules other than self.layers
         for name, module in self.named_children():
             if not module is self.layers:
-                sharded_state_dict.update(
-                    sharded_state_dict_default(
-                        module, f'{prefix}{name}.', sharded_offsets, metadata
+                if isinstance(module, nn.ModuleList):
+                    for idx, sub_module in enumerate(module):
+                        sharded_state_dict.update(
+                            sharded_state_dict_default(
+                                sub_module, f'{prefix}{name}.{idx}.', sharded_offsets, metadata
+                            )
+                        )
+                else:
+                    sharded_state_dict.update(
+                        sharded_state_dict_default(
+                            module, f'{prefix}{name}.', sharded_offsets, metadata
+                        )
                     )
-                )
 
         return sharded_state_dict
 

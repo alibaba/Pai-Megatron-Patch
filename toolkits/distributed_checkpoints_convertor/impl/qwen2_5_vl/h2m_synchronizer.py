@@ -52,9 +52,13 @@ class HF2MGSynchronizer(_HF2MGSynchronizer):
     def set_vision_layer_state(self, layer, hf_layer):
         self.set_visual_attn_state(layer.self_attention, hf_layer.attn)
         self.copy(hf_layer.norm1.weight, layer.self_attention.linear_qkv.layer_norm_weight)
+        if layer.config.normalization == 'LayerNorm':
+            self.copy(hf_layer.norm1.bias, layer.self_attention.linear_qkv.layer_norm_bias)
         
         self.set_mlp_state(layer.mlp, hf_layer.mlp)
         self.copy(hf_layer.norm2.weight, layer.mlp.linear_fc1.layer_norm_weight)
+        if layer.config.normalization == 'LayerNorm':
+            self.copy(hf_layer.norm2.bias, layer.mlp.linear_fc1.layer_norm_bias)
     
     def set_visual_attn_state(self, attn, hf_attn):
         '''Set self-attention params.'''
@@ -89,7 +93,7 @@ class HF2MGSynchronizer(_HF2MGSynchronizer):
         )
 
         # Copy bias
-        if self.args.add_qkv_bias:
+        if attn.config.add_qkv_bias:
             if self.dryrun:
                 attn_proj_bias = attn.linear_qkv.bias
             else:

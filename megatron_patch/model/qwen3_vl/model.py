@@ -5,7 +5,7 @@ from typing import List
 
 import torch
 
-from megatron.core import InferenceParams, parallel_state
+from megatron.core import InferenceParams
 from megatron.core.transformer import MegatronModule
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_config import TransformerConfig
@@ -211,8 +211,9 @@ class Qwen3VLModel(MegatronModule):
         
         if self.pre_process:
             vision_embeds = None
+            deepstack_feature_lists = None
             if vision_grid_thw.shape[0] > 0:
-                vision_embeds = self.vision_model(
+                vision_embeds, deepstack_feature_lists = self.vision_model(
                     vision_data=vision_data, # If None, vision model should use intermediate outputs (EPP > 1)
                     grid_thw=vision_grid_thw # should provided in each EPP stage
                 )
@@ -228,28 +229,32 @@ class Qwen3VLModel(MegatronModule):
             # If running inference, we can skip image token computation if they were computed already earlier for this sample.
             if use_inference_kv_cache:
                 language_embeddings: torch.Tensor = self.language_model.embedding(
-                input_ids=input_ids,
-                position_ids=None # NOTE: disable
+                    input_ids=input_ids,
+                    position_ids=None # NOTE: disable
                 )  # [text_seq_len, b, h_language]
                 # NOTE: why not cat here? is it the combined embeddings useless?
                 combined_embeddings = language_embeddings
             elif vision_embeds is not None:
+                if image_input_mask is not None:
+                    image_input_mask = image_input_mask.T # shape [seqlen, mbs]
+                if video_input_mask is not None:
+                    video_input_mask = video_input_mask.T
+
                 if video_start_index == 0:
                     image_embeds = None
                     video_embeds = vision_embeds
+                    visual_pos_masks = video_input_mask 
                 elif video_start_index == vision_embeds.shape[0]:
                     image_embeds = vision_embeds
                     video_embeds = None
+                    visual_pos_masks = image_input_mask
                 elif 0 < video_start_index < vision_embeds.shape[0]:
                     image_embeds = vision_embeds[:video_start_index]
                     video_embeds = vision_embeds[video_start_index:]
+                    visual_pos_masks = torch.logical_or(image_input_mask, video_input_mask)
                 else:
                     raise ValueError(f"Expect video token start index in range [0, {vision_embeds.shape[0]}], but got {video_start_index}")
                 
-                if image_embeds is not None:
-                    image_input_mask = image_input_mask.T # shape [seqlen, mbs]
-                if video_embeds is not None:
-                    video_input_mask = video_input_mask.T
                 combined_embeddings = self.language_model.embedding(
                     input_ids=input_ids,
                     position_ids=None, # NOTE: disable
@@ -263,8 +268,11 @@ class Qwen3VLModel(MegatronModule):
                     input_ids=input_ids,
                     position_ids=None # NOTE: disable
                 )  # [text_seq_len, b, h_language]
+            
         else:
             combined_embeddings = None
+            visual_pos_masks = None
+            deepstack_feature_lists = None
 
         output = self.language_model(
             input_ids=None,
@@ -274,31 +282,9 @@ class Qwen3VLModel(MegatronModule):
             labels=labels,                          # only not None in the last decoder PP stage
             inference_params=inference_params,      # currently always None
             packed_seq_params=packed_seq_params,    # currently always None
+            visual_pos_masks=visual_pos_masks,
+            deepstack_visual_embeds=deepstack_feature_lists,
             **(extra_block_kwargs or {}),
         )
         return output
 
-
-
-def _load_state_dict_hook_ignore_param_names(
-    param_names: List[str], module: torch.nn.Module, incompatible_keys: namedtuple
-):
-    """Hook to ignore missing keys during checkpoint loading.
-
-    By default, this should not be used to avoid accidentally missing weights in checkpoint loading.
-
-    Example use case: Use this for the vision projection if you want to load a checkpoint that contains vision and language model weights
-    but not the vision projection weights.
-
-    Args:
-        param_names (list of str): Parameter names allowed to be missing when calling load_state_dict.
-        module (torch.nn.Module): The torch module this hook applies to. Unused here but required by the torch API.
-        incompatible_keys (namedtuple): Namedtuple with fields missing_keys and unexpected_keys, which collect the missing and unexpected
-            keys when calling load_state_dict on this torch module, respectively.
-    """
-    for param_name in param_names:
-        if param_name in incompatible_keys.missing_keys:
-            logging.getLogger(__name__).warning(
-                f"{param_name} being removed from incompatible_keys.missing_keys in QWen2VLModel"
-            )
-            incompatible_keys.missing_keys.remove(param_name)
