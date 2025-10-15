@@ -82,7 +82,6 @@ if [ $MODEL_SIZE = A3B ]; then
     INTERMEDIATE_SIZE=5120
     MOE_INTERMEDIATE_SIZE=512
     MAX_POSITION_EMBEDDINGS=262144
-    EXTRA_VOCAB_SIZE=293
     NUM_KEY_VALUE_HEADS=2
     ROPE_THETA=10000000
     NUM_EXPERTS=512
@@ -348,7 +347,7 @@ megatron_options="  \
         --no-load-optim \
         --no-load-rng \
         --num-workers 32 \
-        --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
+        --padded-vocab-size 151936 \
         --patch-tokenizer-type Qwen3Tokenizer \
         --swiglu \
         --normalization RMSNorm \

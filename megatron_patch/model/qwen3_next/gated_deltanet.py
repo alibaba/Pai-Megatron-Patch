@@ -6,17 +6,12 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-import math
-import warnings
-from dataclasses import dataclass, replace
 from typing import List, Optional, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from megatron.core.dist_checkpointing import ShardedTensor
-from megatron.core.dist_checkpointing.mapping import ReplicaId, ShardedTensorFactory
 from megatron.core.inference.contexts import BaseInferenceContext
 from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.tensor_parallel import get_cuda_rng_tracker
@@ -27,14 +22,11 @@ from megatron.core.transformer.utils import (
     make_sharded_tensors_for_checkpoint,
     sharded_state_dict_default,
 )
-from megatron.core.utils import deprecate_inference_params, log_single_rank
+
 
 from megatron.core.ssm.mamba_context_parallel import MambaContextParallel
+from megatron.core.ssm.mamba_mixer import MambaMixer, MambaMixerSubmodules, _split_tensor_factory
 
-try:
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-except ImportError:
-    selective_state_update = None
 
 try:
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
@@ -74,17 +66,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class MambaMixerSubmodules:
-    """
-    Contains the module specs for the input and output linear layers.
-    """
-
-    in_proj: Union[ModuleSpec, type] = None
-    out_proj: Union[ModuleSpec, type] = None
-
-
-class GatedDeltaNetMixer(MegatronModule):
+class GatedDeltaNetMixer(MambaMixer):
     """
     Args:
         config: The config of the model.
@@ -153,7 +135,7 @@ class GatedDeltaNetMixer(MegatronModule):
                 "FLA is not installed"
             )
 
-        super().__init__(config)
+        MegatronModule.__init__(self, config)
         self.config = config
         self.d_model = d_model
         self.d_conv = d_conv
@@ -382,67 +364,6 @@ class GatedDeltaNetMixer(MegatronModule):
 
         return out, out_bias
 
-    def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None):
-        """
-        allocate inference cache
-        """
-        device = self.out_proj.weight.device
-        conv_dtype = self.conv1d.weight.dtype if dtype is None else dtype
-        conv_state = torch.zeros(
-            batch_size, self.conv1d.weight.shape[0], self.d_conv, device=device, dtype=conv_dtype
-        )
-        ssm_dtype = self.in_proj.weight.dtype if dtype is None else dtype
-        # ssm_dtype = torch.float32
-        ssm_state = torch.zeros(
-            batch_size,
-            self.nheads_local_tp,
-            self.headdim,
-            self.d_state,
-            device=device,
-            dtype=ssm_dtype,
-        )
-        return conv_state, ssm_state
-
-    def _get_states_from_cache(self, inference_context, batch_size, *, inference_params=None):
-        """Initializes or retrieves the SSM state tensors from the cache.
-
-        At the start of any inference (at the prefill step), if there is no cache or if the
-        cached batch size has changed, then new tensors are initialized and stored in the cache.
-        Otherwise the existing tensors are retrieved from the cache and zeroed out.
-        """
-
-        inference_context = deprecate_inference_params(inference_context, inference_params)
-
-        assert inference_context is not None
-        assert self.layer_number is not None
-        if (
-            self.layer_number not in inference_context.key_value_memory_dict
-            or batch_size != self.cached_batch_size
-        ):
-            conv_state = torch.zeros(
-                batch_size,
-                self.conv1d.weight.shape[0],
-                self.d_conv,
-                device=self.conv1d.weight.device,
-                dtype=self.conv1d.weight.dtype,
-            )
-            ssm_state = torch.zeros(
-                batch_size,
-                self.nheads_local_tp,
-                self.headdim,
-                self.d_state,
-                device=self.in_proj.weight.device,
-                dtype=self.in_proj.weight.dtype,
-            )
-            inference_context.key_value_memory_dict[self.layer_number] = (conv_state, ssm_state)
-            self.cached_batch_size = batch_size
-        else:
-            conv_state, ssm_state = inference_context.key_value_memory_dict[self.layer_number]
-            # TODO: Remove reference to `inference_context.sequence_len_offset` for dynamic batching
-            if inference_context.sequence_len_offset == 0:
-                conv_state.zero_()
-                ssm_state.zero_()
-        return conv_state, ssm_state
 
     def sharded_state_dict(self, prefix="", sharded_offsets=(), metadata=None):
         """Provide a sharded state dictionary for distributed checkpointing."""
@@ -522,62 +443,3 @@ class GatedDeltaNetMixer(MegatronModule):
 
         return sharded_state_dict
 
-
-def _split_tensor_factory(
-    orig_sh_ten: ShardedTensor, split_sections: List[int], split_names: List[str], split_dim: int
-) -> ShardedTensorFactory:
-    """Builds a factory that splits a given ShardedTensor into several independent chunks."""
-    assert isinstance(orig_sh_ten, ShardedTensor), type(orig_sh_ten)
-    orig_sh_ten_no_data = orig_sh_ten.without_data()  # remove `data` reference
-
-    if sum(split_sections) != orig_sh_ten_no_data.local_shape[split_dim]:
-        raise ValueError(
-            f"Split sections must cover the whole dimension size, "
-            f"got {split_sections=} vs dimensions size "
-            f"{orig_sh_ten_no_data.local_shape[split_dim]}"
-        )
-
-    assert not isinstance(
-        split_sections, int
-    ), "Splitting into predefined section sizes is supported (`split_sections` must be a list)"
-    assert len(split_sections) == len(split_names), (len(split_sections), len(split_names))
-
-    @torch.no_grad()
-    def sh_ten_build_fn(
-        key: str, t: torch.Tensor, replica_id: ReplicaId, flattened_range: Optional[slice]
-    ):
-        factory_sh_ten = replace(
-            orig_sh_ten_no_data,
-            key=key,
-            data=t,
-            dtype=t.dtype,
-            replica_id=replica_id,
-            flattened_range=flattened_range,
-        )
-
-        chunk_sh_tens = []
-        split_start = 0
-        for split_size, split_name in zip(split_sections, split_names):
-            split_chunks = factory_sh_ten.narrow(split_dim, split_start, split_size)
-            for sh_ten in split_chunks:
-                sh_ten.key = f"{sh_ten.key}.{split_name}"
-            chunk_sh_tens.extend(split_chunks)
-            split_start += split_size
-
-        assert split_start == orig_sh_ten_no_data.local_shape[split_dim], (
-            split_start,
-            orig_sh_ten_no_data.local_shape[split_dim],
-        )
-        assert sum(sh_ten.data.numel() for sh_ten in chunk_sh_tens) == t.numel(), (
-            chunk_sh_tens,
-            t.shape,
-        )
-        return chunk_sh_tens
-
-    @torch.no_grad()
-    def sh_ten_merge_fn(sub_state_dict):
-        return torch.cat(sub_state_dict)
-
-    return ShardedTensorFactory(
-        orig_sh_ten.key, orig_sh_ten.data, sh_ten_build_fn, sh_ten_merge_fn, orig_sh_ten.replica_id
-    )

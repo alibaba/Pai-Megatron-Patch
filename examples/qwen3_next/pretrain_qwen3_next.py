@@ -25,8 +25,6 @@ from megatron.training import pretrain, print_rank_0
 
 torch._dynamo.config.suppress_errors = True
 
-
-from model_provider import count_parameters_in_layer
 from megatron.core.models.mamba import MambaModel
 from megatron.training import print_rank_0
 from megatron.training.arguments import core_transformer_config_from_args
@@ -34,14 +32,11 @@ from megatron.training.arguments import core_transformer_config_from_args
 from megatron_patch.model.qwen3_next.layer_specs import get_qwen3_next_layer_spec
 from megatron_patch.model.qwen3_next.transformer_config import Qwen3NextTransformerConfig
 
-from megatron_patch.tokenizer import build_tokenizer
-
 def mamba_builder(args, pre_process, post_process, vp_stage=None, config=None):
     print_rank_0('building MAMBA model ...')
     if config is None:
         config = core_transformer_config_from_args(args, Qwen3NextTransformerConfig)
     assert args.use_legacy_models is False, "Mamba only supported in Mcore!"
-    build_tokenizer(args)
 
     model = MambaModel(
         config=config,
@@ -60,10 +55,6 @@ def mamba_builder(args, pre_process, post_process, vp_stage=None, config=None):
         rotary_percent=args.rotary_percent,
         rotary_base=args.rotary_base,
     )
-
-    for l in range(model.decoder.num_layers_per_pipeline_rank):
-        layer_params = count_parameters_in_layer(model, f'decoder.layers.{l}.')
-        print_rank_0(f" == params layer {l}: {layer_params}")
 
     return model
 
