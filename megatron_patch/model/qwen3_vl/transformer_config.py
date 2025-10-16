@@ -28,6 +28,11 @@ class Qwen3VLTransformerConfig(TransformerConfig):
     num_position_embeddings: int = 0
     deepstack_visual_indexes: List = field(default_factory=lambda: [8, 16, 24])
 
+    vision_start_token_id: int = 151652
+    image_token_id: int = 151655
+    video_token_id: int = 151656
+    spatial_merge_size: int = 2
+    
     # The following options are set with --disable-bias-linear --add-qkv-bias
     # in the script
     # add_bias_linear = False
