@@ -1,4 +1,4 @@
-# Qwen2.5-VL模型在Pai-Megatron-Patch的最佳实践
+# Qwen3-VL模型在Pai-Megatron-Patch的最佳实践
 
 ## Table of Contents
    * [安装](#安装)
@@ -11,7 +11,12 @@
 
 请在阿里云人工智能平台PAI产品中填写专属镜像地址： `dsw-registry.cn-wulanchabu.cr.aliyuncs.com/pai/pai-megatron-patch:25.01` 
 
-运行下列代码克隆Pai-Megatron-Patch
+然后升级`transformers`及`multi-storage-client`的版本
+```
+pip install transformers==4.57.1
+pip install -U multi-storage-client
+```
+随后运行下列代码克隆Pai-Megatron-Patch
 ```bash
 cd /workspace
 git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
@@ -21,10 +26,10 @@ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 
 ```bash
 cd /mnt
-mkdir qwen2.5-vl-ckpts
-cd qwen2.5-vl-ckpts
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/qwen-ckpts/Qwen2.5-VL-3B-Instruct.tar
-tar -xvf Qwen2.5-VL-3B-Instruct.tar
+mkdir qwen3-vl-ckpts
+cd qwen3-vl-ckpts
+wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/qwen-ckpts/Qwen3-VL-4B-Instruct.tar
+tar -xvf Qwen3-VL-4B-Instruct.tar
 cd ..
 
 mkdir llava-datasets
@@ -77,10 +82,10 @@ HF_DIR=$7                   # HF权重路径(mcore2hf时必须提供)
 
 ```bash
 cd /workspace/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
-bash scripts/qwen2_5_vl/run_8xH20.sh \
-3B \
-/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct \
-/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-to-mcore  \
+bash scripts/qwen3_vl/run_8xH20.sh \
+4B \
+/mnt/qwen3-vl-ckpts/Qwen3-VL-4B-Instruct \
+/mnt/qwen3-vl-ckpts/Qwen3-VL-4B-Instruct-to-mcore  \
 false \
 true \
 bf16
@@ -90,20 +95,17 @@ bf16
 
 ```bash
 cd /workspace/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
-bash scripts/qwen2_5_vl/run_8xH20.sh \
-3B \
-/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-to-mcore \
-/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-back  \
+bash scripts/qwen3_vl/run_8xH20.sh \
+4B \
+/mnt/qwen3-vl-ckpts/Qwen3-VL-4B-Instruct-to-mcore \
+/mnt/qwen3-vl-ckpts/Qwen3-VL-4B-Instruct-to-mcore-back  \
 true \
 true \
 bf16 \
-/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct
+/mnt/qwen3-vl-ckpts/Qwen3-VL-4B-Instruct
 ```
 
 ### Megatron-Core预训练
-
-> 关于attention: Qwen2.5-VL调用了varlen attention，若您使用Hopper架构GPU，推荐将FL设为false以使用FusedAttention后端来获得最佳性能；
-对于其他NVIDIA GPU，由于FusedAttention不支持varlen，请将FL设置为true。此外，目前观察到Flash-Attention 3会出现不正常的grad norm，不推荐使用。
 
 #### 预训练命令描述
 需要传入的参数列表如下：
@@ -135,13 +137,13 @@ OUTPUT_BASEPATH=${24}           # 训练输出日志文件路径
 ```
 
 #### 预训练示例
-使用以下命令启动对Qwen2.5-VL的继续预训练。
+使用以下命令启动对Qwen3-VL的继续预训练。
 
 ```bash
-cd /workspace/Pai-Megatron-Patch/examples/qwen2_5_vl
+cd /workspace/Pai-Megatron-Patch/examples/qwen3_vl
 bash run_mcore_qwen.sh  \
 dsw  \
-3B   \
+4B   \
 1    \
 32 \
 1e-5   \
@@ -149,8 +151,10 @@ dsw  \
 2048  \
 2048  \
 bf16  \
-2   \
-2  \
+1   \
+1  \
+1 \
+1 \
 1 \
 true \
 true \
@@ -160,39 +164,9 @@ false \
 100000  \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
-/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-to-mcore \
+/mnt/qwen2.5-vl-ckpts/Qwen3-VL-4B-Instruct-to-mcore \
 20000  \
 200   \
-/workspace/output_mcore_qwen2_5_vl_pretrain
+/workspace/output_mcore_qwen3_vl_pretrain
 ```
 
-由于PP切分时，PP Rank 0额外的ViT会导致其负载略高于其他PP Rank，为了达到最佳性能，您可能需要调整`MP_PP0_LAYERS`变量降低PP Rank 0的LLM层数。
-
-```bash
-cd /workspace/Pai-Megatron-Patch/examples/qwen2_5_vl
-MP_PP0_LAYERS=16 sh run_mcore_qwen.sh  \
-dsw  \
-3B   \
-1    \
-32 \
-1e-5   \
-1e-6   \
-2048  \
-2048  \
-bf16  \
-2   \
-2  \
-1 \
-true \
-true \
-true   \
-false \
-false \
-100000  \
-/mnt/llava-datasets/LLaVA-Pretrain/wds   \
-/mnt/llava-datasets/LLaVA-Pretrain/wds   \
-/mnt/qwen2.5-vl-ckpts/Qwen2.5-VL-3B-Instruct-to-mcore \
-20000  \
-200   \
-/workspace/output_mcore_qwen2_5_vl_pretrain
-```

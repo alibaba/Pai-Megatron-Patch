@@ -41,6 +41,7 @@ Pai-Megatron-Patch是各类开源大模型和Megatron训练加速引擎之间的
 - [阿里云PAI获得FewCLUE基于大模型的小样本学习双料冠军](https://developer.aliyun.com/article/788081?spm=a2c6h.12873639.article-detail.17.11c5383cHpFZks&tlog=yuekan_8)
 
 新功能：
+- **支持用Megatron-Core框架训练Qwen3-VL模型** [🔥🔥 2025.10.17]
 - **通过上下文并行(Context Parallel)与序列打包(Sequence Packing)提升Moonlight/DeepSeek-V3等MLA模型的强化学习训练稳定性和效率** [🔥🔥 2025.10.10]
 - **[实验性]支持Qwen3-Next-80B-A3B使用Mcore进行预训练** [🔥🔥 2025.09.22]
 - **支持Qwen3和DeepSeek-R1模型使用Mcore+Verl进行强化学习GRPO训练** [🔥🔥 2025.09.19]

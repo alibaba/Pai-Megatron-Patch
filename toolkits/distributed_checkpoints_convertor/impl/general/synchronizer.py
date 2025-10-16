@@ -41,6 +41,7 @@ class ParamType(Enum):
     # generalized gate_up with multi linear with different output size
     MERGED_LINEAR = 10
     QGKV_W = 11
+    MOE_DOWN = 12
 
 class BaseSynchronizer(ABC):
     def __init__(
@@ -111,7 +112,7 @@ class BaseSynchronizer(ABC):
         if mg_model is None:
             mg_model = self._mgmodel
         if hf_model is None:
-            hf_model = self._hfmodel
+            hf_model = self._hfmodel.model
 
         if mg_model.pre_process:
             self.set_preprocess_state(mg_model=mg_model, hf_model=hf_model)
@@ -120,18 +121,25 @@ class BaseSynchronizer(ABC):
             self.set_postprocess_state(mg_model=mg_model, hf_model=hf_model)
 
         for mg_layer_id, hf_layer_id in self._build_pipeline_parallel_mapping().items():
-            if self.tp_rank == 0 and self.ep_rank == 0 and self.etp_rank == 0:
+            if all([
+                self.tp_rank == 0,
+                self.ep_rank == 0,
+                self.etp_rank == 0,
+                self.dp_rank == 0
+            ]):
                 logging.info(f"Converting layer {hf_layer_id}")
             layer = mg_model.decoder.layers[mg_layer_id]
-            hf_layer = hf_model.model.layers[hf_layer_id]
+            hf_layer = hf_model.layers[hf_layer_id]
             self.set_layer_state(layer, hf_layer)
 
     @abstractmethod
     def set_preprocess_state(self, mg_model, hf_model):
+        """arg hf_model should contains `embed_tokens`, `layers` and `norm`"""
         ...
 
     @abstractmethod
     def set_postprocess_state(self, mg_model, hf_model):
+        """arg hf_model should contains `embed_tokens`, `layers` and `norm`"""
         ...
 
     @abstractmethod

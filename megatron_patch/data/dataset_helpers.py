@@ -339,7 +339,12 @@ class TaskEncoder(DefaultTaskEncoder[Union[VQASample, ChatMLSample], ImageTaskSa
             raise NotImplementedError("You should use sharegpt dataset to train with videos.")
         else:
             # TODO: add args
-            imgs = get_visual_transform(sample.image)
+            imgs = get_visual_transform(
+                sample.image,
+                factor=2 * self.patch_size,
+                min_pixels=16 * self.patch_size**2,
+                max_pixels=5120 * self.patch_size ** 2,
+            )
             flatten_patches, thw_grids = self._flatten_visual_inputs(imgs, is_image=True)
 
         assert "<image>" in sample.context # ?
