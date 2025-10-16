@@ -207,16 +207,14 @@ false \
 
 ```bash
 cd /workspace/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
-bash hf2mcore_qwen2.5_convertor.sh \
+bash scripts/qwen2_5/run_8xH20.sh \
 0.5B \
-/mnt/qwen-ckpts/Qwen2.5-0.5B-Instruct-to-mcore  \
-/mnt/qwen-ckpts/Qwen2.5-0.5B-Instruct-back    \
-1  \
-1  \
+/mnt/qwen-ckpts/Qwen2.5-0.5B-Instruct-mcore\
+/mnt/qwen-ckpts/Qwen2.5-0.5B-Instruct-mcore-to-hf\
+true \
+true \
 bf16 \
-true \
-true \
-/mnt/qwen-ckpts/Qwen2.5-0.5B-Instruct
+/mnt/qwen-ckpts/Qwen2.5-0.5B-Instruct-hf-ini
 ```
 
 ### 运行评估工具
