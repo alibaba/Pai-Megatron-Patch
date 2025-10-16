@@ -26,6 +26,10 @@ class Qwen2VLTransformerConfig(TransformerConfig):
     rotary_scaling_factor: int = None
     max_position_embeddings: int = None
     moe_aux_loss_coeff: float = 0.0
+    vision_start_token_id: int = 151652
+    image_token_id: int = 151655
+    video_token_id: int = 151656
+    spatial_merge_size: int = 2
 
     # The following options are set with --disable-bias-linear --add-qkv-bias
     # in the script
