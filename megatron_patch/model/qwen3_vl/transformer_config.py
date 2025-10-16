@@ -38,34 +38,28 @@ class Qwen3VLTransformerConfig(TransformerConfig):
 def get_vision_model_config(args, config):
     # Given a Transformer Config from decoder, build vision encoder config
     # diff: out_hidden_size & intermediate_size
-
     # mlp: hidden_size -> intermediate_size -> embed_dim, silu
-    # NOTE: here we provide a workaround to solve the wrong layer amount when VPP of decoder is on
-
-    # depth=27,
-    # hidden_size=1152,
-    # hidden_act="gelu_pytorch_tanh",
-    # intermediate_size=4304, # MLP ffn_hidden_size
-    # num_heads=16,
-    # in_channels=3,
-    # patch_size=16,
-    # spatial_merge_size=2,
-    # temporal_patch_size=2,
-    # out_hidden_size=3584, #?
-    # num_position_embeddings=2304,
-    # deepstack_visual_indexes=[8, 16, 24],
-    # initializer_range=0.02,
 
     assert parallel_state.get_virtual_pipeline_model_parallel_world_size() is None, "NotSupported"
-    config.num_layers = 27 # depth
+    if args.num_layers == 36 and args.hidden_size == 2560:
+        # 4B
+        config.num_layers = 24 # depth
+        config.hidden_size = 1024 # hidden_size
+        config.ffn_hidden_size = 4096
+        config.deepstack_visual_indexes=[5, 11, 17]
+
+    else:
+        # 8B, A3B, A22B
+        config.num_layers = 27 # depth
+        config.hidden_size = 1152 # hidden_size
+        config.ffn_hidden_size = 4304
+        config.deepstack_visual_indexes=[8, 16, 24]
 
     config.num_attention_heads = 16 # num_heads
     config.add_bias_linear = True # all nn.Linear has bias (MLP, attn)
     config.add_qkv_bias = True # qkv_proj in attn has bias
-    config.hidden_size = 1152 # hidden_size
     config.hidden_dropout = 0.0
     config.attention_dropout = 0.0
-    config.ffn_hidden_size = 4304
 
     config.gated_linear_unit = False # no gated
     config.kv_channels = config.hidden_size // config.num_attention_heads

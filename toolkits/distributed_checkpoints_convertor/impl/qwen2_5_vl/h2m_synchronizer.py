@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
+from safetensors import safe_open
 from packaging.version import Version as PkgVersion
 import transformers
 
@@ -29,6 +31,28 @@ class HF2MGSynchronizer(_HF2MGSynchronizer):
                 self._mgmodel.vision_model,
                 self._hfmodel.visual
             )
+
+    def load_tensor(self, dummy_tensor):
+        def _get_filename_from_key(key):
+            if self._single_file:
+                return os.path.join(self.load_dir, 'model.safetensors')
+            if key in self._key_to_file:
+                return self._key_to_file[key]
+            raise KeyError(f'{key} not found in index file')
+
+        if dummy_tensor not in self._hf_params_to_key:
+            raise ValueError()
+        key = self._hf_params_to_key[dummy_tensor]
+        if self.debug:
+            self._visit[self._hf_params_key_to_id[key]] = True
+        if not self.args.untie_embeddings_and_output_weights and key == 'lm_head.weight':
+            if PkgVersion(transformers.__version__) >= PkgVersion('4.52.0'):
+                key = 'model.language_model.embed_tokens.weight'
+            else:
+                key = 'model.embed_tokens.weight'
+        file = _get_filename_from_key(key)
+        with safe_open(file, framework="pt", device=str(self.device)) as f:
+            return f.get_tensor(key)
 
     def set_vision_model_layer_state(self, vision_model, hf_vision_model):
         self.copy(

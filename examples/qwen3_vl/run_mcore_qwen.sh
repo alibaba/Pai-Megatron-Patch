@@ -80,43 +80,112 @@ elif [ $FL = false ]; then
     --attention-backend fused"
 fi
 
-if [ $MODEL_SIZE = A3B ]; then
 
-HIDDEN_SIZE=2048
-NUM_ATTENTION_HEADS=32
-NUM_LAYERS=48
-INTERMEDIATE_SIZE=6144
-MOE_INTERMEDIATE_SIZE=768
-MAX_POSITION_EMBEDDINGS=262144
-VOCAB_SIZE=151936
-NUM_KEY_VALUE_HEADS=4
-ROPE_THETA=1000000
-NUM_EXPERTS=128
-ROUTER_TOPK=8
-RMS_NORM_EPS=1e-6
+if [ $MODEL_SIZE = 4B ]; then
+    NUM_LAYERS=36
+    HIDDEN_SIZE=2560
+    NUM_ATTENTION_HEADS=32
+    INTERMEDIATE_SIZE=9728
+    NUM_KEY_VALUE_HEADS=8
+    MAX_POSITION_EMBEDDINGS=262144
+    VOCAB_SIZE=151936
+    ROPE_THETA=5000000
+    RMS_NORM_EPS=1e-6
+    gqa_options=" \
+                --group-query-attention \
+                --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+    
+    tie_option=""
+    moe_options=""
+elif [ $MODEL_SIZE = 8B ]; then
+    NUM_LAYERS=36
+    HIDDEN_SIZE=4096
+    NUM_ATTENTION_HEADS=32
+    INTERMEDIATE_SIZE=12288
+    NUM_KEY_VALUE_HEADS=8
+    MAX_POSITION_EMBEDDINGS=262144
+    VOCAB_SIZE=151936
+    ROPE_THETA=5000000
+    RMS_NORM_EPS=1e-6
+    gqa_options=" \
+                --group-query-attention \
+                --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+    
+    tie_option=" \
+            --untie-embeddings-and-output-weights \
+            "
+    moe_options=""
+elif [ $MODEL_SIZE = A3B ]; then
 
-gqa_options=" \
-		    --group-query-attention \
-		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+    HIDDEN_SIZE=2048
+    NUM_ATTENTION_HEADS=32
+    NUM_LAYERS=48
+    INTERMEDIATE_SIZE=6144
+    MOE_INTERMEDIATE_SIZE=768
+    MAX_POSITION_EMBEDDINGS=262144
+    VOCAB_SIZE=151936
+    NUM_KEY_VALUE_HEADS=4
+    ROPE_THETA=1000000
+    NUM_EXPERTS=128
+    ROUTER_TOPK=8
+    RMS_NORM_EPS=1e-6
+
+    gqa_options=" \
+                --group-query-attention \
+                --num-query-groups ${NUM_KEY_VALUE_HEADS}"
 
 
-tie_option=" \
-        --untie-embeddings-and-output-weights \
+    tie_option=" \
+            --untie-embeddings-and-output-weights \
+            "
+
+    moe_options=" \
+        --moe-grouped-gemm \
+        --moe-token-dispatcher-type alltoall \
+        --moe-router-topk ${ROUTER_TOPK} \
+        --num-experts ${NUM_EXPERTS} \
+        --expert-tensor-parallel-size ${ETP} \
+        --expert-model-parallel-size ${EP} \
+        --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
+        --moe-router-load-balancing-type aux_loss \
+        --moe-aux-loss-coeff 0.001 \
+        --moe-layer-freq '([1]*48)' \
+        "
+elif [ $MODEL_SIZE = A22B ]; then
+    HIDDEN_SIZE=4096
+    NUM_ATTENTION_HEADS=64
+    NUM_LAYERS=94
+    INTERMEDIATE_SIZE=12288
+    MOE_INTERMEDIATE_SIZE=1536
+    MAX_POSITION_EMBEDDINGS=262144
+    VOCAB_SIZE=151936
+    NUM_KEY_VALUE_HEADS=4
+    ROPE_THETA=5000000
+    NUM_EXPERTS=128
+    ROUTER_TOPK=8
+    RMS_NORM_EPS=1e-6
+
+
+    moe_options=" \
+        --moe-grouped-gemm \
+        --moe-token-dispatcher-type alltoall \
+        --moe-router-topk ${ROUTER_TOPK} \
+        --num-experts ${NUM_EXPERTS} \
+        --expert-tensor-parallel-size ${ETP} \
+        --expert-model-parallel-size ${EP} \
+        --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
+        --moe-router-load-balancing-type aux_loss \
+        --moe-aux-loss-coeff 0.001 \
+        --moe-layer-freq '([1]*94)' 
         "
 
-moe_options=" \
-    --moe-grouped-gemm \
-    --moe-token-dispatcher-type alltoall \
-    --moe-router-topk ${ROUTER_TOPK} \
-    --num-experts ${NUM_EXPERTS} \
-    --expert-tensor-parallel-size ${ETP} \
-    --expert-model-parallel-size ${EP} \
-    --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
-    --moe-router-load-balancing-type aux_loss \
-    --moe-aux-loss-coeff 0.001 \
-    --moe-layer-freq '([1]*48)' \
-    "
+    tie_option=" \
+            --untie-embeddings-and-output-weights \
+            "
 
+    gqa_options=" \
+                --group-query-attention \
+                --num-query-groups ${NUM_KEY_VALUE_HEADS}"
 fi
 
 if [ -z ${MP_PP0_LAYERS} ];then
@@ -289,7 +358,7 @@ megatron_options="  \
         --dataloader-type external \
         --transformer-impl transformer_engine \
         --ckpt-format torch_dist \
-        --mrope-section 16 24 24 \
+        --mrope-section 24 20 20 \
         --patch-size 16 \
         --qk-layernorm \
         --kv-channels 128 

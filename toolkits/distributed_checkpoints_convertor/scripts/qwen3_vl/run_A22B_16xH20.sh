@@ -102,55 +102,26 @@ GPT_MODEL_ARGS=(
     --mrope-section 24 20 20
 )
 
-if [ $MODEL_SIZE = 4B ]; then
+if [ $MODEL_SIZE = A22B ]; then
     GPT_MODEL_ARGS+=(
-        --num-layers 36
-        --hidden-size 2560
-        --ffn-hidden-size 9728
-        --num-attention-heads 32
-        --num-query-groups 8
-    )
-    if [ -z  "$MODEL_PARALLEL_ARGS" ]; then
-        MODEL_PARALLEL_ARGS=(
-            --tensor-model-parallel-size 1
-            --pipeline-model-parallel-size 4
-        )
-    fi
-elif [ $MODEL_SIZE = 8B ]; then
-    GPT_MODEL_ARGS+=(
-        --num-layers 36
+        --num-layers 94
         --hidden-size 4096
         --ffn-hidden-size 12288
-        --num-attention-heads 32
-        --untie-embeddings-and-output-weights
-        --num-query-groups 8
-    )
-    if [ -z  "$MODEL_PARALLEL_ARGS" ]; then
-        MODEL_PARALLEL_ARGS=(
-            --tensor-model-parallel-size 1
-            --pipeline-model-parallel-size 4
-        )
-    fi
-elif [ $MODEL_SIZE = A3B ]; then
-    GPT_MODEL_ARGS+=(
-        --num-layers 48
-        --hidden-size 2048
-        --ffn-hidden-size 6144
-        --moe-ffn-hidden-size 768
-        --num-attention-heads 32
+        --moe-ffn-hidden-size 1536
+        --num-attention-heads 64
         --untie-embeddings-and-output-weights
         --moe-grouped-gemm
         --moe-router-score-function softmax
         --moe-token-dispatcher-type alltoall
         --moe-router-topk 8
-        --moe-layer-freq "'([1]*48)'"
+        --moe-layer-freq "'([1]*94)'"
         --num-experts 128
         --num-query-groups 4
     )
     if [ -z  "$MODEL_PARALLEL_ARGS" ]; then
         MODEL_PARALLEL_ARGS=(
             --tensor-model-parallel-size 1
-            --pipeline-model-parallel-size 1
+            --pipeline-model-parallel-size 2
             --expert-model-parallel-size 8
         )
     fi
