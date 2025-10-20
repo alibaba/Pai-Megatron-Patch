@@ -22,6 +22,7 @@ class PatchEmbed(nn.Module):
         temporal_patch_size: int = 2,
         in_channels: int = 3,
         embed_dim: int = 1152,
+        bias: bool = False
     ) -> None:
         super().__init__()
         self.patch_size = patch_size
@@ -30,7 +31,7 @@ class PatchEmbed(nn.Module):
         self.embed_dim = embed_dim
 
         kernel_size = [temporal_patch_size, patch_size, patch_size]
-        self.proj = nn.Conv3d(in_channels, embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False)
+        self.proj = nn.Conv3d(in_channels, embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=bias)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         target_dtype = self.proj.weight.dtype
