@@ -1,15 +1,14 @@
 ## Quick Start
 
-
 |             |                                                      Megatron-Core                                                       |                                                                                        ChatLearn                                                                                        |    verl     |
 |:------------|:------------------------------------------------------------------------------------------------------------------------:|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|:-----------:|
-|Qwen3-Next  |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3_next/README.md)| Coming Soon | Coming Soon |
+|Qwen3-Next  |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3_next/README.md)| [ReadMe](https://github.com/alibaba/ChatLearn/blob/main/docs/zh/tutorial/tutorial_grpo_mcore_qwen3_next.md) | Coming Soon |
 |Qwen3       |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3/README.md)|[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3/README_chatlearn.md) | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3/README_verl.md) |
-|Qwen3-VL  |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3_vl/README.md)| Coming Soon | Coming Soon |
-|Qwen2.5-VL  |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen2_5_vl/README.md)| [ReadMe](https://github.com/alibaba/ChatLearn/blob/main/docs/en/tutorial/tutorial_grpo_mcore_qwenvl.md) | Coming Soon |
-|Moonlight   |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/moonlight/README.md)|[ReadMe](https://github.com/alibaba/ChatLearn/blob/main/docs/zh/tutorial/tutorial_grpo_mcore_moonlight_and_deepseek.md)| [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/moonlight/README_verl.md) |
+|Qwen3-VL  | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3_vl/README.md)| Coming Soon | Coming Soon |
+|Qwen2.5-VL  |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen2_5_vl/README.md)| [ReadMe](https://github.com/alibaba/ChatLearn/blob/main/docs/zh/tutorial/tutorial_grpo_mcore_qwenvl.md) | Coming Soon |
+|Moonlight   |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/moonlight/README.md)|[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/moonlight/README_chatlearn.md)| [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/moonlight/README_verl.md) |
 |DeepSeek-V3 |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/deepseek_v3/README.md)| N/A | N/A |
-|DeepSeek-R1 | N/A |[ReadMe](https://github.com/alibaba/ChatLearn/blob/main/docs/zh/tutorial/tutorial_grpo_mcore_moonlight_and_deepseek.md)| [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/deepseek_v3/README_verl.md) |
+|DeepSeek-R1 | N/A |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/deepseek_v3/README_grpo.md)| [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/deepseek_v3/README_verl.md) |
 
 
 
@@ -19,6 +18,7 @@ English | [简体中文](./README_zh-CN.md)
 Pai-Megatron-Patch (https://github.com/alibaba/Pai-Megatron-Patch) is a deep learning training toolkit built for developers to train and predict LLMs & VLMs by using Megatron framework easily. With the continuous development of LLMs, the model structure and scale are rapidly evolving. Although these models can be conveniently manufactured using Transformers or DeepSpeed training framework, the training efficiency is comparably low. This phenomenon becomes even severer when the model scale exceeds 10 billion. The primary objective of Pai-Megatron-Patch is to effectively utilize the computational power of GPUs for LLM. This tool allows convenient training of commonly used LLM with all the accelerating techniques provided by Megatron-LM.
 
 What's New:
+- **Support Qwen3-Next-80B-A3B Reinforcement Training using Megatron-Core and ChatLearn** [🔥🔥 2025.10.17]
 - **Support Qwen3-VL series Pre-Training using Megatron-Core** [🔥🔥 2025.10.17]
 - **Improve MLA models such as Moonlight/DeepSeek-V3 RL Training Stability and Efficiency with Context Parallel and Sequence Packing** [🔥🔥 2025.10.10]
 - **[Experimental]Support Qwen3-Next-80B-A3B Pre-Training using Megatron-Core** [🔥🔥 2025.09.22]
