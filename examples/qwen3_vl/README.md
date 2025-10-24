@@ -4,15 +4,17 @@
    * [安装](#安装)
    * [数据集&模型下载](#数据集和模型下载)
    * [Megatron-Core模型训练流程](#Megatron-Core模型训练流程)
-      * [模型格式转换](#Megatron-Core模型格式转换)
-      * [继续预训练](#预训练示例)
+      * [模型格式转换](#模型格式转换)
+      * [模型微调](#Qwen3-VL-30B-A3B微调示例)
+      * [模型评测](#Qwen3-VL-30B-A3B评测示例)
 
 ## 安装
 
 请在阿里云人工智能平台PAI产品中填写专属镜像地址： `dsw-registry.cn-wulanchabu.cr.aliyuncs.com/pai/pai-megatron-patch:25.01` 
 
-然后升级`transformers`及`multi-storage-client`的版本
+然后安装modelscope并升级`transformers`及`multi-storage-client`的版本
 ```
+pip install modelscope==1.30.0
 pip install transformers==4.57.1
 pip install -U multi-storage-client
 ```
@@ -27,9 +29,7 @@ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 ```bash
 cd /mnt
 mkdir qwen3-vl-ckpts
-cd qwen3-vl-ckpts
-wget https://atp-modelzoo-wlcb-pai.oss-cn-wulanchabu.aliyuncs.com/release/models/pai-megatron-patch/qwen-ckpts/Qwen3-VL-4B-Instruct.tar
-tar -xvf Qwen3-VL-4B-Instruct.tar
+modelscope download --model Qwen/Qwen3-VL-30B-A3B-Instruct  --local_dir Qwen3-VL-30B-A3B-Instruct
 cd ..
 
 mkdir llava-datasets
@@ -67,10 +67,10 @@ tar -zxf wds.tgz
 
 
 ## Megatron-Core模型训练流程
-### Megatron-Core模型格式转换
-当前qwen2.5-VL已升级至`torch_dist`格式权重训练，为了进行权重转换，需要传入的参数列表如下
+### 模型格式转换
+当前qwen3-VL已升级至`torch_dist`格式权重训练，为了进行权重转换，需要传入的参数列表如下
 ```
-MODEL_SIZE=$1               # 模型大小，3B, 7B, 32B, 72B
+MODEL_SIZE=$1               # 模型大小，4B, 8B, A3B, A22B
 LOAD_DIR=$2                 # 源权重路径
 SAVE_DIR=$3                 # 目标权重路径
 MG2HF=$4                    # 转换方向 可选: true, false
@@ -83,31 +83,18 @@ HF_DIR=$7                   # HF权重路径(mcore2hf时必须提供)
 ```bash
 cd /workspace/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
 bash scripts/qwen3_vl/run_8xH20.sh \
-4B \
-/mnt/qwen3-vl-ckpts/Qwen3-VL-4B-Instruct \
-/mnt/qwen3-vl-ckpts/Qwen3-VL-4B-Instruct-to-mcore  \
+A3B \
+/mnt/qwen3-vl-ckpts/Qwen3-VL-30B-A3B-Instruct \
+/mnt/qwen3-vl-ckpts/Qwen3-VL-30B-A3B-Instruct-to-mcore  \
 false \
 true \
 bf16
 ```
 
-当您需要将训练好的checkpoint转换回huggingface格式用于推理时，执行
 
-```bash
-cd /workspace/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
-bash scripts/qwen3_vl/run_8xH20.sh \
-4B \
-/mnt/qwen3-vl-ckpts/Qwen3-VL-4B-Instruct-to-mcore \
-/mnt/qwen3-vl-ckpts/Qwen3-VL-4B-Instruct-to-mcore-back  \
-true \
-true \
-bf16 \
-/mnt/qwen3-vl-ckpts/Qwen3-VL-4B-Instruct
-```
+### Qwen3-VL-30B-A3B微调示例
 
-### Megatron-Core预训练
-
-#### 预训练命令描述
+#### 微调命令描述
 需要传入的参数列表如下：
 ```bash
 ENV=$1                          # 运行环境配置开关: dsw单机训练训练，dlc表示多机训练环境
@@ -136,26 +123,26 @@ LR_WARMUP_ITERS=${23}           # 预热Iter数
 OUTPUT_BASEPATH=${24}           # 训练输出日志文件路径
 ```
 
-#### 预训练示例
-使用以下命令启动对Qwen3-VL的继续预训练。
+#### 微调示例
+使用以下命令启动对Qwen3-VL-30B-A3B的微调。
 
 ```bash
 cd /workspace/Pai-Megatron-Patch/examples/qwen3_vl
 bash run_mcore_qwen.sh  \
 dsw  \
-4B   \
+A3B   \
 1    \
-32 \
+128 \
 1e-5   \
 1e-6   \
-2048  \
-2048  \
+16384  \
+16384  \
 bf16  \
-1   \
-1  \
+4   \
+4  \
 1 \
 1 \
-1 \
+4 \
 true \
 true \
 true   \
@@ -164,9 +151,58 @@ false \
 100000  \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
 /mnt/llava-datasets/LLaVA-Pretrain/wds   \
-/mnt/qwen2.5-vl-ckpts/Qwen3-VL-4B-Instruct-to-mcore \
-20000  \
-200   \
-/workspace/output_mcore_qwen3_vl_pretrain
+/mnt/qwen3-vl-ckpts/Qwen3-VL-30B-A3B-Instruct-to-mcore \
+500  \
+50   \
+/mnt/qwen3-vl-ckpts/sft_output_mcore_Qwen3-VL-30B-A3B
+```
+微调完成后的loss曲线如下图所示
+<p align="center">
+  <picture>
+    <img alt="patch" src="../images/qwen3_vl_loss.png" width=60%>
+  </picture>
+</p>
+
+### Qwen3-VL-30B-A3B评测示例
+
+我们使用image caption任务来对多模态模型的效果进行评测，原始图像如下图所示：
+<p align="center">
+  <picture>
+    <img alt="patch" src="../images/qwen3_vl_demo.jpeg" width=60%>
+  </picture>
+</p>
+
+接着我们使用以下命令查看没有经过微调的Qwen3-VL-30B-A3B模型的输出效果
+```bash
+cd /workspace/Pai-Megatron-Patch/examples/qwen3_vl
+python inference.py --model-path /mnt/qwen3-vl-ckpts/Qwen3-VL-30B-A3B-Instruct
+
+```
+输出结果如下：
+```bash
+['Of course. Here is a detailed description of the image.\n\nThis is a heartwarming and serene photograph capturing a tender moment between a woman and her dog on a beach at sunset.\n\n- **Main Subjects and Interaction**: The central focus is a woman and a large, light-colored dog, likely a yellow Labrador Retriever, sitting on the sand. The dog is sitting upright, and its right front paw is raised to meet the woman\'s hand in a "high-five" gesture. The woman is sitting cross-legged, smiling warmly at her dog, her face illuminated by the golden sunlight. This interaction conveys a strong bond of companionship, trust, and affection.\n\n- **Setting and Atmosphere**: The scene is set on a wide, sandy beach. In the background, the ocean stretches to the horizon, with a gentle wave cresting and breaking. The time of day is clearly sunset, as evidenced by the low, warm, golden light that bathes the entire scene. This light creates a soft, glowing effect, particularly on the woman\'s hair and the edges of the dog, and casts a warm hue over the sand. The sky is a bright, hazy white, indicating the sun is just below the horizon.\n\n- **Details and Composition**: The woman is wearing a black and white plaid flannel shirt over dark pants. She has a white watch on her left wrist. The dog is wearing a blue harness decorated with small, colorful paw prints. A red leash lies on the sand near them. The composition places the subjects slightly off-center, allowing the vastness of the beach and ocean to create a sense of peace and openness. The overall mood is one of tranquility, joy, and the simple pleasure of a shared moment with a beloved pet.']
+```
+接下来，我们使用以下命令查看经过微调的Qwen3-VL-30B-A3B模型的输出效果
+首先需要将微调后模型转换成HF格式，命令如下：
+```bash
+cd /workspace/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
+bash scripts/qwen3_vl/run_8xH20.sh \
+4B \
+/mnt/qwen3-vl-ckpts/sft_output_mcore_Qwen3-VL-30B-A3B \
+/mnt/qwen3-vl-ckpts/sft_output_hf_Qwen3-VL-30B-A3B  \
+true \
+true \
+bf16 \
+/mnt/qwen3-vl-ckpts/Qwen3-VL-30B-A3B-Instruct
+```
+接着运行同样的推理
+```bash
+cd /workspace/Pai-Megatron-Patch/examples/qwen3_vl
+python inference.py --model-path /mnt/qwen3-vl-ckpts/sft_output_hf_Qwen3-VL-30B-A3B
+
 ```
 
+输出结果参考如下：
+```bash
+['a woman is sitting on the beach with her dog, petting it']
+```
