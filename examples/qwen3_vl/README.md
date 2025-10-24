@@ -202,7 +202,7 @@ python inference.py --model-path /mnt/qwen3-vl-ckpts/sft_output_hf_Qwen3-VL-30B-
 
 ```
 
-输出结果如下：
+输出结果参考如下：
 ```bash
 ['a woman is sitting on the beach with her dog, petting it']
 ```
