@@ -88,6 +88,7 @@ class Qwen3OmniModel(MegatronModule):
         
         self.encoder_hidden_state = None
         self.vision_model = None
+        self.audio_model = None
         self.vision_projection = None
         self.language_model = None
 
@@ -108,10 +109,6 @@ class Qwen3OmniModel(MegatronModule):
             )
 
             self.audio_model = Qwen3OmniMoeAudioEncoder._from_config(audio_transformer_config)
-            if torch.distributed.get_rank() ==0:
-                breakpoint()
-            torch.distributed.barrier()
-
 
         self.language_model = GPTModel(
             config=language_transformer_config,
@@ -177,6 +174,38 @@ class Qwen3OmniModel(MegatronModule):
             for param in module.parameters():
                 param.requires_grad = False
 
+    def get_audio_features(
+        self,
+        input_features: torch.FloatTensor,
+        feature_attention_mask: Optional[torch.LongTensor] = None,
+        audio_feature_lengths: Optional[torch.LongTensor] = None,
+    ):
+        """
+        Encodes audios into continuous embeddings that can be forwarded to the language model.
+
+        Args:
+            input_features (`torch.FloatTensor`):
+                The tensors corresponding to the input audios.
+            feature_attention_mask (`torch.LongTensor`, *optional*):
+                Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+            audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+                The length of feature shape of each audio in LLM.
+        """
+        if feature_attention_mask is not None:
+            audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
+            input_features = input_features.permute(0, 2, 1)[feature_attention_mask.bool()].permute(1, 0)
+        else:
+            audio_feature_lengths = None
+
+        feature_lens = audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
+        audio_outputs = self.audio_tower(
+            input_features,
+            feature_lens=feature_lens,
+        )
+        audio_features = audio_outputs.last_hidden_state
+
+        return audio_features
+
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -186,6 +215,9 @@ class Qwen3OmniModel(MegatronModule):
         video_start_index: int = -1,
         image_input_mask: torch.Tensor = None,
         video_input_mask: torch.Tensor = None,
+        input_features: torch.Tensor = None,
+        feature_attention_mask: torch.Tensor = None,
+        audio_feature_lengths: torch.Tensor = None,
 
         attention_mask: torch.Tensor = None,
         labels: torch.Tensor = None,
@@ -227,6 +259,14 @@ class Qwen3OmniModel(MegatronModule):
                     grid_thw=vision_grid_thw # should provided in each EPP stage
                 )
 
+            audio_embds = None
+            if input_features is not None:
+                audio_embeds = self.get_audio_features(
+                    input_features,
+                    feature_attention_mask=feature_attention_mask,
+                    audio_feature_lengths=audio_feature_lengths,
+                )
+
             # If running inference, the language model KV cache will be updated for image token positions.
             # Here we store the image tokens sequence length, which can be used as an offset to the KV cache later.
             if inference_params is not None:
@@ -264,13 +304,15 @@ class Qwen3OmniModel(MegatronModule):
                 else:
                     raise ValueError(f"Expect video token start index in range [0, {vision_embeds.shape[0]}], but got {video_start_index}")
                 
+
                 combined_embeddings = self.language_model.embedding(
                     input_ids=input_ids,
                     position_ids=None, # NOTE: disable
                     image_input_mask=image_input_mask,
                     video_input_mask=video_input_mask,
                     image_embeds=image_embeds,
-                    video_embeds=video_embeds
+                    video_embeds=video_embeds,
+                    audio_embeds=audio_embeds,
                 )  # [text_seq_len, b, h_language]
             else:
                 combined_embeddings = self.language_model.embedding(
@@ -282,6 +324,9 @@ class Qwen3OmniModel(MegatronModule):
             combined_embeddings = None
             visual_pos_masks = None
             deepstack_feature_lists = None
+
+
+        
 
         output = self.language_model(
             input_ids=None,

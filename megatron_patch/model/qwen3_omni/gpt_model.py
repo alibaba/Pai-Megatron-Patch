@@ -11,7 +11,6 @@ from megatron.core import tensor_parallel
 from megatron.core.config_logger import has_config_logger_enabled, log_config_to_disk
 from megatron.core.dist_checkpointing.mapping import ShardedStateDict
 from megatron.core.inference.contexts import BaseInferenceContext
-from ..qwen2_vl.language_model_embedding import LanguageModelEmbedding
 from megatron.core.models.common.embeddings.rotary_pos_embedding import (
     # MultimodalRotaryEmbedding,
     RotaryEmbedding,
@@ -26,11 +25,12 @@ from megatron.core.transformer.multi_token_prediction import (
     tie_word_embeddings_state_dict,
 )
 from megatron.core.transformer.spec_utils import ModuleSpec
-from .transformer_block import TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import WrappedTensor, deprecate_inference_params
 
+from .transformer_block import TransformerBlock
 from .rotary_pos_embedding import Qwen3VLRotaryEmbedding
+from .language_model_embedding import LanguageModelEmbedding
 
 class GPTModel(LanguageModule):
     """GPT Transformer language model.
