@@ -199,7 +199,9 @@ def get_batch(model, data_iterator):
     # shape: n_video_samples
     video_thw_grids = broadcast_data(["video_thw_grids"], data, torch.long)["video_thw_grids"]
 
-
+    if torch.distributed.get_rank() ==0:
+        breakpoint()
+    torch.distributed.barrier()
     image_input_mask = broadcast_data(["image_input_mask"], data, torch.bool)["image_input_mask"]
     video_input_mask = broadcast_data(["video_input_mask"], data, torch.bool)["video_input_mask"]
     torch.cuda.nvtx.range_pop()

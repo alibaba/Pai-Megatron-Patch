@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Alibaba PAI and Nvidia Megatron-LM Team.
+# Copyright (c) 2025 Alibaba PAI and Nvidia Megatron-LM Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Literal
+from typing import Literal, Optional
 
 import torch
 from torch import Tensor
@@ -187,9 +187,8 @@ class LanguageModelEmbedding(MegatronModule):
             embeddings = embeddings.float()
 
         if audio_embeds is not None:
-            audio_embeds = audio_embeds.to(embeddings.device, embeddings.dtype)
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=embeddings)
-            embeddings = inputs_embeds.masked_scatter(audio_mask, audio_embeds)
+            embeddings = inputs_embeds.masked_scatter(audio_mask, audio_embedsto(embeddings.device, embeddings.dtype))
 
         # Dropout.
         if self.config.sequence_parallel:
