@@ -187,8 +187,13 @@ class LanguageModelEmbedding(MegatronModule):
             embeddings = embeddings.float()
 
         if audio_embeds is not None:
+            #Mcore: input_ids: torch.Size([1, 4096]), embeddings: torch.Size([4096, 1, 2048])
+            #HF,input_ids: torch.Size([1, 1185]), embeddings: torch.Size([1, 1185, 2048]) audio_embeds: torch.Size([1, 1185, 2048])
+            embeddings = embeddings.permute(1, 0, 2)
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=embeddings)
-            embeddings = inputs_embeds.masked_scatter(audio_mask, audio_embedsto(embeddings.device, embeddings.dtype))
+            ##HF,inputs_embes: torch.Size([1, 1185, 2048])
+            embeddings = embeddings.masked_scatter(audio_mask, audio_embeds.to(embeddings.device, embeddings.dtype))
+            embeddings = embeddings.permute(1, 0, 2)
 
         # Dropout.
         if self.config.sequence_parallel:

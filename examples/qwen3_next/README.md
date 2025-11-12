@@ -58,6 +58,9 @@ pip install --no-build-isolation  flash-linear-attention -i https://mirrors.aliy
 # fix torch.distributed.DistBackendError: NCCL error in: ../torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:1331, unhandled cuda error
 pip install --upgrade nvidia-nccl-cu12
 
+# 下载Pai-Megatron-Patch源码
+git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
+
 ```
 
 ## 数据集和模型下载

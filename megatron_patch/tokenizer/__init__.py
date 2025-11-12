@@ -400,6 +400,11 @@ def build_tokenizer(args):
                 return self.special_tokens_map[self.video_token]
 
             @property
+            def audio_token_id(self):
+                return 151675 # from Qwen3-omni
+
+
+            @property
             def vision_start_token_id(self):
                 return self.special_tokens_map[self.vision_start_token]
 

@@ -21,11 +21,16 @@ from general.synchronizer import ParamType
 
 class HF2MGSynchronizer(_HF2MGSynchronizer):
 
-    def sync_params(self):
-        if PkgVersion(transformers.__version__) >= PkgVersion('4.52.0'):
-            super().sync_params(self._mgmodel.language_model, self._hfmodel.model.language_model)
-        else:
-            super().sync_params(self._mgmodel.language_model, self._hfmodel.model)
+    def sync_params(self, mg_model = None, hf_model = None):
+        if mg_model is None:
+            mg_model = self._mgmodel.language_model
+        if hf_model is None:
+            if PkgVersion(transformers.__version__) >= PkgVersion('4.52.0'):
+                hf_model = self._hfmodel.model.language_model
+            else:
+                hf_model = self._hfmodel.model
+
+        super().sync_params(mg_model, hf_model)
         if self._mgmodel.pre_process:
             self.set_vision_model_layer_state(
                 self._mgmodel.vision_model,

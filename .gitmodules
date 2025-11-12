@@ -16,12 +16,6 @@
 [submodule "backends/megatron/PAI-Megatron-LM-240718"]
 	path = backends/megatron/PAI-Megatron-LM-240718
 	url = https://github.com/NVIDIA/Megatron-LM.git
-[submodule "backends/LM-Evaluation-Harness-240310"]
-	path = backends/LM-Evaluation-Harness-240310
-	url = https://github.com/jerryli1981/lm-evaluation-harness.git
-[submodule "backends/Bigcode-Evaluation-Harness-240327"]
-	path = backends/Bigcode-Evaluation-Harness-240327
-	url = https://github.com/jerryli1981/bigcode-evaluation-harness
 [submodule "backends/megatron/Megatron-LM-250624"]
 	path = backends/megatron/Megatron-LM-250624
 	url = https://github.com/NVIDIA/Megatron-LM.git

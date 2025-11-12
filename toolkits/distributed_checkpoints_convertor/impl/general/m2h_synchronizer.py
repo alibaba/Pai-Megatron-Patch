@@ -34,8 +34,8 @@ class ParamMergeError(ValueError):
 
 class MG2HFSynchronizer(BaseSynchronizer):
 
-    def __init__(self, load_dir, model_provider_func=None):
-        super().__init__(load_dir, model_provider_func)
+    def __init__(self, load_dir, model_provider_func=None, skip_hf_initialization=False):
+        super().__init__(load_dir, model_provider_func, skip_hf_initialization=skip_hf_initialization)
         if not self.dryrun:
             load_checkpoint(
                 [self._mgmodel], 
@@ -57,7 +57,10 @@ class MG2HFSynchronizer(BaseSynchronizer):
         self._rank_mapping[self.rank] = torch.Tensor([self.tp_rank, self.pp_rank, self.etp_rank, self.ep_rank, self.dp_rank, self.edp_rank]).to(self.device)
         dist.all_gather_into_tensor(self._rank_mapping, self._rank_mapping[self.rank])
         # define the merge function type for each param
-        self._merge_type: torch.Tensor = torch.zeros([self.hf_size], dtype=torch.int, device=self.device)
+        try:
+            self._merge_type: torch.Tensor = torch.zeros([self.hf_size], dtype=torch.int, device=self.device)
+        except:
+            self._merge_type = None
         self._has_param: torch.Tensor = None # self._has_param[param_id].nonzero() ==> ranks that have this param
 
     def _copy_impl(self, src_tensor, dst_tensor, param_type: ParamType=ParamType.UNIQUE):

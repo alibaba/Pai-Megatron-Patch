@@ -52,7 +52,7 @@ from megatron_patch.model.qwen2_5_vl.transformer_config import (
 )
 from megatron.core import mpu, tensor_parallel
 from megatron.core.parallel_state import get_tensor_model_parallel_rank
-from megatron_patch.data.dataset_helpers import TaskEncoder, print_error_handler
+from megatron_patch.data.multimodal_dataset_helper import TaskEncoder, print_error_handler
 from megatron.training.utils import unwrap_model
 
 from megatron.energon import (

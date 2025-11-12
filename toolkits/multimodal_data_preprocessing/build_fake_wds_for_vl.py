@@ -48,28 +48,19 @@ def convert(dataset_dir, max_count=10000):
             video_datas = []
             video_datas.append([cv2.imread(os.path.join(current_dir, "australia.jpg"), cv2.IMREAD_UNCHANGED), cv2.imread(os.path.join(current_dir, "australia.jpg"), cv2.IMREAD_UNCHANGED)])
 
-            second_per_grid_ts = [0.5, 0.5]
-
-            audio_datas = []
-            with open(os.path.join(current_dir, "glass-breaking-151256.mp3"), "rb") as aud_file:
-                aud_data = aud_file.read()
-                audio_datas.append(aud_data)
-
             conversations = [
                 {"role": "system", "content": "你是个有用无害的助手"},
                 {"role": "user", "content": "<image>图片中是什么，<video>视频中是什么"},
-                {"role": "assistant", "content": "图片中是一个大象，视频中是一只小狗在草地上奔跑"},
-                {"role": "user", "content": "<audio>语音说了什么"},
-                {"role": "assistant", "content": "今天天气真好呀"}
+                {"role": "assistant", "content": "图片中是一个大象，视频中是一只小狗在草地上奔跑"}
             ]
 
             sample = {
                 "__key__": str(entry),
-                "mp3s": audio_datas,
+                "mp3s": [],
                 "mp4s": video_datas,
                 "jpgs": image_datas,
                 "json": json.dumps({'conversations': conversations,
-                    'second_per_grid_ts': second_per_grid_ts}
+                    'second_per_grid_ts': []}
                 ).encode("utf-8"),
             }
             shard_writer.write(sample)

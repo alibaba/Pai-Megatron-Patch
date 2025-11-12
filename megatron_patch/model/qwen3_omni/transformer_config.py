@@ -18,7 +18,7 @@ from megatron.core.transformer import TransformerConfig
 from megatron.core import parallel_state
 
 @dataclass
-class Qwen3VLTransformerConfig(TransformerConfig):
+class Qwen3OmniTransformerConfig(TransformerConfig):
 
     transformer_impl: str = 'transformer_engine'
     rotary_base: int = None
@@ -31,6 +31,7 @@ class Qwen3VLTransformerConfig(TransformerConfig):
     vision_start_token_id: int = 151652
     image_token_id: int = 151655
     video_token_id: int = 151656
+    audio_token_id: int = 151675
     spatial_merge_size: int = 2
     
     # The following options are set with --disable-bias-linear --add-qkv-bias

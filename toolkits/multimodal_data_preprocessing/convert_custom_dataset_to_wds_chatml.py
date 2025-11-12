@@ -101,7 +101,7 @@ def generate_configs(path: EPath, split, shuffle_tars=True, num_workers=32):
     # NOTE: dump dataset.yaml
     metadata = {
         '__class__': 'ChatMLWebdataset',
-        '__module__': 'megatron_patch.data.energon.chatml',
+        '__module__': 'megatron_patch.data.multimodal_dataset',
         'field_map': {
             'imgs': 'jpgs',
             'videos': 'videos',

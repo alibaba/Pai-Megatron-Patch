@@ -3,7 +3,7 @@ import logging
 from typing import Optional
 
 import torch
-from transformers.models.qwen3_omni_moe.modular_qwen3_omni_moe import Qwen3OmniMoeAudioEncoder
+from transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe import Qwen3OmniMoeAudioEncoder
 from transformers.models.qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeAudioEncoderConfig
 
 from megatron.core import InferenceParams
@@ -12,7 +12,7 @@ from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.packed_seq_params import PackedSeqParams
 
-from .transformer_config import Qwen3VLTransformerConfig
+from .transformer_config import Qwen3OmniTransformerConfig
 from .visionmodel import Qwen3VisionModel
 from .gpt_model import GPTModel
 
@@ -51,7 +51,7 @@ class Qwen3OmniModel(MegatronModule):
 
     def __init__(
         self,
-        language_transformer_config: Qwen3VLTransformerConfig,
+        language_transformer_config: Qwen3OmniTransformerConfig,
         language_transformer_layer_spec: ModuleSpec,
         language_vocab_size: int,
         language_max_sequence_length: int,
@@ -109,6 +109,7 @@ class Qwen3OmniModel(MegatronModule):
             )
 
             self.audio_model = Qwen3OmniMoeAudioEncoder._from_config(audio_transformer_config)
+
 
         self.language_model = GPTModel(
             config=language_transformer_config,
@@ -198,10 +199,12 @@ class Qwen3OmniModel(MegatronModule):
             audio_feature_lengths = None
 
         feature_lens = audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
-        audio_outputs = self.audio_tower(
-            input_features,
+        #RuntimeError: Input type (float) and bias type (c10::BFloat16) should be the same
+        audio_outputs = self.audio_model(
+            input_features.bfloat16(),
             feature_lens=feature_lens,
         )
+        
         audio_features = audio_outputs.last_hidden_state
 
         return audio_features
@@ -212,13 +215,13 @@ class Qwen3OmniModel(MegatronModule):
         position_ids: torch.Tensor,
         vision_data: torch.Tensor = None,
         vision_grid_thw: torch.Tensor = None,
+        audio_data: torch.Tensor = None,
+        audio_lengths: torch.Tensor = None,
         video_start_index: int = -1,
         image_input_mask: torch.Tensor = None,
         video_input_mask: torch.Tensor = None,
-        input_features: torch.Tensor = None,
-        feature_attention_mask: torch.Tensor = None,
-        audio_feature_lengths: torch.Tensor = None,
-
+        audio_input_mask: torch.Tensor = None,
+        audio_feature_attention_mask: torch.Tensor = None,
         attention_mask: torch.Tensor = None,
         labels: torch.Tensor = None,
         inference_params: InferenceParams = None,
@@ -260,11 +263,15 @@ class Qwen3OmniModel(MegatronModule):
                 )
 
             audio_embds = None
-            if input_features is not None:
+            if audio_data is not None:
+                attention_mask_length = audio_data.shape[-1]
+                #HF: audio_data: torch.Size([2, 128, 403]), audio_feature_lengths: torch.Size([2, 403])
+                #HF: output: torch.Size([78, 2048])
+                #Mcore audio_data: torch.Size([1, 80, 1209]), audio_feature_lengths: torch.Size([1, 1209])
                 audio_embeds = self.get_audio_features(
-                    input_features,
-                    feature_attention_mask=feature_attention_mask,
-                    audio_feature_lengths=audio_feature_lengths,
+                    audio_data,
+                    feature_attention_mask=audio_feature_attention_mask[:, :attention_mask_length],
+                    audio_feature_lengths=None,
                 )
 
             # If running inference, the language model KV cache will be updated for image token positions.

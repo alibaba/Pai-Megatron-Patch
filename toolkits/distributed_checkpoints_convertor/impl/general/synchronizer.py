@@ -47,7 +47,8 @@ class BaseSynchronizer(ABC):
     def __init__(
             self, 
             load_dir, 
-            model_provider_func = None
+            model_provider_func = None,
+            skip_hf_initialization: bool = False,
         ):
         """The base class of a parameter synchronizer.
 
@@ -76,12 +77,18 @@ class BaseSynchronizer(ABC):
             model_provider_func = model_provider
         self._mgmodel = model_provider_func(pre_process, post_process)
 
-        config = AutoConfig.from_pretrained(self.load_dir, trust_remote_code=True)
-        with init_empty_weights(include_buffers=True):
-            automodel_cls = getattr(transformers, self.args.auto_model)
-            self._hfmodel = automodel_cls.from_config(config, trust_remote_code=True, torch_dtype=config.torch_dtype)
+        if skip_hf_initialization:
+            self._hfmodel = None
+        else:
+            config = AutoConfig.from_pretrained(self.load_dir, trust_remote_code=True)
+            with init_empty_weights(include_buffers=True):
+                automodel_cls = getattr(transformers, self.args.auto_model)
+                if hasattr(automodel_cls, 'from_config'):
+                    self._hfmodel = automodel_cls.from_config(config, trust_remote_code=True, torch_dtype=config.torch_dtype)
+                else:
+                    self._hfmodel = automodel_cls._from_config(config, torch_dtype=config.torch_dtype)
 
-        self.build_hf_mapping()
+            self.build_hf_mapping()
 
     def build_hf_mapping(self):
         # NOTE: two or more keys may point to the same tensor and we need to deduplicate
