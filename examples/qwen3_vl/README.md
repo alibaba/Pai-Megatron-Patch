@@ -66,7 +66,7 @@ build_fake_wds_for_vl.py脚本是将原始的多模态多轮对话数据通过[w
 cd /mnt/Pai-Megatron-Patch/toolkits/multimodal_data_preprocessing
 python build_fake_wds_for_vl.py --output-dir wds
 ```
-当熟悉了多模态数据序列化逻辑后，我们就可以参考[DataJuicer](./README_DataJuicer.md)指引来对多模态数据进行大规模处理了。
+当熟悉了多模态数据序列化逻辑后，我们就可以参考[DataJuicer](../qwen3_omni/README_DataJuicer.md)指引来对多模态数据进行大规模处理了。
 使用DJ生成TAR包后，需要调用Patch的脚本生成元数据，如下所示:
 ```bash
 cd /mnt/Pai-Megatron-Patch/toolkits/multimodal_data_preprocessing
