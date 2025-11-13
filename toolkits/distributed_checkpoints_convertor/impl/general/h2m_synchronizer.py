@@ -32,8 +32,8 @@ from general.synchronizer import BaseSynchronizer, ParamType
 
 class HF2MGSynchronizer(BaseSynchronizer):
 
-    def __init__(self, load_dir, model_provider_func=None):
-        super().__init__(load_dir, model_provider_func)
+    def __init__(self, load_dir, model_provider_func=None, skip_hf_initialization=False):
+        super().__init__(load_dir, model_provider_func, skip_hf_initialization=skip_hf_initialization)
         self._single_file = False
         p = os.path.join(self.load_dir, SAFE_WEIGHTS_INDEX_NAME)
         if not os.path.exists(p):
@@ -55,7 +55,10 @@ class HF2MGSynchronizer(BaseSynchronizer):
                 # NOTE: Fill non-persistent/persistent buffer with NaN
                 for b in self._mgmodel.buffers():
                     b.data.fill_(torch.nan)
-            self._visit = torch.zeros([self.hf_size], dtype=torch.int, device=self.device)
+            try:
+                self._visit = torch.zeros([self.hf_size], dtype=torch.int, device=self.device)
+            except:
+                self._visit = None
 
     def load_tensor(self, dummy_tensor):
         def _get_filename_from_key(key):

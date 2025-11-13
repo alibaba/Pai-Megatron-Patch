@@ -45,8 +45,8 @@ def standardize_image(img):
 def get_visual_transform(
         img, 
         factor: int = 28, 
-        min_pixels: int = 56 * 56, 
-        max_pixels: int = 14 * 14 * 4 * 1280, 
+        min_pixels: int = 64 * 64, 
+        max_pixels: int = 16 * 16 * 4 * 1280, 
         augment=False
     ):
     img = np.array(img)

@@ -1,4 +1,4 @@
-# Qwen3-VL模型在Pai-Megatron-Patch的最佳实践
+# Qwen3-Omni模型在Pai-Megatron-Patch的最佳实践
 
 ## Table of Contents
    * [开发&运行环境搭建](#开发&运行环境搭建)
@@ -6,7 +6,7 @@
    * [Megatron-Core模型训练流程](#Megatron-Core模型训练流程)
       * [模型格式转换](#模型格式转换)
       * [训练代码调试](#训练代码调试)
-      * [模型微调](#Qwen3-VL-30B-A3B-Instruct微调示例)
+      * [模型微调](#Qwen3-Omni-30B-A3B-Instruct微调示例)
 
 ## 开发&运行环境搭建
 
@@ -53,20 +53,20 @@ git clone --recurse-submodules https://github.com/alibaba/Pai-Megatron-Patch.git
 
 ## 微调模型&数据集准备
 
-使用modelscope来快速下载Qwen3-VL-30B-A3B-Instruct模型
+使用modelscope来快速下载Qwen3-Omni-30B-A3B-Instruct模型
 ```bash
 cd /mnt
-mkdir qwen3-vl-ckpts
-cd qwen3-vl-ckpts
-modelscope download --model Qwen/Qwen3-VL-30B-A3B-Instruct --local_dir Qwen3-VL-30B-A3B-Instruct
+mkdir qwen3-omni-ckpts
+cd qwen3-omni-ckpts
+modelscope download --model Qwen/Qwen3-Omni-30B-A3B-Instruct --local_dir Qwen3-Omni-30B-A3B-Instruct
 ```
 我们提供了基于DataJuicer的大规模且高性能的多模态数据序列化的方案，在实施该方案前我们通过一个简单的demo熟悉下多模态数据序列化流程。 
-build_fake_wds_for_vl.py脚本是将原始的多模态多轮对话数据通过[webdataset](https://github.com/webdataset/webdataset)打包成[Energon](https://github.com/NVIDIA/Megatron-Energon)数据加载器可识别的格式。
+build_fake_wds_for_omni.py脚本是将原始的多模态多轮对话数据通过[webdataset](https://github.com/webdataset/webdataset)打包成[Energon](https://github.com/NVIDIA/Megatron-Energon)数据加载器可识别的格式。
 ```bash
 cd /mnt/Pai-Megatron-Patch/toolkits/multimodal_data_preprocessing
-python build_fake_wds_for_vl.py --output-dir wds
+python build_fake_wds_for_omni.py --output-dir wds
 ```
-当熟悉了多模态数据序列化逻辑后，我们就可以参考[DataJuicer](../qwen3_omni/README_DataJuicer.md)指引来对多模态数据进行大规模处理了。
+当熟悉了多模态数据序列化逻辑后，我们就可以参考[DataJuicer](./README_DataJuicer.md)指引来对多模态数据进行大规模处理了。
 使用DJ生成TAR包后，需要调用Patch的脚本生成元数据，如下所示:
 ```bash
 cd /mnt/Pai-Megatron-Patch/toolkits/multimodal_data_preprocessing
@@ -77,27 +77,27 @@ python build_wds_meta_data_from_datajuice.py --dataset-root ${your dj output dir
 ### 模型格式转换
 ```bash
 cd /mnt/Pai-Megatron-Patch/toolkits/distributed_checkpoints_convertor
-bash scripts/qwen3_vl/run_8xH20.sh \
+bash scripts/qwen3_omni/run_8xH20.sh \
 A3B \
-/mnt/qwen3-vl-ckpts/Qwen3-VL-30B-A3B-Instruct  \
-/mnt/qwen3-vl-ckpts/Qwen3-VL-30B-A3B-Instruct-to-mcore  \
+/mnt/qwen3-omni-ckpts/Qwen3-Omni-30B-A3B-Instruct  \
+/mnt/qwen3-omni-ckpts/Qwen3-Omni-30B-A3B-Instruct-to-mcore  \
 false \
 true \
 bf16
 ```
 
 ### 训练代码调试
-由于Qwen3-VL的多模态数据融合以及模型结构复杂，我们提供了用于单机调试的脚本方便理解代码逻辑或者快速发现Issue等等。
+由于Qwen3-omni的多模态数据融合以及模型结构复杂，我们提供了用于单机调试的脚本方便理解代码逻辑或者快速发现Issue等等。
 启动单机训练代码调试的脚本如下：
 ```bash
-cd /mnt/Pai-Megatron-Patch/examples/qwen3_vl
-bash debug_mcore_qwen3_vl.sh
+cd /mnt/Pai-Megatron-Patch/examples/qwen3_omni
+bash debug_mcore_qwen3_omni.sh
 ```
 
-### Qwen3-VL-30B-A3B-Instruct微调示例
+### Qwen3-Omni-30B-A3B-Instruct微调示例
 #### 微调示例
-使用以下命令启动对Qwen3-VL-30B-A3B-Instruct的微调。
+使用以下命令启动对Qwen3-Omni-30B-A3B-Instruct的微调。
 ```bash
-cd /mnt/Pai-Megatron-Patch/examples/qwen3_vl
-bash run_mcore_qwen3_vl_lite.sh
+cd /mnt/Pai-Megatron-Patch/examples/qwen3_omni
+bash run_mcore_qwen3_omni.sh
 ```

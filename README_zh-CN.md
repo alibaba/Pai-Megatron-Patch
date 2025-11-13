@@ -2,13 +2,14 @@
 
 |             |                                                      Megatron-Core                                                       |                                                                                        ChatLearn                                                                                        |    verl     |
 |:------------|:------------------------------------------------------------------------------------------------------------------------:|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|:-----------:|
+|Qwen3-Omni  |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3_omni/README.md)| N/A | Coming Soon |
 |Qwen3-Next  |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3_next/README.md)| [ReadMe](https://github.com/alibaba/ChatLearn/blob/main/docs/zh/tutorial/tutorial_grpo_mcore_qwen3_next.md) | Coming Soon |
 |Qwen3       |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3/README.md)|[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3/README_chatlearn.md) | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3/README_verl.md) |
-|Qwen3-VL  | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3_vl/README.md)| Coming Soon | Coming Soon |
-|Qwen2.5-VL  |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen2_5_vl/README.md)| [ReadMe](https://github.com/alibaba/ChatLearn/blob/main/docs/zh/tutorial/tutorial_grpo_mcore_qwenvl.md) | Coming Soon |
+|Qwen3-VL  | [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen3_vl/README.md)| N/A | Coming Soon |
+|Qwen2.5-VL  |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/qwen2_5_vl/README.md)| [ReadMe](https://github.com/alibaba/ChatLearn/blob/main/docs/zh/tutorial/tutorial_grpo_mcore_qwenvl.md) | N/A |
 |Moonlight   |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/moonlight/README.md)|[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/moonlight/README_chatlearn.md)| [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/moonlight/README_verl.md) |
 |DeepSeek-V3 |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/deepseek_v3/README.md)| N/A | N/A |
-|DeepSeek-R1 | N/A |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/deepseek_v3/README_grpo.md)| [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/deepseek_v3/README_verl.md) |
+|DeepSeek-R1 | N/A |[ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/deepseek_v3/README_chatlearn.md)| [ReadMe](https://github.com/alibaba/Pai-Megatron-Patch/blob/main/examples/deepseek_v3/README_verl.md) |
 
 
 
@@ -41,6 +42,7 @@ Pai-Megatron-Patch是各类开源大模型和Megatron训练加速引擎之间的
 - [阿里云PAI获得FewCLUE基于大模型的小样本学习双料冠军](https://developer.aliyun.com/article/788081?spm=a2c6h.12873639.article-detail.17.11c5383cHpFZks&tlog=yuekan_8)
 
 新功能：
+- **[实验性]支持Qwen3-Omni-Thinker模型使用Mcore进行微调训练** [🔥🔥 2025.11.12]
 - **支持Qwen3-Next-80B-A3B模型使用Mcore+ChatLearn进行强化学习GRPO训练** [🔥🔥 2025.10.17]
 - **支持用Megatron-Core框架训练Qwen3-VL模型** [🔥🔥 2025.10.17]
 - **通过上下文并行(Context Parallel)与序列打包(Sequence Packing)提升Moonlight/DeepSeek-V3等MLA模型的强化学习训练稳定性和效率** [🔥🔥 2025.10.10]
