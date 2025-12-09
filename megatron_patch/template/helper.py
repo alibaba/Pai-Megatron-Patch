@@ -25,6 +25,7 @@ from megatron.training.utils import (
     average_losses_across_data_parallel_group,
     get_batch_on_this_cp_rank,
     get_batch_on_this_tp_rank,
+    unwrap_model
 )
 
 from megatron.core.models.gpt import GPTModel
@@ -187,12 +188,13 @@ def forward_step(data_iterator, model):
         'attention_mask': attention_mask,
         'labels': labels
     }
+    unwrapped_model = unwrap_model(model)
 
-    if 'loss_mask' in inspect.signature(model.forward).parameters:
+    if 'loss_mask' in inspect.signature(unwrapped_model.forward).parameters:
         # NOTE: MTP-head (since 0328) requires loss_mask to compute correct loss scale.
         input_kwargs['loss_mask'] = loss_mask
     
-    if 'packed_seq_params' in inspect.signature(model.forward).parameters:
+    if 'packed_seq_params' in inspect.signature(unwrapped_model.forward).parameters:
         input_kwargs['packed_seq_params'] = packed_seq_params
     else:
         assert packed_seq_params is None, f"Sequence Packing is not supported for {model}"

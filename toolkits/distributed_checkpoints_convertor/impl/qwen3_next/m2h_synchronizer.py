@@ -41,7 +41,7 @@ class MG2HFSynchronizer(_MG2HFSynchronizer):
             hf_model = self._hfmodel
 
         if mg_model.pre_process:
-            self.set_preprocess_state(mg_model=mg_model, hf_model=hf_model)
+            self.set_preprocess_state(mg_model=mg_model, hf_model=hf_model.model)
         
         if mg_model.post_process:
             self.set_postprocess_state(mg_model=mg_model, hf_model=hf_model, is_mamba=True)
