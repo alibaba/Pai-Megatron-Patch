@@ -102,7 +102,22 @@ GPT_MODEL_ARGS=(
     --mrope-section 24 20 20
 )
 
-if [ $MODEL_SIZE = 4B ]; then
+
+if [ $MODEL_SIZE = 2B ]; then
+    GPT_MODEL_ARGS+=(
+        --num-layers 28
+        --hidden-size 2048
+        --ffn-hidden-size 6144
+        --num-attention-heads 16
+        --num-query-groups 8
+    )
+    if [ -z  "$MODEL_PARALLEL_ARGS" ]; then
+        MODEL_PARALLEL_ARGS=(
+            --tensor-model-parallel-size 1
+            --pipeline-model-parallel-size 4
+        )
+    fi
+elif [ $MODEL_SIZE = 4B ]; then
     GPT_MODEL_ARGS+=(
         --num-layers 36
         --hidden-size 2560
@@ -129,6 +144,21 @@ elif [ $MODEL_SIZE = 8B ]; then
         MODEL_PARALLEL_ARGS=(
             --tensor-model-parallel-size 1
             --pipeline-model-parallel-size 4
+        )
+    fi
+elif [ $MODEL_SIZE = 32B ]; then
+    GPT_MODEL_ARGS+=(
+        --num-layers 64
+        --hidden-size 5120
+        --ffn-hidden-size 25600
+        --num-attention-heads 64
+        --untie-embeddings-and-output-weights
+        --num-query-groups 8
+    )
+    if [ -z  "$MODEL_PARALLEL_ARGS" ]; then
+        MODEL_PARALLEL_ARGS=(
+            --tensor-model-parallel-size 1
+            --pipeline-model-parallel-size 8
         )
     fi
 elif [ $MODEL_SIZE = A3B ]; then
