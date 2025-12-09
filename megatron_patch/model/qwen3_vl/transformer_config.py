@@ -46,7 +46,10 @@ def get_vision_model_config(args, config):
     # mlp: hidden_size -> intermediate_size -> embed_dim, silu
 
     assert parallel_state.get_virtual_pipeline_model_parallel_world_size() is None, "NotSupported"
-    if args.num_layers == 36 and args.hidden_size == 2560:
+    if (
+        (args.num_layers == 36 and args.hidden_size == 2560) or 
+        (args.num_layers == 28 and args.hidden_size == 2048)
+    ):
         # 4B
         config.num_layers = 24 # depth
         config.hidden_size = 1024 # hidden_size

@@ -80,8 +80,23 @@ elif [ $FL = false ]; then
     --attention-backend fused"
 fi
 
-
-if [ $MODEL_SIZE = 4B ]; then
+if [ $MODEL_SIZE = 2B ]; then
+    NUM_LAYERS=28
+    HIDDEN_SIZE=2048
+    NUM_ATTENTION_HEADS=16
+    INTERMEDIATE_SIZE=6144
+    NUM_KEY_VALUE_HEADS=8
+    MAX_POSITION_EMBEDDINGS=262144
+    VOCAB_SIZE=151936
+    ROPE_THETA=5000000
+    RMS_NORM_EPS=1e-6
+    gqa_options=" \
+                --group-query-attention \
+                --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+    
+    tie_option=""
+    moe_options=""
+elif [ $MODEL_SIZE = 4B ]; then
     NUM_LAYERS=36
     HIDDEN_SIZE=2560
     NUM_ATTENTION_HEADS=32
@@ -102,6 +117,24 @@ elif [ $MODEL_SIZE = 8B ]; then
     HIDDEN_SIZE=4096
     NUM_ATTENTION_HEADS=32
     INTERMEDIATE_SIZE=12288
+    NUM_KEY_VALUE_HEADS=8
+    MAX_POSITION_EMBEDDINGS=262144
+    VOCAB_SIZE=151936
+    ROPE_THETA=5000000
+    RMS_NORM_EPS=1e-6
+    gqa_options=" \
+                --group-query-attention \
+                --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+    
+    tie_option=" \
+            --untie-embeddings-and-output-weights \
+            "
+    moe_options=""
+elif [ $MODEL_SIZE = 32B ]; then
+    NUM_LAYERS=64
+    HIDDEN_SIZE=5120
+    NUM_ATTENTION_HEADS=64
+    INTERMEDIATE_SIZE=25600
     NUM_KEY_VALUE_HEADS=8
     MAX_POSITION_EMBEDDINGS=262144
     VOCAB_SIZE=151936
