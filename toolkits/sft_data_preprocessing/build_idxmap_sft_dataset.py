@@ -256,6 +256,10 @@ def get_args():
                        type=int,
                        default=0,
                        help='extra_vocab_size')
+    group.add_argument('--padded-vocab-size',
+                       type=int,
+                       default=0,
+                       help='padded_vocab_size')
 
     args = parser.parse_args()
     args.keep_empty = False
