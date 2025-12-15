@@ -32,6 +32,7 @@ class Qwen3VLTransformerConfig(TransformerConfig):
     image_token_id: int = 151655
     video_token_id: int = 151656
     spatial_merge_size: int = 2
+    mrope_interleaved: int = True
     
     # The following options are set with --disable-bias-linear --add-qkv-bias
     # in the script

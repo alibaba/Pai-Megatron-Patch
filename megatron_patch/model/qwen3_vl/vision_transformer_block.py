@@ -326,6 +326,9 @@ class TransformerBlock(MegatronModule):
             ]
         )
 
+        if self.config.recompute_method == 'uniform' and self.config.recompute_granularity == 'full':
+            assert self.config.recompute_num_layers == 1
+
 
     def _build_layers(self):
         # Transformer layers.
@@ -442,6 +445,7 @@ class TransformerBlock(MegatronModule):
                     rotary_pos_emb,
                 )
 
+        deepstack_feature_lists = []
         if self.config.recompute_method == 'uniform':
             # Uniformly divide the total number of Transformer layers and checkpoint
             # the input activation of each divided chunk.
@@ -451,6 +455,17 @@ class TransformerBlock(MegatronModule):
                 hidden_states, context = checkpoint_handler(
                     custom(layer_idx, layer_idx + self.config.recompute_num_layers)
                 )
+
+                index = layer_idx + self.config.recompute_num_layers - 1
+                if index in self.deepstack_visual_indexes:
+                    idx = self.deepstack_visual_indexes.index(index)
+                    merger = self.deepstack_merger_list[idx]
+                    deepstack_feature = merger(
+                        self.deepstack_norm_list[idx](
+                            hidden_states.view(-1, merger.config.ffn_hidden_size)
+                        )
+                    )
+                    deepstack_feature_lists.append(deepstack_feature)
 
                 layer_idx += self.config.recompute_num_layers
 
@@ -474,10 +489,21 @@ class TransformerBlock(MegatronModule):
                     hidden_states, context = custom(layer_idx, layer_idx + 1)(
                         hidden_states, attention_mask, context, context_mask, rotary_pos_emb
                     )
+
+                index = layer_idx
+                if index in self.deepstack_visual_indexes:
+                    idx = self.deepstack_visual_indexes.index(index)
+                    merger = self.deepstack_merger_list[idx]
+                    deepstack_feature = merger(
+                        self.deepstack_norm_list[idx](
+                            hidden_states.view(-1, merger.config.ffn_hidden_size)
+                        )
+                    )
+                    deepstack_feature_lists.append(deepstack_feature)
         else:
             raise ValueError("Invalid activation recompute method.")
 
-        return hidden_states
+        return deepstack_feature_lists, hidden_states
 
     def set_input_tensor(self, input_tensor: Tensor):
         """Set input tensor to be used instead of forward()'s input.
@@ -578,8 +604,7 @@ class TransformerBlock(MegatronModule):
         with rng_context, outer_fp8_context:
             # Forward pass.
             if self.config.recompute_granularity == 'full' and self.training:
-                raise NotImplementedError()
-                hidden_states = self._checkpointed_forward(
+                deepstack_feature_lists, hidden_states = self._checkpointed_forward(
                     hidden_states=hidden_states,
                     attention_mask=attention_mask,
                     context=context,
