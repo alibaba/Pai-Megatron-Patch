@@ -32,8 +32,6 @@ else
         --num-layers-per-virtual-pipeline-stage ${MP_VP}"
 fi
 
-MP_SFT_PACKING=false
-
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
 ### BASE CONFIG ###
@@ -293,13 +291,21 @@ fi
 comm_overlap_option="\
         --overlap-grad-reduce \
         --overlap-param-gather"
-
+    
 if [ $SP = true ] && [ $TP -gt 1 ]; then
-    comm_overlap_option="\
-        --tp-comm-overlap \
-        --overlap-grad-reduce \
-        --overlap-param-gather \
-        --sequence-parallel"
+    if [ ${MP_SFT_PACKING} = true ]; then
+        comm_overlap_option="\
+            --overlap-grad-reduce \
+            --overlap-param-gather \
+            --sequence-parallel"
+    else
+        comm_overlap_option="\
+            --tp-comm-overlap \
+            --overlap-grad-reduce \
+            --overlap-param-gather \
+            --sequence-parallel"
+    fi
+
 fi
 
 if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
@@ -308,12 +314,11 @@ if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
 fi
 
 LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
-PREFIX="finetune-mcore-qwen2-vl-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
+PREFIX="finetune-mcore-qwen3-vl-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}"
 
 if [ ${MP_SFT_PACKING} = true ]; then
     packing_options=" \
-        --reset-position-ids \
-        --no-create-attention-mask-in-dataloader
+        --reset-position-ids
     "
 else
     packing_options=""

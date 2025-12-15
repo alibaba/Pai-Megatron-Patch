@@ -54,7 +54,7 @@ from megatron.core import mpu, tensor_parallel
 from megatron.core.parallel_state import get_tensor_model_parallel_rank
 from megatron_patch.data.multimodal_dataset_helper import TaskEncoder, print_error_handler
 from megatron.training.utils import unwrap_model
-
+from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.energon import (
     LimitDataset,
     RepeatDataset,
@@ -70,7 +70,11 @@ def model_provider(
 ) -> Union[Qwen3VLModel]:
     args = get_args()
     print_rank_0("start building qwen3-vl model ...")
-
+    if args.reset_position_ids:
+        args.variable_seq_lengths = True
+        if args.moe_token_dispatcher_type == "allgather":
+            args.moe_token_dispatcher_type = "alltoall"
+        print_rank_0(f">>>>>>>>>> Use sequence packing, overwrite variable_seq_lengths to be True <<<<<<<<<<")
     # Config of vit, llm and projector
     config = core_transformer_config_from_args(args, Qwen3VLTransformerConfig)
     use_te = args.transformer_impl == "transformer_engine"
@@ -212,6 +216,48 @@ def get_batch(model, data_iterator):
     )
     torch.cuda.nvtx.range_pop()
 
+    packed_seq_params = None
+    args = get_args()
+    if args.reset_position_ids:
+        seqlens = (tokens != tokenizer.pad_token_id).sum(dim=-1)
+        
+        cu_seqlens = torch.cat(
+            [
+                seqlens.new_zeros(1),
+                seqlens.cumsum(dim=0)
+            ]
+        ).int()
+        total_seqlen = cu_seqlens[-1].cpu().item()
+        align_size = mpu.get_tensor_model_parallel_world_size()
+        pad_size = (align_size - (total_seqlen % align_size)) % align_size
+        cu_seqlens[-1] += pad_size
+        max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+
+        def pack_data(raw_data: torch.Tensor, seqlens: torch.Tensor, pad_size: int=0):
+            # pack raw_data [mbs, maxlen] into [1, total_nnz + pad_size]
+            assert raw_data.shape[0] > 0, "Expect non-empty batch during packing"
+            samples = []
+            for d, l in zip(raw_data, seqlens):
+                samples.append(d[:l])
+            if pad_size > 0:
+                samples.append(samples[-1].new_zeros(pad_size))
+            return torch.cat(samples).unsqueeze(0)
+
+        to_be_packed = [tokens, labels, loss_mask, image_input_mask, video_input_mask]
+        for i, d in enumerate(to_be_packed):
+            to_be_packed[i] = pack_data(d, seqlens, pad_size)
+        tokens, labels, loss_mask, image_input_mask, video_input_mask = to_be_packed
+        
+        packed_seq_params = PackedSeqParams(
+            cu_seqlens_q=cu_seqlens,
+            cu_seqlens_kv=cu_seqlens,
+            qkv_format='thd',
+            max_seqlen_q = max_seqlen,
+            max_seqlen_kv = max_seqlen,
+        )
+        attention_mask = None
+        position_ids = None
+
     return (
         tokens, 
         labels, 
@@ -223,7 +269,8 @@ def get_batch(model, data_iterator):
         image_thw_grids, 
         video_thw_grids,
         image_input_mask, 
-        video_input_mask
+        video_input_mask,
+        packed_seq_params
     )
 
 def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
@@ -276,7 +323,8 @@ def forward_step(data_iterator, model: Qwen3VLModel):
         image_thw_grids, 
         video_thw_grids,
         image_input_mask, 
-        video_input_mask
+        video_input_mask,
+        packed_seq_params
     ) = get_batch(unwrap_model(model), data_iterator)
     timers("batch-generator").stop()
 
@@ -292,7 +340,8 @@ def forward_step(data_iterator, model: Qwen3VLModel):
         image_input_mask = image_input_mask,
         video_input_mask = video_input_mask,
         attention_mask = attention_mask,
-        labels = labels
+        labels = labels,
+        packed_seq_params = packed_seq_params
     )
 
     return output_tensor, partial(loss_func, loss_mask)

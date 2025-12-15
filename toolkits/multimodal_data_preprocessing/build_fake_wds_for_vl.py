@@ -41,7 +41,7 @@ def convert(dataset_dir, max_count=10000):
     add_handlers(default_handlers, "mp3s", lambda data: pickle.dumps([audioencoder(d) for d in data]))
 
     with wds.ShardWriter(os.path.join(output, 'pretrain-%d.tar'), maxcount=max_count) as shard_writer:
-        for entry in range(2):
+        for entry in range(200):
             image_datas = []
             image_datas.append(cv2.imread(os.path.join(current_dir, "australia.jpg"), cv2.IMREAD_UNCHANGED))
 

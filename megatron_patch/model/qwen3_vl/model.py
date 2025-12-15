@@ -164,8 +164,14 @@ class Qwen3VLModel(MegatronModule):
             modules.append(self.vision_projection)
 
         for module in modules:
-            for param in module.parameters():
+            for name, param in module.named_parameters():
+                if not freeze_vision_projection and "projection" in name: # Proj模块
+                    continue
                 param.requires_grad = False
+
+        for name, param in self.named_parameters():
+            if param.requires_grad:
+                print (f"trainable parameter is {name}")
 
     def forward(
         self,
@@ -176,7 +182,6 @@ class Qwen3VLModel(MegatronModule):
         video_start_index: int = -1,
         image_input_mask: torch.Tensor = None,
         video_input_mask: torch.Tensor = None,
-
         attention_mask: torch.Tensor = None,
         labels: torch.Tensor = None,
         inference_params: InferenceParams = None,

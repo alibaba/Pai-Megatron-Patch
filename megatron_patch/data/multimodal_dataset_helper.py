@@ -156,7 +156,6 @@ class TaskEncoder(DefaultTaskEncoder[ChatMLSample, EncodedSample, EncodedBatch, 
 
     def encode_sample(self, sample: ChatMLSample):
         if isinstance(sample, ChatMLSample):
-            print("ChatMLSample sample detected")
             yield self.encode_chatml(sample)
         else:
             raise NotImplementedError('Sample format not supported')

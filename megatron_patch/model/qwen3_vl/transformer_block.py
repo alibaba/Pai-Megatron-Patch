@@ -365,6 +365,8 @@ class TransformerBlock(MegatronModule):
         attention_bias: Tensor,
         packed_seq_params: PackedSeqParams,
         use_inner_fp8_context: bool,
+        visual_pos_masks: Optional[torch.Tensor] = None,
+        deepstack_visual_embeds: Optional[list[torch.Tensor]] = None,
     ):
         """Forward method with activation checkpointing."""
 
@@ -429,6 +431,13 @@ class TransformerBlock(MegatronModule):
                     custom(layer_idx, layer_idx + self.config.recompute_num_layers)
                 )
 
+                # add visual features to the hidden states of first several layers
+                if deepstack_visual_embeds is not None and layer_idx in range(len(deepstack_visual_embeds)):
+                    hidden_states = self._deepstack_process(
+                        hidden_states,
+                        visual_pos_masks,
+                        deepstack_visual_embeds[layer_idx],
+                    )
                 layer_idx += self.config.recompute_num_layers
 
         elif self.config.recompute_method == 'block':
@@ -450,6 +459,14 @@ class TransformerBlock(MegatronModule):
                 else:
                     hidden_states, context = custom(layer_idx, layer_idx + 1)(
                         hidden_states, attention_mask, context, context_mask, rotary_pos_emb
+                    )
+                
+                # add visual features to the hidden states of first several layers
+                if deepstack_visual_embeds is not None and layer_idx in range(len(deepstack_visual_embeds)):
+                    hidden_states = self._deepstack_process(
+                        hidden_states,
+                        visual_pos_masks,
+                        deepstack_visual_embeds[layer_idx],
                     )
         else:
             raise ValueError("Invalid activation recompute method.")
@@ -568,6 +585,8 @@ class TransformerBlock(MegatronModule):
                     attention_bias=attention_bias,
                     packed_seq_params=packed_seq_params,
                     use_inner_fp8_context=use_inner_fp8_context,
+                    visual_pos_masks=visual_pos_masks,
+                    deepstack_visual_embeds=deepstack_visual_embeds
                 )
             else:
                 for l_no, layer in enumerate(self.layers):
