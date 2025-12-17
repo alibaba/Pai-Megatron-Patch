@@ -55,6 +55,13 @@ class HF2MGSynchronizer(_HF2MGSynchronizer):
                 key = 'model.language_model.embed_tokens.weight'
             else:
                 key = 'model.embed_tokens.weight'
+
+        if PkgVersion(transformers.__version__) >= PkgVersion('4.52.0'):
+            if "model.language_model" in key:
+                key = key.replace("model.language_model", "model")
+            elif "model.visual" in key:
+                key = key.replace("model.visual", "visual")
+
         file = _get_filename_from_key(key)
         with safe_open(file, framework="pt", device=str(self.device)) as f:
             return f.get_tensor(key)
