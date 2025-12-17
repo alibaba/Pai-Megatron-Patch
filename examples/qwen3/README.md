@@ -103,7 +103,7 @@ OUTPUT_BASEPATH=${27}           # 训练输出日志文件路径
 ```
 
 #### 预训练示例
-使用以下命令启动对qwen2的继续预训练。
+使用以下命令启动对qwen3的继续预训练。
 备注：当`AC=offload`或`full`时，可设置`MP_AC_LAYERS`环境变量来控制Checkpointing或Offload的TransformerLayer层数（默认值：`1`）。
 
 ```bash
